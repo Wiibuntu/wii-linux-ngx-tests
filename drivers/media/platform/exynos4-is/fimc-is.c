@@ -141,7 +141,7 @@ static int fimc_is_enable_clocks(struct fimc_is *is)
 			dev_err(&is->pdev->dev, "clock %s enable failed\n",
 				fimc_is_clocks[i]);
 			for (--i; i >= 0; i--)
-				clk_disable(is->clocks[i]);
+				clk_disable_unprepare(is->clocks[i]);
 			return ret;
 		}
 		pr_debug("enabled clock: %s\n", fimc_is_clocks[i]);
@@ -815,12 +815,13 @@ static int fimc_is_probe(struct platform_device *pdev)
 	is->irq = irq_of_parse_and_map(dev->of_node, 0);
 	if (!is->irq) {
 		dev_err(dev, "no irq found\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_iounmap;
 	}
 
 	ret = fimc_is_get_clocks(is);
 	if (ret < 0)
-		return ret;
+		goto err_iounmap;
 
 	platform_set_drvdata(pdev, is);
 
@@ -880,6 +881,8 @@ err_irq:
 	free_irq(is->irq, is);
 err_clk:
 	fimc_is_put_clocks(is);
+err_iounmap:
+	iounmap(is->pmu_regs);
 	return ret;
 }
 
@@ -935,6 +938,7 @@ static int fimc_is_remove(struct platform_device *pdev)
 	fimc_is_unregister_subdevs(is);
 	vb2_dma_contig_cleanup_ctx(is->alloc_ctx);
 	fimc_is_put_clocks(is);
+	iounmap(is->pmu_regs);
 	fimc_is_debugfs_remove(is);
 	release_firmware(is->fw.f_w);
 	fimc_is_free_cpu_memory(is);

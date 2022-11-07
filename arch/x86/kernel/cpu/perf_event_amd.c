@@ -115,7 +115,7 @@ static __initconst const u64 amd_hw_cache_event_ids
 /*
  * AMD Performance Monitor K7 and later.
  */
-static const u64 amd_perfmon_event_map[] =
+static const u64 amd_perfmon_event_map[PERF_COUNT_HW_MAX] =
 {
   [PERF_COUNT_HW_CPU_CYCLES]			= 0x0076,
   [PERF_COUNT_HW_INSTRUCTIONS]			= 0x00c0,
@@ -160,7 +160,7 @@ static inline int amd_pmu_addr_offset(int index, bool eventsel)
 	if (offset)
 		return offset;
 
-	if (!cpu_has_perfctr_core)
+	if (!boot_cpu_has(X86_FEATURE_PERFCTR_CORE))
 		offset = index;
 	else
 		offset = index << 1;
@@ -652,7 +652,7 @@ static __initconst const struct x86_pmu amd_pmu = {
 
 static int __init amd_core_pmu_init(void)
 {
-	if (!cpu_has_perfctr_core)
+	if (!boot_cpu_has(X86_FEATURE_PERFCTR_CORE))
 		return 0;
 
 	switch (boot_cpu_data.x86) {

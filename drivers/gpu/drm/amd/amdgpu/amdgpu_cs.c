@@ -124,6 +124,13 @@ int amdgpu_cs_get_ring(struct amdgpu_device *adev, u32 ip_type,
 		}
 		break;
 	}
+
+	if (!(*out_ring && (*out_ring)->adev)) {
+		DRM_ERROR("Ring %d is not initialized on IP %d\n",
+			  ring, ip_type);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -169,7 +176,7 @@ int amdgpu_cs_parser_init(struct amdgpu_cs_parser *p, void *data)
 	int ret;
 
 	if (cs->in.num_chunks == 0)
-		return 0;
+		return -EINVAL;
 
 	chunk_array = kmalloc_array(cs->in.num_chunks, sizeof(uint64_t), GFP_KERNEL);
 	if (!chunk_array)

@@ -303,12 +303,6 @@ static inline struct usb_request *ss_alloc_ep_req(struct usb_ep *ep, int len)
 	return alloc_ep_req(ep, len, ss->buflen);
 }
 
-void free_ep_req(struct usb_ep *ep, struct usb_request *req)
-{
-	kfree(req->buf);
-	usb_ep_free_request(ep, req);
-}
-
 static void disable_ep(struct usb_composite_dev *cdev, struct usb_ep *ep)
 {
 	int			value;
@@ -600,6 +594,7 @@ static int source_sink_start_ep(struct f_sourcesink *ss, bool is_in,
 	for (i = 0; i < 8; i++) {
 		if (is_iso) {
 			switch (speed) {
+			case USB_SPEED_SUPER_PLUS:
 			case USB_SPEED_SUPER:
 				size = ss->isoc_maxpacket *
 						(ss->isoc_mult + 1) *
@@ -855,7 +850,7 @@ static struct usb_function *source_sink_alloc_func(
 
 	ss = kzalloc(sizeof(*ss), GFP_KERNEL);
 	if (!ss)
-		return NULL;
+		return ERR_PTR(-ENOMEM);
 
 	ss_opts =  container_of(fi, struct f_ss_opts, func_inst);
 

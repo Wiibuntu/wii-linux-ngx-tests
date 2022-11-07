@@ -26,25 +26,32 @@
  * Once the queue is registered it must reinject all packets it
  * receives, no matter what.
  */
-static const struct nf_queue_handler __rcu *queue_handler __read_mostly;
 
 /* return EBUSY when somebody else is registered, return EEXIST if the
  * same handler is registered, return 0 in case of success. */
-void nf_register_queue_handler(const struct nf_queue_handler *qh)
+void nf_register_queue_handler(struct net *net, const struct nf_queue_handler *qh)
 {
 	/* should never happen, we only have one queueing backend in kernel */
-	WARN_ON(rcu_access_pointer(queue_handler));
-	rcu_assign_pointer(queue_handler, qh);
+	WARN_ON(rcu_access_pointer(net->nf.queue_handler));
+	rcu_assign_pointer(net->nf.queue_handler, qh);
 }
 EXPORT_SYMBOL(nf_register_queue_handler);
 
 /* The caller must flush their queue before this */
-void nf_unregister_queue_handler(void)
+void nf_unregister_queue_handler(struct net *net)
 {
-	RCU_INIT_POINTER(queue_handler, NULL);
-	synchronize_rcu();
+	RCU_INIT_POINTER(net->nf.queue_handler, NULL);
 }
 EXPORT_SYMBOL(nf_unregister_queue_handler);
+
+static void nf_queue_sock_put(struct sock *sk)
+{
+#ifdef CONFIG_INET
+	sock_gen_put(sk);
+#else
+	sock_put(sk);
+#endif
+}
 
 void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 {
@@ -56,7 +63,7 @@ void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 	if (state->out)
 		dev_put(state->out);
 	if (state->sk)
-		sock_put(state->sk);
+		nf_queue_sock_put(state->sk);
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	if (entry->skb->nf_bridge) {
 		struct net_device *physdev;
@@ -73,9 +80,12 @@ void nf_queue_entry_release_refs(struct nf_queue_entry *entry)
 EXPORT_SYMBOL_GPL(nf_queue_entry_release_refs);
 
 /* Bump dev refs so they don't vanish while packet is out */
-void nf_queue_entry_get_refs(struct nf_queue_entry *entry)
+bool nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 {
 	struct nf_hook_state *state = &entry->state;
+
+	if (state->sk && !atomic_inc_not_zero(&state->sk->sk_refcnt))
+		return false;
 
 	if (state->in)
 		dev_hold(state->in);
@@ -95,6 +105,7 @@ void nf_queue_entry_get_refs(struct nf_queue_entry *entry)
 			dev_hold(physdev);
 	}
 #endif
+	return true;
 }
 EXPORT_SYMBOL_GPL(nf_queue_entry_get_refs);
 
@@ -103,7 +114,7 @@ void nf_queue_nf_hook_drop(struct net *net, struct nf_hook_ops *ops)
 	const struct nf_queue_handler *qh;
 
 	rcu_read_lock();
-	qh = rcu_dereference(queue_handler);
+	qh = rcu_dereference(net->nf.queue_handler);
 	if (qh)
 		qh->nf_hook_drop(net, ops);
 	rcu_read_unlock();
@@ -122,9 +133,10 @@ int nf_queue(struct sk_buff *skb,
 	struct nf_queue_entry *entry = NULL;
 	const struct nf_afinfo *afinfo;
 	const struct nf_queue_handler *qh;
+	struct net *net = state->net;
 
 	/* QUEUE == DROP if no one is waiting, to be safe. */
-	qh = rcu_dereference(queue_handler);
+	qh = rcu_dereference(net->nf.queue_handler);
 	if (!qh) {
 		status = -ESRCH;
 		goto err;
@@ -147,7 +159,11 @@ int nf_queue(struct sk_buff *skb,
 		.size	= sizeof(*entry) + afinfo->route_key_size,
 	};
 
-	nf_queue_entry_get_refs(entry);
+	if (!nf_queue_entry_get_refs(entry)) {
+		kfree(entry);
+		return -ENOTCONN;
+	}
+
 	skb_dst_force(skb);
 	afinfo->saveroute(skb, entry);
 	status = qh->outfn(entry, queuenum);

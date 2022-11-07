@@ -563,8 +563,6 @@ ccio_io_pdir_entry(u64 *pdir_ptr, space_t sid, unsigned long vba,
 	/* We currently only support kernel addresses */
 	BUG_ON(sid != KERNEL_SPACE);
 
-	mtsp(sid,1);
-
 	/*
 	** WORD 1 - low order word
 	** "hints" parm includes the VALID bit!
@@ -595,7 +593,7 @@ ccio_io_pdir_entry(u64 *pdir_ptr, space_t sid, unsigned long vba,
 	** Grab virtual index [0:11]
 	** Deposit virt_idx bits into I/O PDIR word
 	*/
-	asm volatile ("lci %%r0(%%sr1, %1), %0" : "=r" (ci) : "r" (vba));
+	asm volatile ("lci %%r0(%1), %0" : "=r" (ci) : "r" (vba));
 	asm volatile ("extru %1,19,12,%0" : "+r" (ci) : "r" (ci));
 	asm volatile ("depw  %1,15,12,%0" : "+r" (pa) : "r" (ci));
 
@@ -741,6 +739,8 @@ ccio_map_single(struct device *dev, void *addr, size_t size,
 
 	BUG_ON(!dev);
 	ioc = GET_IOC(dev);
+	if (!ioc)
+		return DMA_ERROR_CODE;
 
 	BUG_ON(size <= 0);
 
@@ -805,6 +805,10 @@ ccio_unmap_single(struct device *dev, dma_addr_t iova, size_t size,
 	
 	BUG_ON(!dev);
 	ioc = GET_IOC(dev);
+	if (!ioc) {
+		WARN_ON(!ioc);
+		return;
+	}
 
 	DBG_RUN("%s() iovp 0x%lx/%x\n",
 		__func__, (long)iova, size);
@@ -908,6 +912,8 @@ ccio_map_sg(struct device *dev, struct scatterlist *sglist, int nents,
 	
 	BUG_ON(!dev);
 	ioc = GET_IOC(dev);
+	if (!ioc)
+		return 0;
 	
 	DBG_RUN_SG("%s() START %d entries\n", __func__, nents);
 
@@ -980,6 +986,10 @@ ccio_unmap_sg(struct device *dev, struct scatterlist *sglist, int nents,
 
 	BUG_ON(!dev);
 	ioc = GET_IOC(dev);
+	if (!ioc) {
+		WARN_ON(!ioc);
+		return;
+	}
 
 	DBG_RUN_SG("%s() START %d entries, %p,%x\n",
 		__func__, nents, sg_virt(sglist), sglist->length);
@@ -988,7 +998,7 @@ ccio_unmap_sg(struct device *dev, struct scatterlist *sglist, int nents,
 	ioc->usg_calls++;
 #endif
 
-	while(sg_dma_len(sglist) && nents--) {
+	while (nents && sg_dma_len(sglist)) {
 
 #ifdef CCIO_COLLECT_STATS
 		ioc->usg_pages += sg_dma_len(sglist) >> PAGE_SHIFT;
@@ -996,6 +1006,7 @@ ccio_unmap_sg(struct device *dev, struct scatterlist *sglist, int nents,
 		ccio_unmap_single(dev, sg_dma_address(sglist),
 				  sg_dma_len(sglist), direction);
 		++sglist;
+		nents--;
 	}
 
 	DBG_RUN_SG("%s() DONE (nents %d)\n", __func__, nents);

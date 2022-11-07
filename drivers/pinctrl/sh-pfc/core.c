@@ -453,6 +453,36 @@ static const struct of_device_id sh_pfc_of_table[] = {
 		.data = &r8a7740_pinmux_info,
 	},
 #endif
+#ifdef CONFIG_PINCTRL_PFC_R8A7742
+	{
+		.compatible = "renesas,pfc-r8a7742",
+		.data = &r8a7742_pinmux_info,
+	},
+#endif
+#ifdef CONFIG_PINCTRL_PFC_R8A7743
+	{
+		.compatible = "renesas,pfc-r8a7743",
+		.data = &r8a7743_pinmux_info,
+	},
+#endif
+#ifdef CONFIG_PINCTRL_PFC_R8A7744
+	{
+		.compatible = "renesas,pfc-r8a7744",
+		.data = &r8a7744_pinmux_info,
+	},
+#endif
+#ifdef CONFIG_PINCTRL_PFC_R8A7745
+	{
+		.compatible = "renesas,pfc-r8a7745",
+		.data = &r8a7745_pinmux_info,
+	},
+#endif
+#ifdef CONFIG_PINCTRL_PFC_R8A77470
+	{
+		.compatible = "renesas,pfc-r8a77470",
+		.data = &r8a77470_pinmux_info,
+	},
+#endif
 #ifdef CONFIG_PINCTRL_PFC_R8A7778
 	{
 		.compatible = "renesas,pfc-r8a7778",
@@ -543,9 +573,14 @@ static int sh_pfc_probe(struct platform_device *pdev)
 		ret = info->ops->init(pfc);
 		if (ret < 0)
 			return ret;
+
+		/* .init() may have overridden pfc->info */
+		info = pfc->info;
 	}
 
-	pinctrl_provide_dummies();
+	/* Enable dummy states for those platforms without pinctrl support */
+	if (!of_have_populated_dt())
+		pinctrl_provide_dummies();
 
 	ret = sh_pfc_init_ranges(pfc);
 	if (ret < 0)
