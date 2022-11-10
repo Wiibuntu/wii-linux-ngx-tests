@@ -27,6 +27,7 @@
 #define DBG(fmt, arg...)	drv_printk(KERN_DEBUG, fmt, ##arg)
 
 #include <linux/device.h>
+#include <linux/wait.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/kthread.h>
@@ -2035,8 +2036,7 @@ static int sthcd_rescan_thread(void *arg)
 		sthcd_oh_rescan(oh);
 
 		/* re-check again after the configured interval */
-		sleep_on_timeout(&sthcd->rescan_waitq,
-				 STHCD_RESCAN_INTERVAL*HZ);
+		wait_event_timeout(&sthcd->rescan_waitq, 0, STHCD_RESCAN_INTERVAL*HZ);
 	}
 	return 0;
 }
