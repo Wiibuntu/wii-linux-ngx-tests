@@ -24,7 +24,7 @@
 #include <linux/of_platform.h>
 #include <linux/slab.h>
 #include <linux/timer.h>
-
+#include <linux/of_address.h>
 /*
  * This keymap is for a datel adapter + normal US keyboard.
  */
