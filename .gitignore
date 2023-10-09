@@ -114,3 +114,6 @@ all.config
 # Kdevelop4
 *.kdev4
 git.diff
+
+# ignore Techflash's script to load the kernel to his Wii
+wiiload.sh
