@@ -133,7 +133,6 @@ EXPORT_SYMBOL_GPL(starlet_es_get_device);
 
 /*
  *
- */
 static int starlet_es_get_title_count(unsigned long *count)
 {
 	struct starlet_es_device *es_dev = starlet_es_get_device();
@@ -163,9 +162,6 @@ static int starlet_es_get_title_count(unsigned long *count)
 	return error;
 }
 
-/*
- *
- */
 static int starlet_es_get_titles(u64 *titles, unsigned long count)
 {
 	struct starlet_es_device *es_dev = starlet_es_get_device();
@@ -192,7 +188,7 @@ static int starlet_es_get_titles(u64 *titles, unsigned long count)
 	es_small_buf_put(count_buf);
 
 	return error;
-}
+}*/
 
 /*
  * This call may be used in a non-sleeping context
@@ -453,7 +449,7 @@ err_out:
 }
 EXPORT_SYMBOL_GPL(starlet_es_reload_ios_and_launch);
 
-static int starlet_es_find_newest_title(struct starlet_es_device *es_dev,
+/*static int starlet_es_find_newest_title(struct starlet_es_device *es_dev,
 					u64 *title,
 					u64 title_min, u64 title_max)
 {
@@ -517,7 +513,7 @@ static int starlet_es_load_preferred_ios(struct starlet_es_device *es_dev,
 	}
 
 	return error;
-}
+}*/
 
 static int starlet_nwc24_stop_scheduler(void)
 {
@@ -556,11 +552,11 @@ static int starlet_es_init(struct starlet_es_device *es_dev)
 		ios_min = 0x100000000ULL | STARLET_ES_IOS_MIN;
 		ios_max = 0x100000000ULL | STARLET_ES_IOS_MAX;
 
-		error = starlet_es_load_preferred_ios(es_dev, ios_min, ios_max);
-		if (error)
-			drv_printk(KERN_WARNING, "unable to load preferred"
-				   " IOS version (min %llx, max %llx)\n",
-				   ios_min, ios_max);
+		// error = starlet_es_load_preferred_ios(es_dev, ios_min, ios_max);
+		// if (error)
+		//	drv_printk(KERN_WARNING, "unable to load preferred"
+		//		   " IOS version (min %llx, max %llx)\n",
+		//		   ios_min, ios_max);
 	}
 
 	/*
