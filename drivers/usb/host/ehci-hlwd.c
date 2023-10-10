@@ -49,6 +49,10 @@ static int ehci_hlwd_reset(struct usb_hcd *hcd)
 	dbg_hcs_params(ehci, "reset");
 	dbg_hcc_params(ehci, "reset");
 
+
+
+	spin_lock_init(&ehci->lock);
+
 	error = ehci_halt(ehci);
 	if (error)
 		goto out;

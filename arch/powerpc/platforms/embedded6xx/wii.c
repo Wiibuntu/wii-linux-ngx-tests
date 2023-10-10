@@ -183,6 +183,8 @@ static void wii_restart(char *cmd)
 	local_irq_disable();
 
 	/* try first to launch The Homebrew Channel... */
+	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_OHBC);
+	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_LULZ);
 	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_V107);
 	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_JODI);
 	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_HAXX);

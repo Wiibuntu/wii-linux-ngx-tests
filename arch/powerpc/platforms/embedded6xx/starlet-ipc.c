@@ -16,6 +16,7 @@
 
 /*#define DBG(fmt, arg...)	pr_debug(fmt, ##arg)*/
 #define DBG(fmt, arg...)	drv_printk(KERN_INFO, fmt, ##arg)
+#define ERR(fmt, arg...)	drv_printk(KERN_ERR, fmt, ##arg)
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -553,7 +554,7 @@ static int _starlet_open(const char *pathname, int flags,
 		starlet_ipc_free_request(req);
 	}
 	if (error < 0)
-		DBG("%s: %s: error=%d (%x)\n", __func__, pathname,
+		ERR("%s: %s: error=%d (%x)\n", __func__, pathname,
 		    error, error);
 	return error;
 }
@@ -1387,6 +1388,9 @@ static void starlet_fixups(void)
 		sg_set_buf(&io[0], &buf[6], 3);
 		starlet_ioctlv(fd, 0, 6, in, 1, io);
 		starlet_close(fd);
+	}
+	else {
+		drv_printk(KERN_ERR, "failed to disconnect wiimotes");
 	}
 
 	/*
