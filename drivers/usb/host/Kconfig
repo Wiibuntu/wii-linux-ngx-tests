@@ -236,7 +236,7 @@ config USB_EHCI_HCD_PPC_OF
 
 config USB_EHCI_HCD_HLWD
 	bool "Nintendo Wii (Hollywood) EHCI USB controller support"
-	depends on USB_EHCI_HCD && STARLET_MINI
+	depends on USB_EHCI_HCD && WII
 	default y
 	---help---
 	  Say Y here to support the EHCI USB controller found in the
@@ -509,7 +509,7 @@ config USB_OHCI_HCD_PPC_OF
 
 config USB_OHCI_HCD_HLWD
 	bool "Nintendo Wii (Hollywood) OHCI USB controller support"
-	depends on USB_OHCI_HCD && STARLET_MINI
+	depends on USB_OHCI_HCD && WII
 	select USB_OHCI_LITTLE_ENDIAN
 	default y
 	---help---
