@@ -554,11 +554,10 @@ static int starlet_es_init(struct starlet_es_device *es_dev)
 		ios_max = 0x100000000ULL | STARLET_ES_IOS_MAX;
 
 		error = starlet_es_load_preferred_ios(es_dev, ios_min, ios_max);
-		if (error)
-			drv_printk(KERN_EMERG, "unable to load preferred"
-				   " IOS version (min %llx, max %llx)\n",
-				   ios_min, ios_max);
-		panic("starlet-es: Failed to load IOS version between %llx and %llx", ios_min, ios_max);
+		if (error) {
+			drv_printk(KERN_EMERG, "unable to load preferred IOS version (min %llx, max %llx)\n", ios_min, ios_max);
+			panic("starlet-es: Failed to load IOS version between %llx and %llx", ios_min, ios_max);
+		}
 	}
 
 	/*
