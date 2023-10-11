@@ -599,9 +599,9 @@ static inline uint32_t rgbrgb16toycbycr(uint16_t rgb1, uint16_t rgb2)
 		return 0x00800080;	/* black, black */
 
 	/* RGB565 */
-	r1 = ((rgb1 >> 11) & 0x1f);
+	r1 = ((rgb1 >> 0) & 0x1f);
 	g1 = ((rgb1 >> 5) & 0x3f);
-	b1 = ((rgb1 >> 0) & 0x1f);
+	b1 = ((rgb1 >> 11) & 0x1f);
 
 	/* fast (approximated) scaling to 8 bits, thanks to Masken */
 	r1 = (r1 << 3) | (r1 >> 2);
@@ -618,9 +618,9 @@ static inline uint32_t rgbrgb16toycbycr(uint16_t rgb1, uint16_t rgb2)
 		b = b1;
 	} else {
 		/* same as we did for r1 before */
-		r2 = ((rgb2 >> 11) & 0x1f);
+		r2 = ((rgb2 >> 0) & 0x1f);
 		g2 = ((rgb2 >> 5) & 0x3f);
-		b2 = ((rgb2 >> 0) & 0x1f);
+		b2 = ((rgb2 >> 11) & 0x1f);
 		r2 = (r2 << 3) | (r2 >> 2);
 		g2 = (g2 << 2) | (g2 >> 4);
 		b2 = (b2 << 3) | (b2 >> 2);
@@ -2006,17 +2006,16 @@ static int vifb_do_probe(struct device *dev,
 	vi_reset_video(ctl);
 	vi_detect_tv_mode(ctl);
 
-	if (!nostalgic) {
-		/* by default, start with overscan compensation */
-		info->var.xres = 576;
-		if (ctl->mode->height == 574)
-			info->var.yres = 516;
-		else
-			info->var.yres = 432;
-	} else {
-		info->var.xres = ctl->mode->width;
-		info->var.yres = ctl->mode->height;
+	info->var.xres = ctl->mode->width;
+	info->var.yres = ctl->mode->height;
+	
+	if (info->var.yres > 448) {
+		info->var.yres = 448;
 	}
+	if (info->var.height > 448) {
+		info->var.height = 448;
+	}
+	// info->var.width;
 
 	ctl->visible_page = 0;
 	ctl->flip_pending = 0;
