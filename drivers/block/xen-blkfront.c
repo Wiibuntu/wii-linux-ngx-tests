@@ -237,7 +237,7 @@ static int fill_grant_buffer(struct blkfront_info *info, int num)
 			goto out_of_memory;
 
 		if (info->feature_persistent) {
-			granted_page = alloc_page(GFP_NOIO);
+			granted_page = alloc_page(GFP_NOIO | __GFP_ZERO);
 			if (!granted_page) {
 				kfree(gnt_list_entry);
 				goto out_of_memory;
@@ -662,7 +662,8 @@ static int blkif_queue_rw_req(struct request *req)
 		ring_req->u.rw.handle = info->handle;
 		ring_req->operation = rq_data_dir(req) ?
 			BLKIF_OP_WRITE : BLKIF_OP_READ;
-		if (req->cmd_flags & (REQ_FLUSH | REQ_FUA)) {
+		if ((req->cmd_flags & REQ_FLUSH) ||
+		    rq_data_dir(req) && (req->cmd_flags & REQ_FUA)) {
 			/*
 			 * Ideally we can do an unordered flush-to-disk.
 			 * In case the backend onlysupports barriers, use that.
@@ -1235,6 +1236,7 @@ static int blkif_completion(unsigned long *id,
 	int i = 0;
 	struct scatterlist *sg;
 	int num_sg, num_grant;
+	struct blk_shadow *s = &info->shadow[*id];
 	struct copy_from_grant data = {
 		.s = s,
 		.grant_idx = 0,
@@ -1489,7 +1491,7 @@ static int setup_blkring(struct xenbus_device *dev,
 	for (i = 0; i < info->nr_ring_pages; i++)
 		info->ring_ref[i] = GRANT_INVALID_REF;
 
-	sring = alloc_pages_exact(ring_size, GFP_NOIO);
+	sring = alloc_pages_exact(ring_size, GFP_NOIO | __GFP_ZERO);
 	if (!sring) {
 		xenbus_dev_fatal(dev, -ENOMEM, "allocating shared ring");
 		return -ENOMEM;
@@ -1947,7 +1949,8 @@ static int blkfront_setup_indirect(struct blkfront_info *info)
 
 		BUG_ON(!list_empty(&info->indirect_pages));
 		for (i = 0; i < num; i++) {
-			struct page *indirect_page = alloc_page(GFP_NOIO);
+			struct page *indirect_page = alloc_page(GFP_NOIO |
+			                                        __GFP_ZERO);
 			if (!indirect_page)
 				goto out_of_memory;
 			list_add(&indirect_page->lru, &info->indirect_pages);
