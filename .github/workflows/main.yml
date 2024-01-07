@@ -25,7 +25,7 @@ jobs:
        ssh-keyscan -H wii-linux.org > ~/.ssh/known_hosts
 
    - name: Git pull on server
-     run: ssh root@wii-linux.org  'cd /srv/other/kernel/v4.4; git pull'
+     run: ssh root@wii-linux.org  'cd /srv/other/kernel/4.4; git pull'
 
    - name: Build the kernel
      run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain make -j$(nproc)'
