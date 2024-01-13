@@ -6,40 +6,40 @@ on:
      - v4.4
 
 jobs:
- deploy:
-   runs-on: ubuntu-latest
+  deploy:
+    runs-on: ubuntu-latest
 
-   steps:
-   - name: Setup SSH Keys and known_hosts
-     env:
-       SSH_AUTH_SOCK: /tmp/ssh_agent.sock
-     run: |
-       mkdir -p ~/.ssh/
-       echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+    steps:
+    - name: Setup SSH Keys and known_hosts
+      env:
+        SSH_AUTH_SOCK: /tmp/ssh_agent.sock
+      run: |
+        mkdir -p ~/.ssh/
+        echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
 
-       # bit paranoid, but prevent cracking the pubkey
-       echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_ed25519.pub
+        # bit paranoid, but prevent cracking the pubkey
+        echo "${{ secrets.SSH_PUBLIC_KEY }}" > ~/.ssh/id_ed25519.pub
 
-       chmod 600 ~/.ssh/id_ed25519
-       chmod 644 ~/.ssh/id_ed25519.pub
-       ssh-keyscan -H wii-linux.org > ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/id_ed25519
+        chmod 644 ~/.ssh/id_ed25519.pub
+        ssh-keyscan -H wii-linux.org > ~/.ssh/known_hosts
 
-   - name: Git pull on server
-     run: ssh root@wii-linux.org  'cd /srv/other/kernel/4.4; git pull'
+    - name: Git pull on server
+      run: ssh root@wii-linux.org  'cd /srv/other/kernel/4.4; git pull'
 
-   - name: Build the kernel
-     run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain make -j$(nproc)'
+    - name: Build the kernel
+      run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain make -j$(nproc)'
 
-   - name: Package up the modules
-     run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain /bin/sh -c "apt update; apt install kmod -y; make modules_install; tar czf modules.tar.gz /lib/modules/4.4*"'
+    - name: Package up the modules
+      run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain /bin/sh -c "apt update; apt install kmod -y; make modules_install; tar czf modules.tar.gz /lib/modules/4.4*"'
 
-    - name: Deploy modules
-      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./deploy-modules_targz.sh'
+     - name: Deploy modules
+       run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./deploy-modules_targz.sh'
 
-    - name: Build & Deploy new rootfs with modules
-      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./build-rootfs.sh'
+     - name: Build & Deploy new rootfs with modules
+       run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./build-rootfs.sh'
 
-    - name: Build new SD Files archive
-      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./gen-sd-files.sh'
+     - name: Build new SD Files archive
+       run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./gen-sd-files.sh'
 
 
