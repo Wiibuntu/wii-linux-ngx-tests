@@ -6,10 +6,10 @@ on:
      - v4.4
 
 jobs:
-  deploy:
-    runs-on: ubuntu-latest
+ deploy:
+   runs-on: ubuntu-latest
 
-    steps:
+   steps:
     - name: Setup SSH Keys and known_hosts
       env:
         SSH_AUTH_SOCK: /tmp/ssh_agent.sock
