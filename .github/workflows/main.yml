@@ -33,5 +33,13 @@ jobs:
    - name: Package up the modules
      run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain /bin/sh -c "apt update; apt install kmod -y; make modules_install; tar czf modules.tar.gz /lib/modules/4.4*"'
 
-#    - name: Deploy new kernel & modules
-    #  run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack;'
+    - name: Deploy modules
+      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./deploy-modules_targz.sh'
+
+    - name: Build & Deploy new rootfs with modules
+      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./build-rootfs.sh'
+
+    - name: Build new SD Files archive
+      run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack; ./gen-sd-files.sh'
+
+
