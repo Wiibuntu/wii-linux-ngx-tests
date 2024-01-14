@@ -28,7 +28,7 @@ jobs:
           theotherone224/wii-linux-toolchain make -j$(nproc)'
       - name: Package up the modules
         run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t
-          theotherone224/wii-linux-toolchain /bin/sh -c "apt update; apt install
+          theotherone224/wii-linux-toolchain /bin/sh -ce "apt update; apt install
           kmod -y; make modules_install; tar czf modules.tar.gz
           /lib/modules/4.4*"'
       - name: Deploy modules
