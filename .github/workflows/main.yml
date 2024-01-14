@@ -27,11 +27,10 @@ jobs:
         run: ssh root@wii-linux.org  'docker run -v /srv/other/kernel/4.4:/code -t
           theotherone224/wii-linux-toolchain make -j$(nproc)'
       - name: Package up the modules
-        run: ssh root@wii-linux.org  'docker run --dns 1.1.1.1 -v
+        run: ssh root@wii-linux.org  'docker run --network host -v
           /srv/other/kernel/4.4:/code -t theotherone224/wii-linux-toolchain
-          /bin/sh -ce "echo nameserver 1.1.1.1 > /etc/resolv.conf; apt update;
-          apt install kmod -y; make modules_install; tar czf modules.tar.gz
-          /lib/modules/4.4*"'
+          /bin/sh -ce "apt update; apt install kmod -y; make modules_install;
+          tar czf modules.tar.gz /lib/modules/4.4*"'
       - name: Deploy modules
         run: ssh root@wii-linux.org  'cd /wii-linux-tools/build-stack;
           ./deploy-modules_targz.sh'
