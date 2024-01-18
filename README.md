@@ -1,38 +1,44 @@
-# Modern Linux for Wii/GameCube
+# (More) Modern Linux for Wii/GameCube
 
-<a href="https://neagix.github.io/wii-linux-ngx/"><img alt="Tux + Wii" src="docs/wii-linux-ngx-logo.png" width="160" title="wii-linux-ngx" /></a>
+<a href="https://wii-linux.org/"><img alt="Tux + Wii" src="docs/wii-linux-ngx-logo.png" width="160" title="wii-linux-ngx" /></a>
 
-The [wii-linux-ngx repository](https://github.com/neagix/wii-linux-ngx) contains Linux kernel branches with rebased patches for the purpose of running a modern Linux distribution on the Wii.
+The [wii-linux-ngx repository](https://github.com/Wii-Linux/wii-linux-ngx) contains Linux kernel branches with rebased patches for the purpose of running a modern Linux distribution on the Wii.
 
-Up-to-date documentation and scripts can always be found on the [master branch](https://github.com/neagix/wii-linux-ngx/tree/master).
+Up-to-date documentation and scripts can always be found on the [master branch](https://github.com/Wii-Linux/wii-linux-ngx/tree/master).
 
 Feel free to open Issues/Pull requests for improvement/discussion purposes.
 
-See also [Frequently Asked Questions](https://github.com/neagix/wii-linux-ngx/blob/master/docs/index.md#frequently-asked-questions).
+See also [Frequently Asked Questions](https://github.com/Wii-Linux/wii-linux-ngx/blob/master/docs/index.md#frequently-asked-questions).
+
+## Status
+
+The project is currently under active development.  Expect new releases and new bugs very often.
+
+## Support
+
+### Discord
+
+You can get real-time support primarily on our [Discord server](https://discord.com/invite/D9EBdRWzv2)
 
 ## How to install
 
-Download the compressed image from the releases, decompress it (`gunzip`) and then flash it to an SD card with your program of choice.
+Follow the [installation guide](https://wii-linux.org/installation_guide), found on the website.
 
 ## How it works
 
 ### Wii
 
-wii-linux-ngx works with an SD card (or USB mass storage) with the following layout:
-* first partition, FAT32 with MINI and [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot) (Bootmii is provided as fallback)
-* second partition with ext3 Linux rootfs
-
-You can add other partitions of your choice; performance of SD cards is better than USB mass storage.
-
+The kernel boots using Gumboot on your SD Card, taking the place of BootMii.  
+The kernel can then load the rootfs (root filesystem, equivalent to the "C:\" drive if you use Windows) from either the SD Card, or a USB device (the default).
 You can use Priiloader to make Bootmii your default choice, effectively creating this chain:
 
 ```
-Wii power on -> MINI -> (Gumboot selection with power/eject buttons ->) Linux kernel zImage
+Wii power on -> MINI -> (Gumboot selection with power/eject buttons ->) Linux kernel zImage -> Void Linux userspace
 ```
 
 See also:
-* [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot)
-* [customized MINI](https://github.com/neagix/mini)
+* [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot), by neagix
+* [customized MINI](https://github.com/neagix/mini), by neagix
 
 ### GameCube
 
@@ -44,9 +50,10 @@ Currently not tested on virtual Wii.
 
 ## Default credentials
 
-The SD image and rootfs have `root:root` credentials.
+The SD image and rootfs have `root:voidlinux` credentials.  
 
-If you prefer to login via USB serial console, edit the last line of `/etc/inittab` in order to use `ttyUSB0` as a login terminal; you might need to recompile the kernel with your serial-over-USB driver as only the PL2303 driver is included.
+If you prefer to log in over USB serial or a USB gecko on the memory card slots, log in via the TTY, then run either:
+TODO: Add these when home
 
 ## History
 
@@ -54,22 +61,10 @@ Chronological history of Linux for Wii/GameCube:
 
 * [gc-linux (v2.6-based) MIKEp5](http://www.gc-linux.org/wiki/MINI:KernelPreviewFive) - this is the original project and corresponds to the bulk work done to bring Linux to the Wii
 * [DeltaResero's fork (unofficial MIKEp7)](https://github.com/DeltaResero/GC-Wii-Linux-Kernels) - considerable work done by DeltaResero to bring up the GC/Wii patches into a v3.x kernel
-* [this project, wii-linux-ngx](https://github.com/neagix/wii-linux-ngx) - continuation of the previous work, distribution packaging and maintenance
+* [neagix's wii-linux-ngx](https://github.com/neagix/wii-linux-ngx) - continuation of the previous work, distribution packaging and maintenance
+* [This project, fork of wii-linux-ngx](https://github.com/Wii-Linux/wii-linux-ngx) - fixups of the experimental-4.4 branch of neagix's kernel, CIP Patches, USB Gecko
 
 The original (2.6.32 and prior) gcLinux work can be found at: http://sourceforge.net/projects/gc-linux/; at the time of writing project has not seen activity since 2013.
-
-## Status
-
-A few branches are currently maintained:
-* [stable-v3.x](https://github.com/neagix/linux/tree/stable-v3.x), latest working v3.x kernel with most up to date upstream patches
-* [experimental-v3.x](https://github.com/neagix/linux/tree/experimental-v3.x), some features might be broken (SDHC)
-* [experimental-v4.x](https://github.com/neagix/linux/tree/experimental-v4.x), some features might be broken (SDHC)
-* [rebased-deltares-v3.x](https://github.com/neagix/linux/tree/rebased-deltares-v3.x), original v3.12.11 by DeltaResero rebased for easier merges + v3.12.12 merge
-* [stable-v3.x-w-extras](https://github.com/neagix/linux/tree/stable-v3.x-w-extras), features added by DeltaRes but not in stable-v3.x can be found in this branch.
-
-Some of the dropped features (easy to re-add through cherry-pick) are:
-* Nold360's GameCube SDHC support (http://www.gc-forever.com/forums/portal.php)  
-    - (https://github.com/Nold360/GC-Linux-Kernel-2.6.32/commits/master)
 
 ## Framebuffer support
 
@@ -91,6 +86,10 @@ Xorg using framebuffer works fine.
 
 ## Known issues
 
+See [open issues](https://github.com/Wii-Linux/wii-linux-ngx/issues) and the [project timeline](https://github.com/Wii-Linux/projects/1).
+
+Issues that persist from neagix's original repo:
+
 Boot from MINI is well tested, but not boot from IOS. Xorg framebuffer driver is also not tested.
 
 Bugs probably introduced in the port of MIKEp5 from v2.6 to v3.x tree:
@@ -101,7 +100,6 @@ Bugs probably introduced in the port of MIKEp5 from v2.6 to v3.x tree:
     All WiiU as well as some of the newer Wii disc drives, lack support for DVDs as they don't contain the same type of disc drive.
     In other words, support will vary on the age of the console, but most standard GameCube consoles should be able to read mini DVDs (full-sized DVDs are too big for unmodified Gamecube consoles, but they can be read).
     
-See [open issues](https://github.com/neagix/wii-linux-ngx/issues).
 
 ## Changing bootargs with baedit
 
@@ -125,20 +123,17 @@ replaced bootargs = 'your new arguments here                                    
 
 # Connecting via Ethernet dongle
 
-Connection will work automatically and it uses regular Debian configuration files.
+Connection will work automatically since it uses NetworkManager with DHCP.
 
 # Connecting to Wi-Fi
 
-The `whiite-ez-wifi-config` script is included in `/root` to easily connect to a Wi-Fi network.
-
-Supported modes (from http://en-americas-support.nintendo.com/app/answers/detail/a_id/498/~/compatible-wireless-modes-and-wireless-security-types):
-
-    Wireless Frequency: 2.4 GHz Frequency
-    Wireless Modes: 802.11b, 802.11g
-    Wireless Security Modes: WEP, WPA-PSK (TKIP), WPA-PSK (AES), WPA2-PSK (AES)
+Log into the console and run `nmtui`.  Add a new Wi-Fi connection as you would on any other distro.
 
 ## Network troubleshooting resources
 
+* Ask for help in the [Discord server](#discord)
+
+Some of these links may no longer work.
 * http://www.gc-linux.org/wiki/WL:Wifi_Configuration
 * http://www.linux-tips-and-tricks.de/overview#english
 * http://www.linux-tips-and-tricks.de/downloads/collectnwdata-sh/download
@@ -148,60 +143,36 @@ Supported modes (from http://en-americas-support.nintendo.com/app/answers/detail
 
 It is suggested to create a swap partition and enable it to speed up operations, since the Wii has little memory available (~80M).
 
+To do so, partition your disk using GParted from outside of the booted system (Google can tell you a lot).
+Boot into your repartitioned system, run `mkswap /dev/*replace me with your swap partition*`, then to enable it: `swapon /dev/*your swap partition*`
+To enable it by default on boot, add it to /etc/fstab.
+
 # Installing packages
 
-The Jessie rootfs is stripped down so you will need to run `apt-get update` before being able to install any package.
+You may use `xbps-install -Su` to update your packages, or `xbps-install *package name*` to install a new package.
 
 # Building the kernel
 
-Compiling this kernel will has some dependencies that must be installed.
-On a Debian-based system, these dependecies can be installed by running the following command:
+Use the docker container.
+If building for the first time, run this (only needed once):
+`docker pull theotherone224/wii-linux-toolchain`
 
-    sudo apt-get install advancecomp autoconfig automake bash build-essential bzip2 ccache coreutils fakeroot file gcc g++ gzip libmpfr-dev libgmp-dev libnurses5-dev make strip
+Then, to get a shell in the container, run:
+`docker run -v /path/to/the/kernel:/code -it theotherone224/wii-linux-toolchain`
 
-Give a look to DeltaResero's script to see how to use ccache for kernel compilation
-## (Cross) Compiling the Kernel
+Then, in that shell, the following commands are going to be useful:
+`make -j$(nproc)` - Build the kernel quickly on all threads
+`make -j1` - Build the kernel slowly with 1 thread, useful if something fails to see the error
+`make menuconfig` - Start a TUI to configure the kernel
+`make wii_defconfig` - Copy the default Wii config as your config file
+`make modules_install` - Install the kernel modules to /lib/modules/*kernel version*
 
-Remember to edit the corresponding dts file (`arch/powerpc/boot/wii.dts`  for the Wii when not using the default boot method from SD card (`/dev/mmcblk0p2`).
-Enabling zcache and other kernel options requres editing the default bootargs.
-You can alter the bootargs of an already compiled kernel by using the provided tool `baedit` (it's found in the rootfs image or you can run/build it with Go).
+After built, the kernel will be located in `arch/powerpc/boot/zImage`, relative to the kernel source directory.
 
-Related pages:
-* http://www.gc-linux.org/wiki/Building_a_GameCube_Linux_Kernel_%28ARCH%3Dpowerpc%29
 
 ## ZRAM
 
-The zram-config v0.5 files are provided in `/root/zram-config`, there is no init integration though.
-
-You can verify whether zRam ha started by running the following command as root:
-
-        swapon -s
-
-zRam swapping can be turned off with the following command:
-	
-	swapoff /dev/zram0
-        
-Change the command accordingly to which device should be stopped.
-
-Related readings:
-* how to start zRam: http://forums.debian.net/viewtopic.php?t=77627  
-* http://gionn.net/2012/03/11/zram-on-debian-ubuntu-for-memory-overcommitment/
-
-## Mounting a disc
-
-Create a "dvd" folder (as root) in the "/media" directory (only if the folder doesn't exist) with the command:
-
-        mkdir /media/dvd
-
-Then run the following (also as root):
-
-        mount /dev/rvl-di /media/dvd
-
-DVDs can be inserted/switched anytime but should be unmount prior to ejecting and then remount again after to prevent errors.  To unmount a disc, enter the following command as root:
-
-        umount /dev/rvl-di /media/dvd
-
-Additional packages such as libdvdcss & libdvdread may need to be installed for DVD playblack (may need to search package manager as naming standards aren't consistant).  Mplayer and Xine seem to work the best but support will vary depending on the operating system.  
+TODO
 
 ## Related pages:
 * http://fartersoft.com/blog/2011/08/17/debian-installer-for-wii/
