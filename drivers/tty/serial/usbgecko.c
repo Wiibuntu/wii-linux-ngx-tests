@@ -109,7 +109,7 @@ static int ug_check_adapter(struct exi_device *exi_device)
 	return data == 0x0470;
 }
 
-#if 0
+
 /*
  *
  */
@@ -148,6 +148,7 @@ static int ug_is_rxfifo_empty(struct ug_adapter *adapter)
 	return 0;
 }
 
+#if 0
 /*
  *
  */
@@ -160,7 +161,7 @@ static int ug_putc(struct ug_adapter *adapter, char c)
 		return 0;
 
 	if (!exi_dev_try_take(exi_device)) {
-		ug_exi_io_transaction(exi_device, 0xB000|(c<<4), &data);
+		ug_exi_io_transaction(exi_device, 0xB000| (c << 4), &data);
 		exi_dev_give(exi_device);
 		return data & 0x0400;
 	}
@@ -188,8 +189,7 @@ static int ug_getc(struct ug_adapter *adapter, char *c)
 	}
 	return 0;
 }
-#endif
-
+#endif 
 /*
  *
  */
@@ -237,7 +237,6 @@ static int ug_safe_getc(struct ug_adapter *adapter, char *c)
 	}
 	return 0;
 }
-
 
 /*
  *
@@ -435,6 +434,30 @@ static int ug_tty_chars_in_buffer(struct tty_struct *tty)
 	return 0; /* unbuffered */
 }
 
+#ifdef CONFIG_CONSOLE_POLL
+static int ug_poll_init(struct tty_driver *driver, int line, char *options)
+{
+	return 0;
+}
+
+static int ug_poll_get_char(struct tty_driver *driver, int line) {
+	struct tty_struct *tty = driver->ttys[line];
+	struct ug_adapter *adapter = tty->driver_data;
+	char ch;
+	while(!ug_is_rxfifo_empty(adapter))
+		barrier();
+	ug_safe_getc(adapter, &ch);
+	return ch;
+}
+
+static void ug_poll_put_char(struct tty_driver *driver, int line, char c) {
+	struct tty_struct *tty = driver->ttys[line];
+	struct ug_adapter *adapter = tty->driver_data;
+	while (!ug_is_txfifo_empty(adapter)) {
+		ug_safe_putc(adapter, c);
+	}
+}
+#endif
 
 static const struct tty_operations ug_tty_ops = {
 	.open = ug_tty_open,
@@ -442,6 +465,11 @@ static const struct tty_operations ug_tty_ops = {
 	.write = ug_tty_write,
 	.write_room = ug_tty_write_room,
 	.chars_in_buffer = ug_tty_chars_in_buffer,
+#ifdef CONFIG_CONSOLE_POLL
+	.poll_init = ug_poll_init,
+	.poll_get_char = ug_poll_get_char,
+	.poll_put_char = ug_poll_put_char,
+#endif
 };
 
 
@@ -465,10 +493,16 @@ static int ug_tty_init(void)
 		return retval;
 	}
 	driver->ports[0] = kmalloc(sizeof(**driver->ports), GFP_KERNEL);
+	driver->ports[1] = kmalloc(sizeof(**driver->ports), GFP_KERNEL);
+
 	if (!driver->ports[0]) {
 		return -ENOMEM;
 	}
+	if (!driver->ports[1]) {
+		return -ENOMEM;
+	}
 	tty_port_init(driver->ports[0]);
+	tty_port_init(driver->ports[1]);
 	ug_tty_driver = driver;
 	return 0;
 }
@@ -477,8 +511,13 @@ static void ug_tty_exit(void)
 {
 	struct tty_driver *driver = ug_tty_driver;
 	tty_port_destroy(driver->ports[0]);
+	tty_port_destroy(driver->ports[1]);
+
 	kfree(driver->ports[0]);
+	kfree(driver->ports[1]);
+
 	driver->ports[0] = NULL;
+	driver->ports[1] = NULL;
 
 	ug_tty_driver = NULL;
 	if (driver) {
