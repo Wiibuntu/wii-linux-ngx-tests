@@ -329,7 +329,7 @@ static int restore_lowmem_stub(struct kimage *image)
 		" (%u bytes)\n", src, dst, size);
 
 	/* schedule a copy of the lowmem stub to its original location */
-	error = kimage_add_preserved_region(image, dst, src, PAGE_ALIGN(size));
+	//error = kimage_add_preserved_region(image, dst, src, PAGE_ALIGN(size));
 
 out_put:
 	of_node_put(node);
