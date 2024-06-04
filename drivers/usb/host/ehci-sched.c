@@ -940,7 +940,7 @@ static int intr_submit (
 	/* get endpoint and transfer/schedule data */
 	epnum = urb->ep->desc.bEndpointAddress;
 
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 
 	if (unlikely(!HCD_HW_ACCESSIBLE(ehci_to_hcd(ehci)))) {
 		status = -ESHUTDOWN;
@@ -982,7 +982,7 @@ done:
 	if (unlikely(status))
 		usb_hcd_unlink_urb_from_ep(ehci_to_hcd(ehci), urb);
 done_not_linked:
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 	if (status)
 		qtd_list_free (ehci, urb, qtd_list);
 
@@ -1164,7 +1164,7 @@ iso_stream_find (struct ehci_hcd *ehci, struct urb *urb)
 	else
 		ep = urb->dev->ep_out[epnum];
 
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 	stream = ep->hcpriv;
 
 	if (unlikely (stream == NULL)) {
@@ -1182,7 +1182,7 @@ iso_stream_find (struct ehci_hcd *ehci, struct urb *urb)
 		stream = NULL;
 	}
 
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 	return stream;
 }
 
@@ -1286,7 +1286,7 @@ itd_urb_transaction (
 		num_itds = urb->number_of_packets;
 
 	/* allocate/init ITDs */
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 	for (i = 0; i < num_itds; i++) {
 
 		/*
@@ -1302,13 +1302,13 @@ itd_urb_transaction (
 			itd_dma = itd->itd_dma;
 		} else {
  alloc_itd:
-			spin_unlock_irqrestore (&ehci->lock, flags);
+			/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 			itd = dma_pool_alloc (ehci->itd_pool, mem_flags,
 					&itd_dma);
-			spin_lock_irqsave (&ehci->lock, flags);
+			/*spin_lock_irqsave (&ehci->lock, flags);*/
 			if (!itd) {
 				iso_sched_free(stream, sched);
-				spin_unlock_irqrestore(&ehci->lock, flags);
+				/*spin_unlock_irqrestore(&ehci->lock, flags);*/
 				return -ENOMEM;
 			}
 		}
@@ -1318,7 +1318,7 @@ itd_urb_transaction (
 		itd->frame = NO_FRAME;
 		list_add (&itd->itd_list, &sched->td_list);
 	}
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 
 	/* temporarily store schedule info in hcpriv */
 	urb->hcpriv = sched;
@@ -1974,7 +1974,7 @@ static int itd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	}
 
 	/* schedule ... need to lock */
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 	if (unlikely(!HCD_HW_ACCESSIBLE(ehci_to_hcd(ehci)))) {
 		status = -ESHUTDOWN;
 		goto done_not_linked;
@@ -1992,7 +1992,7 @@ static int itd_submit (struct ehci_hcd *ehci, struct urb *urb,
 		usb_hcd_unlink_urb_from_ep(ehci_to_hcd(ehci), urb);
 	}
  done_not_linked:
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
  done:
 	return status;
 }
@@ -2074,7 +2074,7 @@ sitd_urb_transaction (
 	sitd_sched_init(ehci, iso_sched, stream, urb);
 
 	/* allocate/init sITDs */
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 	for (i = 0; i < urb->number_of_packets; i++) {
 
 		/* NOTE:  for now, we don't try to handle wraparound cases
@@ -2095,13 +2095,13 @@ sitd_urb_transaction (
 			sitd_dma = sitd->sitd_dma;
 		} else {
  alloc_sitd:
-			spin_unlock_irqrestore (&ehci->lock, flags);
+			/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 			sitd = dma_pool_alloc (ehci->sitd_pool, mem_flags,
 					&sitd_dma);
-			spin_lock_irqsave (&ehci->lock, flags);
+			/*spin_lock_irqsave (&ehci->lock, flags);*/
 			if (!sitd) {
 				iso_sched_free(stream, iso_sched);
-				spin_unlock_irqrestore(&ehci->lock, flags);
+				/*spin_unlock_irqrestore(&ehci->lock, flags);*/
 				return -ENOMEM;
 			}
 		}
@@ -2116,7 +2116,7 @@ sitd_urb_transaction (
 	urb->hcpriv = iso_sched;
 	urb->error_count = 0;
 
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
 	return 0;
 }
 
@@ -2352,7 +2352,7 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	}
 
 	/* schedule ... need to lock */
-	spin_lock_irqsave (&ehci->lock, flags);
+	/*spin_lock_irqsave (&ehci->lock, flags);*/
 	if (unlikely(!HCD_HW_ACCESSIBLE(ehci_to_hcd(ehci)))) {
 		status = -ESHUTDOWN;
 		goto done_not_linked;
@@ -2370,7 +2370,7 @@ static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 		usb_hcd_unlink_urb_from_ep(ehci_to_hcd(ehci), urb);
 	}
  done_not_linked:
-	spin_unlock_irqrestore (&ehci->lock, flags);
+	/*spin_unlock_irqrestore (&ehci->lock, flags);*/
  done:
 	return status;
 }
