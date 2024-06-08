@@ -25,9 +25,6 @@ CONFIG_HZ_300=y
 CONFIG_PREEMPT=y
 CONFIG_BINFMT_MISC=m
 CONFIG_KEXEC=y
-CONFIG_CMDLINE_BOOL=y
-CONFIG_CMDLINE="root=/dev/sda1 console=tty0 oops=panic force_keyboard_port=4 video=gcnfb:tv=auto,nostalgic rootwait nobats panic=0"
-CONFIG_CMDLINE_FORCE=y
 # CONFIG_SECCOMP is not set
 CONFIG_ADVANCED_OPTIONS=y
 CONFIG_NET=y
