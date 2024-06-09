@@ -152,7 +152,7 @@ struct sdhci_host *sdhci_pltfm_init(struct platform_device *pdev,
 
 // XXX: for some unknown reason it just doesn't work
 // figure out why later
-#ifndef CONFIG_MMC_SDHCI_OF_HLWD
+#if !defined(CONFIG_MMC_SDHCI_OF_HLWD) && !defined(CONFIG_MMC_SDHCI_OF_HLWD_MODULE)
 	if (!request_mem_region(iomem->start, resource_size(iomem),
 		mmc_hostname(host->mmc))) {
 		dev_err(&pdev->dev, "cannot request region\n");
