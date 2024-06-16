@@ -4,6 +4,8 @@
 
 The [wii-linux-ngx repository](https://github.com/Wii-Linux/wii-linux-ngx) contains Linux kernel branches with rebased patches for the purpose of running a modern Linux distribution on the Wii.
 
+It was previously derived from the [project of the same name](https://github.com/neagix/wii-linux-ngx), by [neagix](https://github.com/neagix).
+
 Up-to-date documentation and scripts can always be found on the [master branch](https://github.com/Wii-Linux/wii-linux-ngx/tree/master).
 
 Feel free to open Issues/Pull requests for improvement/discussion purposes.
@@ -37,16 +39,18 @@ Wii power on -> MINI -> (Gumboot selection with power/eject buttons ->) Linux ke
 ```
 
 See also:
+
 * [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot), by neagix
 * [customized MINI](https://github.com/neagix/mini), by neagix
+* [Void PPC](https://github.com/Void-PPC), by foxlet
 
 ### GameCube
 
-Currently not tested on GameCube.
+Currently not tested on GameCube, if you can, please [reach out](https://github.com/Wii-Linux/wii-linux-ngx/blob/master/docs/index.md#frequently-asked-questions)
 
 ### vWii
 
-Currently not tested on virtual Wii.
+Currently not tested on virtual Wii, if you can, please [reach out](https://github.com/Wii-Linux/wii-linux-ngx/blob/master/docs/index.md#frequently-asked-questions)
 
 ## Default credentials
 
@@ -71,15 +75,17 @@ The original (2.6.32 and prior) gcLinux work can be found at: http://sourceforge
 Current version has framebuffer support with Farter's Deferred I/O Framebuffer patch (http://fartersoft.com/) and neagix (author)'s support for RGBA.
 
 To change mode to 32bit:
-```
+
+```text
 fbset -xres 576 -yres 432 -vxres 576 -vyres 432 -depth 32
 ```
 
 Change the last parameter to go back to 16bit.
 
 To display an image:
-```
-$ fbv mario.png
+
+```text
+fbv mario.png
 ```
 
 Xorg using framebuffer works fine.
@@ -93,6 +99,7 @@ Issues that persist from neagix's original repo:
 Boot from MINI is well tested, but not boot from IOS. Xorg framebuffer driver is also not tested.
 
 Bugs probably introduced in the port of MIKEp5 from v2.6 to v3.x tree:
+
 * In IOS mode, external swap partitions don't mount correctly as of kernel version 2.6.39. As a workaround, use a local swapfile (This bug should be relatively easy to find using git bisect)
 * Both IOS and MINI modes seem to have a bug that prevents Linux from booting if a GameCube Controller is inserted in one of the ports while the serial port is enabled in the config.  This bug is caused by a glitch that was created when forward porting from 2.6.32 to 2.6.33.  It should be possible to find this bug using git bisect.
 * Both IOS and MINI also still suffer from the same hardware limitations that they did in 2.6.32.y.  For example, wireless and disc support for Wii consoles is still limited to MINI mode.  Also, DVDs can be mounted as they were in version 2.6.32.y, but due to hardware limitations, it's unable to write to any disc and is unable to read CDs and certain types of DVD's
@@ -106,14 +113,16 @@ Bugs probably introduced in the port of MIKEp5 from v2.6 to v3.x tree:
 It is possible to change kernel command line arguments (also known as `bootargs` from the DTS file) with a hex editor, with (very careful) usage of `sed`, or with the provided `baedit` tool.
 
 To show current bootargs embedded in the kernel:
-```
+
+```text
 $ baedit zImage
 >OK: 3201336 bytes read
 current  bootargs = 'root=/dev/mmcblk0p2 console=tty0 console=ttyUSB0,115200 force_keyboard_port=4 video=gcnfb:tv=auto loader=mini nobats rootwait       
 ```
 
 To change the arguments, just pass them as second parameter to `baedit`:
-```
+
+```text
 $ baedit zImage 'your new arguments here'
 >OK: 3201336 bytes read
 current  bootargs = 'root=/dev/mmcblk0p2 console=tty0 console=ttyUSB0,115200 force_keyboard_port=4 video=gcnfb:tv=auto loader=mini nobats rootwait       
@@ -134,6 +143,7 @@ Log into the console and run `nmtui`.  Add a new Wi-Fi connection as you would o
 * Ask for help in the [Discord server](#discord)
 
 Some of these links may no longer work.
+
 * http://www.gc-linux.org/wiki/WL:Wifi_Configuration
 * http://www.linux-tips-and-tricks.de/overview#english
 * http://www.linux-tips-and-tricks.de/downloads/collectnwdata-sh/download
@@ -160,19 +170,19 @@ If building for the first time, run this (only needed once):
 Then, to get a shell in the container, run:
 `docker run -v /path/to/the/kernel:/code -it theotherone224/wii-linux-toolchain`
 
-Then, in that shell, the following commands are going to be useful:
-`make -j$(nproc)` - Build the kernel quickly on all threads
-`make -j1` - Build the kernel slowly with 1 thread, useful if something fails to see the error
+Then, in that shell, the following commands are going to be useful:  
+`make -j$(nproc)` - Build the kernel quickly on all threads  
+`make -j1` - Build the kernel slowly with 1 thread, useful if something fails to see the error  
 `make menuconfig` - Start a TUI to configure the kernel
-`make wii_defconfig` - Copy the default Wii config as your config file
-`make modules_install` - Install the kernel modules to /lib/modules/*kernel version*
+`make wii_defconfig` - Copy the default Wii config as your config file  
+`make modules_install` - Install the kernel modules to /lib/modules/*kernel version*  
 
 After built, the kernel will be located in `arch/powerpc/boot/zImage`, relative to the kernel source directory.
-
 
 ## ZRAM
 
 TODO
 
 ## Related pages:
+
 * http://fartersoft.com/blog/2011/08/17/debian-installer-for-wii/
