@@ -40,9 +40,9 @@ Wii power on -> MINI -> (Gumboot selection with power/eject buttons ->) Linux ke
 
 See also:
 
-* [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot), by neagix
-* [customized MINI](https://github.com/neagix/mini), by neagix
-* [Void PPC](https://github.com/Void-PPC), by foxlet
+* [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot), by [neagix](https://github.com/neagix)
+* [customized MINI](https://github.com/neagix/mini), by [neagix](https://github.com/neagix)
+* [Void PPC](https://github.com/Void-PPC), by [Foxlet](https://github.com/foxlet)
 
 ### GameCube
 
