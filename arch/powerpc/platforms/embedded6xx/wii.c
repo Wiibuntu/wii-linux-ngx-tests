@@ -290,6 +290,7 @@ enum starlet_ipc_flavour starlet_get_ipc_flavour(void)
 {
 	return starlet_ipc_flavour;
 }
+EXPORT_SYMBOL_GPL(starlet_get_ipc_flavour);
 
 #ifdef CONFIG_KEXEC
 

@@ -21,6 +21,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
@@ -208,6 +210,7 @@ void starlet_ipc_free_request(struct starlet_ipc_request *req)
 {
 	dma_pool_free(req->ipc_dev->dma_pool, req, req->dma_addr);
 }
+EXPORT_SYMBOL_GPL(starlet_ipc_free_request);
 
 static void starlet_ipc_start_request(struct starlet_ipc_request *req)
 {
@@ -627,8 +630,10 @@ int starlet_ioctl_dma_prepare(struct starlet_ipc_request *req,
 {
 	struct starlet_ipc_device *ipc_dev = starlet_ipc_get_device();
 
-	if (!ipc_dev)
+	if (!ipc_dev) {
+		DBG("%s: returning -ENODEV\n");
 		return -ENODEV;
+	}
 
 	req->cmd = STARLET_IOS_IOCTL;
 	req->fd = fd;
@@ -770,8 +775,10 @@ static int _starlet_ioctl(int fd, int request,
 	int error;
 
 	req = starlet_ipc_alloc_request(ipc_dev, GFP_ATOMIC);
-	if (!req)
+	if (!req) {
+		printk("%s: starlet_ipc_alloc_request() failed", __func__);
 		return -ENOMEM;
+	}
 
 	error = starlet_ioctl_prepare(req, fd, request,
 					  ibuf, ilen, obuf, olen);
