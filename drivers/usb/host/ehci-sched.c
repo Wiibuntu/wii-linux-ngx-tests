@@ -925,7 +925,7 @@ done:
 	return status;
 }
 
-static int intr_submit (
+int intr_submit (
 	struct ehci_hcd		*ehci,
 	struct urb		*urb,
 	struct list_head	*qtd_list,
@@ -1936,7 +1936,7 @@ done:
 
 /*-------------------------------------------------------------------------*/
 
-static int itd_submit (struct ehci_hcd *ehci, struct urb *urb,
+int itd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	gfp_t mem_flags)
 {
 	int			status = -EINVAL;
@@ -2316,7 +2316,7 @@ done:
 }
 
 
-static int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
+int sitd_submit (struct ehci_hcd *ehci, struct urb *urb,
 	gfp_t mem_flags)
 {
 	int			status = -EINVAL;
