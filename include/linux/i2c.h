@@ -884,6 +884,8 @@ static inline bool i2c_client_has_driver(struct i2c_client *client)
 {
 	return !IS_ERR_OR_NULL(client) && client->dev.driver;
 }
+extern struct i2c_client *i2c_use_client(struct i2c_client *client);
+extern void i2c_release_client(struct i2c_client *client);
 
 /* call the i2c_client->command() of all attached clients with
  * the given arguments */
