@@ -1,6 +1,8 @@
 /*
  * Copyright (C) 2014 Marvell Technology Group Ltd.
  *
+ * Marvell Berlin reset driver
+ *
  * Antoine Tenart <antoine.tenart@free-electrons.com>
  * Sebastian Hesselbarth <sebastian.hesselbarth@gmail.com>
  *
@@ -46,17 +48,14 @@ static int berlin_reset_reset(struct reset_controller_dev *rcdev,
 	return 0;
 }
 
-static struct reset_control_ops berlin_reset_ops = {
+static const struct reset_control_ops berlin_reset_ops = {
 	.reset	= berlin_reset_reset,
 };
 
 static int berlin_reset_xlate(struct reset_controller_dev *rcdev,
 			      const struct of_phandle_args *reset_spec)
 {
-	unsigned offset, bit;
-
-	if (WARN_ON(reset_spec->args_count != rcdev->of_reset_n_cells))
-		return -EINVAL;
+	unsigned int offset, bit;
 
 	offset = reset_spec->args[0];
 	bit = reset_spec->args[1];
@@ -107,5 +106,5 @@ module_platform_driver(berlin_reset_driver);
 
 MODULE_AUTHOR("Antoine Tenart <antoine.tenart@free-electrons.com>");
 MODULE_AUTHOR("Sebastian Hesselbarth <sebastian.hesselbarth@gmail.com>");
-MODULE_DESCRIPTION("Marvell Berlin reset driver");
+MODULE_DESCRIPTION("Synaptics Berlin reset controller");
 MODULE_LICENSE("GPL");

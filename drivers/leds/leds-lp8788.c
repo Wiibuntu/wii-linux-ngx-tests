@@ -1,14 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * TI LP8788 MFD - keyled driver
  *
  * Copyright 2012 Texas Instruments
  *
  * Author: Milo(Woogyom) Kim <milo.kim@ti.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
  */
 
 #include <linux/module.h>
@@ -146,15 +142,13 @@ static int lp8788_led_probe(struct platform_device *pdev)
 
 	mutex_init(&led->lock);
 
-	platform_set_drvdata(pdev, led);
-
 	ret = lp8788_led_init_device(led, led_pdata);
 	if (ret) {
 		dev_err(dev, "led init device err: %d\n", ret);
 		return ret;
 	}
 
-	ret = led_classdev_register(dev, &led->led_dev);
+	ret = devm_led_classdev_register(dev, &led->led_dev);
 	if (ret) {
 		dev_err(dev, "led register err: %d\n", ret);
 		return ret;
@@ -163,18 +157,8 @@ static int lp8788_led_probe(struct platform_device *pdev)
 	return 0;
 }
 
-static int lp8788_led_remove(struct platform_device *pdev)
-{
-	struct lp8788_led *led = platform_get_drvdata(pdev);
-
-	led_classdev_unregister(&led->led_dev);
-
-	return 0;
-}
-
 static struct platform_driver lp8788_led_driver = {
 	.probe = lp8788_led_probe,
-	.remove = lp8788_led_remove,
 	.driver = {
 		.name = LP8788_DEV_KEYLED,
 	},

@@ -1,25 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /******************************************************************************
  *
- * GPL LICENSE SUMMARY
- *
  * Copyright(c) 2008 - 2011 Intel Corporation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
- *
- * The full GNU General Public License is included in this distribution
- * in the file called LICENSE.GPL.
  *
  * Contact Information:
  *  Intel Linux Wireless <ilw@linux.intel.com>
@@ -435,7 +417,7 @@ EXPORT_SYMBOL(il_send_cmd_pdu_async);
 
 /* default: IL_LED_BLINK(0) using blinking idx table */
 static int led_mode;
-module_param(led_mode, int, S_IRUGO);
+module_param(led_mode, int, 0444);
 MODULE_PARM_DESC(led_mode,
 		 "0=system default, " "1=On(RF On)/Off(RF Off), 2=blinking");
 
@@ -703,7 +685,7 @@ il_eeprom_query16(const struct il_priv *il, size_t offset)
 }
 EXPORT_SYMBOL(il_eeprom_query16);
 
-/**
+/*
  * il_eeprom_init - read EEPROM contents
  *
  * Load the EEPROM contents from adapter into il->eeprom
@@ -717,16 +699,15 @@ il_eeprom_init(struct il_priv *il)
 	u32 gp = _il_rd(il, CSR_EEPROM_GP);
 	int sz;
 	int ret;
-	u16 addr;
+	int addr;
 
 	/* allocate eeprom */
 	sz = il->cfg->eeprom_size;
 	D_EEPROM("NVM size = %d\n", sz);
 	il->eeprom = kzalloc(sz, GFP_KERNEL);
-	if (!il->eeprom) {
-		ret = -ENOMEM;
-		goto alloc_err;
-	}
+	if (!il->eeprom)
+		return -ENOMEM;
+
 	e = (__le16 *) il->eeprom;
 
 	il->ops->apm_init(il);
@@ -778,7 +759,6 @@ err:
 		il_eeprom_free(il);
 	/* Reset chip to save power until we load uCode during "up". */
 	il_apm_stop(il);
-alloc_err:
 	return ret;
 }
 EXPORT_SYMBOL(il_eeprom_init);
@@ -856,13 +836,13 @@ il_init_band_reference(const struct il_priv *il, int eep_band,
 
 #define CHECK_AND_PRINT(x) ((eeprom_ch->flags & EEPROM_CHANNEL_##x) \
 			    ? # x " " : "")
-/**
+/*
  * il_mod_ht40_chan_info - Copy ht40 channel info into driver's il.
  *
  * Does not set up a command, or touch hardware.
  */
 static int
-il_mod_ht40_chan_info(struct il_priv *il, enum ieee80211_band band, u16 channel,
+il_mod_ht40_chan_info(struct il_priv *il, enum nl80211_band band, u16 channel,
 		      const struct il_eeprom_channel *eeprom_ch,
 		      u8 clear_ht40_extension_channel)
 {
@@ -897,7 +877,7 @@ il_mod_ht40_chan_info(struct il_priv *il, enum ieee80211_band band, u16 channel,
 #define CHECK_AND_PRINT_I(x) ((eeprom_ch_info[ch].flags & EEPROM_CHANNEL_##x) \
 			    ? # x " " : "")
 
-/**
+/*
  * il_init_channel_map - Set up driver's info for all possible channels
  */
 int
@@ -924,7 +904,7 @@ il_init_channel_map(struct il_priv *il)
 	D_EEPROM("Parsing data for %d channels.\n", il->channel_count);
 
 	il->channel_info =
-	    kzalloc(sizeof(struct il_channel_info) * il->channel_count,
+	    kcalloc(il->channel_count, sizeof(struct il_channel_info),
 		    GFP_KERNEL);
 	if (!il->channel_info) {
 		IL_ERR("Could not allocate channel_info\n");
@@ -947,7 +927,7 @@ il_init_channel_map(struct il_priv *il)
 			ch_info->channel = eeprom_ch_idx[ch];
 			ch_info->band =
 			    (band ==
-			     1) ? IEEE80211_BAND_2GHZ : IEEE80211_BAND_5GHZ;
+			     1) ? NL80211_BAND_2GHZ : NL80211_BAND_5GHZ;
 
 			/* permanently store EEPROM's channel regulatory flags
 			 *   and max power in channel info database. */
@@ -1005,14 +985,14 @@ il_init_channel_map(struct il_priv *il)
 
 	/* Two additional EEPROM bands for 2.4 and 5 GHz HT40 channels */
 	for (band = 6; band <= 7; band++) {
-		enum ieee80211_band ieeeband;
+		enum nl80211_band ieeeband;
 
 		il_init_band_reference(il, band, &eeprom_ch_count,
 				       &eeprom_ch_info, &eeprom_ch_idx);
 
 		/* EEPROM band 6 is 2.4, band 7 is 5 GHz */
 		ieeeband =
-		    (band == 6) ? IEEE80211_BAND_2GHZ : IEEE80211_BAND_5GHZ;
+		    (band == 6) ? NL80211_BAND_2GHZ : NL80211_BAND_5GHZ;
 
 		/* Loop through each band adding each of the channels */
 		for (ch = 0; ch < eeprom_ch_count; ch++) {
@@ -1044,25 +1024,25 @@ il_free_channel_map(struct il_priv *il)
 }
 EXPORT_SYMBOL(il_free_channel_map);
 
-/**
+/*
  * il_get_channel_info - Find driver's ilate channel info
  *
  * Based on band and channel number.
  */
 const struct il_channel_info *
-il_get_channel_info(const struct il_priv *il, enum ieee80211_band band,
+il_get_channel_info(const struct il_priv *il, enum nl80211_band band,
 		    u16 channel)
 {
 	int i;
 
 	switch (band) {
-	case IEEE80211_BAND_5GHZ:
+	case NL80211_BAND_5GHZ:
 		for (i = 14; i < il->channel_count; i++) {
 			if (il->channel_info[i].channel == channel)
 				return &il->channel_info[i];
 		}
 		break;
-	case IEEE80211_BAND_2GHZ:
+	case NL80211_BAND_2GHZ:
 		if (channel >= 1 && channel <= 14)
 			return &il->channel_info[channel - 1];
 		break;
@@ -1092,7 +1072,7 @@ EXPORT_SYMBOL(il_get_channel_info);
 static void
 il_build_powertable_cmd(struct il_priv *il, struct il_powertable_cmd *cmd)
 {
-	const __le32 interval[3][IL_POWER_VEC_SIZE] = {
+	static const __le32 interval[3][IL_POWER_VEC_SIZE] = {
 		SLP_VEC(2, 2, 4, 6, 0xFF),
 		SLP_VEC(2, 4, 7, 10, 10),
 		SLP_VEC(4, 7, 10, 10, 0xFF)
@@ -1307,10 +1287,14 @@ il_send_scan_abort(struct il_priv *il)
 static void
 il_complete_scan(struct il_priv *il, bool aborted)
 {
+	struct cfg80211_scan_info info = {
+		.aborted = aborted,
+	};
+
 	/* check if scan was requested from mac80211 */
 	if (il->scan_request) {
 		D_SCAN("Complete scan in mac80211\n");
-		ieee80211_scan_completed(il->hw, aborted);
+		ieee80211_scan_completed(il->hw, &info);
 	}
 
 	il->scan_vif = NULL;
@@ -1359,7 +1343,7 @@ il_do_scan_abort(struct il_priv *il)
 		D_SCAN("Successfully send scan abort\n");
 }
 
-/**
+/*
  * il_scan_cancel - Cancel any currently executing HW scan
  */
 int
@@ -1371,7 +1355,7 @@ il_scan_cancel(struct il_priv *il)
 }
 EXPORT_SYMBOL(il_scan_cancel);
 
-/**
+/*
  * il_scan_cancel_timeout - Cancel any currently executing HW scan
  * @ms: amount of time to wait (in milliseconds) for scan to abort
  *
@@ -1446,10 +1430,8 @@ static void
 il_hdl_scan_complete(struct il_priv *il, struct il_rx_buf *rxb)
 {
 
-#ifdef CONFIG_IWLEGACY_DEBUG
 	struct il_rx_pkt *pkt = rxb_addr(rxb);
 	struct il_scancomplete_notification *scan_notif = (void *)pkt->u.raw;
-#endif
 
 	D_SCAN("Scan complete: %d channels (TSF 0x%08X:%08X) - %d\n",
 	       scan_notif->scanned_channels, scan_notif->tsf_low,
@@ -1459,7 +1441,7 @@ il_hdl_scan_complete(struct il_priv *il, struct il_rx_buf *rxb)
 	clear_bit(S_SCAN_HW, &il->status);
 
 	D_SCAN("Scan on %sGHz took %dms\n",
-	       (il->scan_band == IEEE80211_BAND_2GHZ) ? "2.4" : "5.2",
+	       (il->scan_band == NL80211_BAND_2GHZ) ? "2.4" : "5.2",
 	       jiffies_to_msecs(jiffies - il->scan_start));
 
 	queue_work(il->workqueue, &il->scan_completed);
@@ -1477,10 +1459,10 @@ il_setup_rx_scan_handlers(struct il_priv *il)
 EXPORT_SYMBOL(il_setup_rx_scan_handlers);
 
 u16
-il_get_active_dwell_time(struct il_priv *il, enum ieee80211_band band,
+il_get_active_dwell_time(struct il_priv *il, enum nl80211_band band,
 			 u8 n_probes)
 {
-	if (band == IEEE80211_BAND_5GHZ)
+	if (band == NL80211_BAND_5GHZ)
 		return IL_ACTIVE_DWELL_TIME_52 +
 		    IL_ACTIVE_DWELL_FACTOR_52GHZ * (n_probes + 1);
 	else
@@ -1490,14 +1472,14 @@ il_get_active_dwell_time(struct il_priv *il, enum ieee80211_band band,
 EXPORT_SYMBOL(il_get_active_dwell_time);
 
 u16
-il_get_passive_dwell_time(struct il_priv *il, enum ieee80211_band band,
+il_get_passive_dwell_time(struct il_priv *il, enum nl80211_band band,
 			  struct ieee80211_vif *vif)
 {
 	u16 value;
 
 	u16 passive =
 	    (band ==
-	     IEEE80211_BAND_2GHZ) ? IL_PASSIVE_DWELL_BASE +
+	     NL80211_BAND_2GHZ) ? IL_PASSIVE_DWELL_BASE +
 	    IL_PASSIVE_DWELL_TIME_24 : IL_PASSIVE_DWELL_BASE +
 	    IL_PASSIVE_DWELL_TIME_52;
 
@@ -1522,10 +1504,10 @@ void
 il_init_scan_params(struct il_priv *il)
 {
 	u8 ant_idx = fls(il->hw_params.valid_tx_ant) - 1;
-	if (!il->scan_tx_ant[IEEE80211_BAND_5GHZ])
-		il->scan_tx_ant[IEEE80211_BAND_5GHZ] = ant_idx;
-	if (!il->scan_tx_ant[IEEE80211_BAND_2GHZ])
-		il->scan_tx_ant[IEEE80211_BAND_2GHZ] = ant_idx;
+	if (!il->scan_tx_ant[NL80211_BAND_5GHZ])
+		il->scan_tx_ant[NL80211_BAND_5GHZ] = ant_idx;
+	if (!il->scan_tx_ant[NL80211_BAND_2GHZ])
+		il->scan_tx_ant[NL80211_BAND_2GHZ] = ant_idx;
 }
 EXPORT_SYMBOL(il_init_scan_params);
 
@@ -1623,10 +1605,9 @@ il_bg_scan_check(struct work_struct *data)
 	mutex_unlock(&il->mutex);
 }
 
-/**
+/*
  * il_fill_probe_req - fill in all required fields and IE for probe request
  */
-
 u16
 il_fill_probe_req(struct il_priv *il, struct ieee80211_mgmt *frame,
 		  const u8 *ta, const u8 *ies, int ie_len, int left)
@@ -1882,22 +1863,22 @@ EXPORT_SYMBOL(il_send_add_sta);
 static void
 il_set_ht_add_station(struct il_priv *il, u8 idx, struct ieee80211_sta *sta)
 {
-	struct ieee80211_sta_ht_cap *sta_ht_inf = &sta->ht_cap;
+	struct ieee80211_sta_ht_cap *sta_ht_inf = &sta->deflink.ht_cap;
 	__le32 sta_flags;
 
 	if (!sta || !sta_ht_inf->ht_supported)
 		goto done;
 
 	D_ASSOC("spatial multiplexing power save mode: %s\n",
-		(sta->smps_mode == IEEE80211_SMPS_STATIC) ? "static" :
-		(sta->smps_mode == IEEE80211_SMPS_DYNAMIC) ? "dynamic" :
+		(sta->deflink.smps_mode == IEEE80211_SMPS_STATIC) ? "static" :
+		(sta->deflink.smps_mode == IEEE80211_SMPS_DYNAMIC) ? "dynamic" :
 		"disabled");
 
 	sta_flags = il->stations[idx].sta.station_flags;
 
 	sta_flags &= ~(STA_FLG_RTS_MIMO_PROT_MSK | STA_FLG_MIMO_DIS_MSK);
 
-	switch (sta->smps_mode) {
+	switch (sta->deflink.smps_mode) {
 	case IEEE80211_SMPS_STATIC:
 		sta_flags |= STA_FLG_MIMO_DIS_MSK;
 		break;
@@ -1907,7 +1888,7 @@ il_set_ht_add_station(struct il_priv *il, u8 idx, struct ieee80211_sta *sta)
 	case IEEE80211_SMPS_OFF:
 		break;
 	default:
-		IL_WARN("Invalid MIMO PS mode %d\n", sta->smps_mode);
+		IL_WARN("Invalid MIMO PS mode %d\n", sta->deflink.smps_mode);
 		break;
 	}
 
@@ -1919,7 +1900,7 @@ il_set_ht_add_station(struct il_priv *il, u8 idx, struct ieee80211_sta *sta)
 	    cpu_to_le32((u32) sta_ht_inf->
 			ampdu_density << STA_FLG_AGG_MPDU_DENSITY_POS);
 
-	if (il_is_ht40_tx_allowed(il, &sta->ht_cap))
+	if (il_is_ht40_tx_allowed(il, &sta->deflink.ht_cap))
 		sta_flags |= STA_FLG_HT40_EN_MSK;
 	else
 		sta_flags &= ~STA_FLG_HT40_EN_MSK;
@@ -1929,7 +1910,7 @@ done:
 	return;
 }
 
-/**
+/*
  * il_prep_station - Prepare station information for addition
  *
  * should be called with sta_lock held
@@ -2005,7 +1986,7 @@ il_prep_station(struct il_priv *il, const u8 *addr, bool is_ap,
 	il_set_ht_add_station(il, sta_id, sta);
 
 	/* 3945 only */
-	rate = (il->band == IEEE80211_BAND_5GHZ) ? RATE_6M_PLCP : RATE_1M_PLCP;
+	rate = (il->band == NL80211_BAND_5GHZ) ? RATE_6M_PLCP : RATE_1M_PLCP;
 	/* Turn on both antennas for the station... */
 	station->sta.rate_n_flags = cpu_to_le16(rate | RATE_MCS_ANT_AB_MSK);
 
@@ -2016,7 +1997,7 @@ EXPORT_SYMBOL_GPL(il_prep_station);
 
 #define STA_WAIT_TIMEOUT (HZ/2)
 
-/**
+/*
  * il_add_station_common -
  */
 int
@@ -2076,7 +2057,7 @@ il_add_station_common(struct il_priv *il, const u8 *addr, bool is_ap,
 }
 EXPORT_SYMBOL(il_add_station_common);
 
-/**
+/*
  * il_sta_ucode_deactivate - deactivate ucode status for a station
  *
  * il->sta_lock must be held
@@ -2152,7 +2133,7 @@ il_send_remove_station(struct il_priv *il, const u8 * addr, int sta_id,
 	return ret;
 }
 
-/**
+/*
  * il_remove_station - Remove driver's knowledge of station.
  */
 int
@@ -2208,7 +2189,7 @@ out_err:
 }
 EXPORT_SYMBOL_GPL(il_remove_station);
 
-/**
+/*
  * il_clear_ucode_stations - clear ucode station table bits
  *
  * This function clears all the bits in the driver indicating
@@ -2240,7 +2221,7 @@ il_clear_ucode_stations(struct il_priv *il)
 }
 EXPORT_SYMBOL(il_clear_ucode_stations);
 
-/**
+/*
  * il_restore_stations() - Restore driver known stations to device
  *
  * All stations considered active by driver, but not present in ucode, is
@@ -2372,7 +2353,7 @@ il_dump_lq_cmd(struct il_priv *il, struct il_link_quality_cmd *lq)
 }
 #endif
 
-/**
+/*
  * il_is_lq_table_valid() - Test one aspect of LQ cmd for validity
  *
  * It sometimes happens when a HT rate has been in use and we
@@ -2401,7 +2382,7 @@ il_is_lq_table_valid(struct il_priv *il, struct il_link_quality_cmd *lq)
 	return true;
 }
 
-/**
+/*
  * il_send_lq_cmd() - Send link quality command
  * @init: This command is sent as part of station initialization right
  *        after station has been added.
@@ -2547,7 +2528,7 @@ EXPORT_SYMBOL(il_mac_sta_remove);
  *
  */
 
-/**
+/*
  * il_rx_queue_space - Return number of free slots available in queue.
  */
 int
@@ -2564,7 +2545,7 @@ il_rx_queue_space(const struct il_rx_queue *q)
 }
 EXPORT_SYMBOL(il_rx_queue_space);
 
-/**
+/*
  * il_rx_queue_update_write_ptr - Update the write pointer for the RX queue
  */
 void
@@ -2693,6 +2674,7 @@ il_set_decrypted_flag(struct il_priv *il, struct ieee80211_hdr *hdr,
 		if ((decrypt_res & RX_RES_STATUS_DECRYPT_TYPE_MSK) ==
 		    RX_RES_STATUS_BAD_KEY_TTAK)
 			break;
+		fallthrough;
 
 	case RX_RES_STATUS_SEC_TYPE_WEP:
 		if ((decrypt_res & RX_RES_STATUS_DECRYPT_TYPE_MSK) ==
@@ -2702,6 +2684,7 @@ il_set_decrypted_flag(struct il_priv *il, struct ieee80211_hdr *hdr,
 			D_RX("Packet destroyed\n");
 			return -1;
 		}
+		fallthrough;
 	case RX_RES_STATUS_SEC_TYPE_CCMP:
 		if ((decrypt_res & RX_RES_STATUS_DECRYPT_TYPE_MSK) ==
 		    RX_RES_STATUS_DECRYPT_OK) {
@@ -2717,7 +2700,7 @@ il_set_decrypted_flag(struct il_priv *il, struct ieee80211_hdr *hdr,
 }
 EXPORT_SYMBOL(il_set_decrypted_flag);
 
-/**
+/*
  * il_txq_update_write_ptr - Send new write idx to hardware
  */
 void
@@ -2757,7 +2740,7 @@ il_txq_update_write_ptr(struct il_priv *il, struct il_tx_queue *txq)
 }
 EXPORT_SYMBOL(il_txq_update_write_ptr);
 
-/**
+/*
  * il_tx_queue_unmap -  Unmap any remaining DMA mappings and free skb's
  */
 void
@@ -2776,7 +2759,7 @@ il_tx_queue_unmap(struct il_priv *il, int txq_id)
 }
 EXPORT_SYMBOL(il_tx_queue_unmap);
 
-/**
+/*
  * il_tx_queue_free - Deallocate DMA queue.
  * @txq: Transmit queue to deallocate.
  *
@@ -2794,8 +2777,10 @@ il_tx_queue_free(struct il_priv *il, int txq_id)
 	il_tx_queue_unmap(il, txq_id);
 
 	/* De-alloc array of command/tx buffers */
-	for (i = 0; i < TFD_TX_CMD_SLOTS; i++)
-		kfree(txq->cmd[i]);
+	if (txq->cmd) {
+		for (i = 0; i < TFD_TX_CMD_SLOTS; i++)
+			kfree(txq->cmd[i]);
+	}
 
 	/* De-alloc circular buffer of TFDs */
 	if (txq->q.n_bd)
@@ -2817,7 +2802,7 @@ il_tx_queue_free(struct il_priv *il, int txq_id)
 }
 EXPORT_SYMBOL(il_tx_queue_free);
 
-/**
+/*
  * il_cmd_queue_unmap - Unmap any remaining DMA mappings from command queue
  */
 void
@@ -2834,10 +2819,10 @@ il_cmd_queue_unmap(struct il_priv *il)
 		i = il_get_cmd_idx(q, q->read_ptr, 0);
 
 		if (txq->meta[i].flags & CMD_MAPPED) {
-			pci_unmap_single(il->pci_dev,
+			dma_unmap_single(&il->pci_dev->dev,
 					 dma_unmap_addr(&txq->meta[i], mapping),
 					 dma_unmap_len(&txq->meta[i], len),
-					 PCI_DMA_BIDIRECTIONAL);
+					 DMA_BIDIRECTIONAL);
 			txq->meta[i].flags = 0;
 		}
 
@@ -2846,18 +2831,17 @@ il_cmd_queue_unmap(struct il_priv *il)
 
 	i = q->n_win;
 	if (txq->meta[i].flags & CMD_MAPPED) {
-		pci_unmap_single(il->pci_dev,
+		dma_unmap_single(&il->pci_dev->dev,
 				 dma_unmap_addr(&txq->meta[i], mapping),
 				 dma_unmap_len(&txq->meta[i], len),
-				 PCI_DMA_BIDIRECTIONAL);
+				 DMA_BIDIRECTIONAL);
 		txq->meta[i].flags = 0;
 	}
 }
 EXPORT_SYMBOL(il_cmd_queue_unmap);
 
-/**
+/*
  * il_cmd_queue_free - Deallocate DMA queue.
- * @txq: Transmit queue to deallocate.
  *
  * Empty queue by removing and destroying all BD's.
  * Free all buffers.
@@ -2873,8 +2857,10 @@ il_cmd_queue_free(struct il_priv *il)
 	il_cmd_queue_unmap(il);
 
 	/* De-alloc array of command/tx buffers */
-	for (i = 0; i <= TFD_CMD_SLOTS; i++)
-		kfree(txq->cmd[i]);
+	if (txq->cmd) {
+		for (i = 0; i <= TFD_CMD_SLOTS; i++)
+			kfree(txq->cmd[i]);
+	}
 
 	/* De-alloc circular buffer of TFDs */
 	if (txq->q.n_bd)
@@ -2934,7 +2920,7 @@ il_queue_space(const struct il_queue *q)
 EXPORT_SYMBOL(il_queue_space);
 
 
-/**
+/*
  * il_queue_init - Initialize queue's high/low-water and read/write idxes
  */
 static int
@@ -2968,7 +2954,7 @@ il_queue_init(struct il_priv *il, struct il_queue *q, int slots, u32 id)
 	return 0;
 }
 
-/**
+/*
  * il_tx_queue_alloc - Alloc driver data and TFD CB for one Tx/cmd queue
  */
 static int
@@ -3008,7 +2994,7 @@ error:
 	return -ENOMEM;
 }
 
-/**
+/*
  * il_tx_queue_init - Allocate and initialize one tx/cmd queue
  */
 int
@@ -3035,9 +3021,9 @@ il_tx_queue_init(struct il_priv *il, u32 txq_id)
 	}
 
 	txq->meta =
-	    kzalloc(sizeof(struct il_cmd_meta) * actual_slots, GFP_KERNEL);
+	    kcalloc(actual_slots, sizeof(struct il_cmd_meta), GFP_KERNEL);
 	txq->cmd =
-	    kzalloc(sizeof(struct il_device_cmd *) * actual_slots, GFP_KERNEL);
+	    kcalloc(actual_slots, sizeof(struct il_device_cmd *), GFP_KERNEL);
 
 	if (!txq->meta || !txq->cmd)
 		goto out_free_arrays;
@@ -3080,7 +3066,9 @@ err:
 		kfree(txq->cmd[i]);
 out_free_arrays:
 	kfree(txq->meta);
+	txq->meta = NULL;
 	kfree(txq->cmd);
+	txq->cmd = NULL;
 
 	return -ENOMEM;
 }
@@ -3113,7 +3101,7 @@ EXPORT_SYMBOL(il_tx_queue_reset);
 
 /*************** HOST COMMAND QUEUE FUNCTIONS   *****/
 
-/**
+/*
  * il_enqueue_hcmd - enqueue a uCode command
  * @il: device ilate data point
  * @cmd: a point to the ucode command structure
@@ -3131,7 +3119,6 @@ il_enqueue_hcmd(struct il_priv *il, struct il_host_cmd *cmd)
 	struct il_cmd_meta *out_meta;
 	dma_addr_t phys_addr;
 	unsigned long flags;
-	int len;
 	u32 idx;
 	u16 fix_size;
 
@@ -3190,9 +3177,6 @@ il_enqueue_hcmd(struct il_priv *il, struct il_host_cmd *cmd)
 	    cpu_to_le16(QUEUE_TO_SEQ(il->cmd_queue) | IDX_TO_SEQ(q->write_ptr));
 	if (cmd->flags & CMD_SIZE_HUGE)
 		out_cmd->hdr.sequence |= SEQ_HUGE_FRAME;
-	len = sizeof(struct il_device_cmd);
-	if (idx == TFD_CMD_SLOTS)
-		len = IL_MAX_CMD_SIZE;
 
 #ifdef CONFIG_IWLEGACY_DEBUG
 	switch (out_cmd->hdr.cmd) {
@@ -3213,10 +3197,9 @@ il_enqueue_hcmd(struct il_priv *il, struct il_host_cmd *cmd)
 	}
 #endif
 
-	phys_addr =
-	    pci_map_single(il->pci_dev, &out_cmd->hdr, fix_size,
-			   PCI_DMA_BIDIRECTIONAL);
-	if (unlikely(pci_dma_mapping_error(il->pci_dev, phys_addr))) {
+	phys_addr = dma_map_single(&il->pci_dev->dev, &out_cmd->hdr, fix_size,
+				   DMA_BIDIRECTIONAL);
+	if (unlikely(dma_mapping_error(&il->pci_dev->dev, phys_addr))) {
 		idx = -ENOMEM;
 		goto out;
 	}
@@ -3241,7 +3224,7 @@ out:
 	return idx;
 }
 
-/**
+/*
  * il_hcmd_queue_reclaim - Reclaim TX command queue entries already Tx'd
  *
  * When FW advances 'R' idx, all entries between old and new 'R' idx
@@ -3274,7 +3257,7 @@ il_hcmd_queue_reclaim(struct il_priv *il, int txq_id, int idx, int cmd_idx)
 	}
 }
 
-/**
+/*
  * il_tx_cmd_complete - Pull unused buffers off the queue and reclaim them
  * @rxb: Rx buffer to reclaim
  *
@@ -3314,8 +3297,8 @@ il_tx_cmd_complete(struct il_priv *il, struct il_rx_buf *rxb)
 
 	txq->time_stamp = jiffies;
 
-	pci_unmap_single(il->pci_dev, dma_unmap_addr(meta, mapping),
-			 dma_unmap_len(meta, len), PCI_DMA_BIDIRECTIONAL);
+	dma_unmap_single(&il->pci_dev->dev, dma_unmap_addr(meta, mapping),
+			 dma_unmap_len(meta, len), DMA_BIDIRECTIONAL);
 
 	/* Input error checking is done when commands are added to queue. */
 	if (meta->flags & CMD_WANT_SKB) {
@@ -3364,7 +3347,7 @@ MODULE_LICENSE("GPL");
  * default: bt_coex_active = true (BT_COEX_ENABLE)
  */
 static bool bt_coex_active = true;
-module_param(bt_coex_active, bool, S_IRUGO);
+module_param(bt_coex_active, bool, 0444);
 MODULE_PARM_DESC(bt_coex_active, "enable wifi/bluetooth co-exist");
 
 u32 il_debug_level;
@@ -3378,7 +3361,7 @@ EXPORT_SYMBOL(il_bcast_addr);
 static void
 il_init_ht_hw_capab(const struct il_priv *il,
 		    struct ieee80211_sta_ht_cap *ht_info,
-		    enum ieee80211_band band)
+		    enum nl80211_band band)
 {
 	u16 max_bit_rate = 0;
 	u8 rx_chains_num = il->hw_params.rx_chains_num;
@@ -3425,7 +3408,7 @@ il_init_ht_hw_capab(const struct il_priv *il,
 	}
 }
 
-/**
+/*
  * il_init_geos - Initialize mac80211's geo/channel info based from eeprom
  */
 int
@@ -3439,15 +3422,15 @@ il_init_geos(struct il_priv *il)
 	int i = 0;
 	s8 max_tx_power = 0;
 
-	if (il->bands[IEEE80211_BAND_2GHZ].n_bitrates ||
-	    il->bands[IEEE80211_BAND_5GHZ].n_bitrates) {
+	if (il->bands[NL80211_BAND_2GHZ].n_bitrates ||
+	    il->bands[NL80211_BAND_5GHZ].n_bitrates) {
 		D_INFO("Geography modes already initialized.\n");
 		set_bit(S_GEO_CONFIGURED, &il->status);
 		return 0;
 	}
 
 	channels =
-	    kzalloc(sizeof(struct ieee80211_channel) * il->channel_count,
+	    kcalloc(il->channel_count, sizeof(struct ieee80211_channel),
 		    GFP_KERNEL);
 	if (!channels)
 		return -ENOMEM;
@@ -3461,23 +3444,23 @@ il_init_geos(struct il_priv *il)
 	}
 
 	/* 5.2GHz channels start after the 2.4GHz channels */
-	sband = &il->bands[IEEE80211_BAND_5GHZ];
+	sband = &il->bands[NL80211_BAND_5GHZ];
 	sband->channels = &channels[ARRAY_SIZE(il_eeprom_band_1)];
 	/* just OFDM */
 	sband->bitrates = &rates[IL_FIRST_OFDM_RATE];
 	sband->n_bitrates = RATE_COUNT_LEGACY - IL_FIRST_OFDM_RATE;
 
 	if (il->cfg->sku & IL_SKU_N)
-		il_init_ht_hw_capab(il, &sband->ht_cap, IEEE80211_BAND_5GHZ);
+		il_init_ht_hw_capab(il, &sband->ht_cap, NL80211_BAND_5GHZ);
 
-	sband = &il->bands[IEEE80211_BAND_2GHZ];
+	sband = &il->bands[NL80211_BAND_2GHZ];
 	sband->channels = channels;
 	/* OFDM & CCK */
 	sband->bitrates = rates;
 	sband->n_bitrates = RATE_COUNT_LEGACY;
 
 	if (il->cfg->sku & IL_SKU_N)
-		il_init_ht_hw_capab(il, &sband->ht_cap, IEEE80211_BAND_2GHZ);
+		il_init_ht_hw_capab(il, &sband->ht_cap, NL80211_BAND_2GHZ);
 
 	il->ieee_channels = channels;
 	il->ieee_rates = rates;
@@ -3528,7 +3511,7 @@ il_init_geos(struct il_priv *il)
 	il->tx_power_user_lmt = max_tx_power;
 	il->tx_power_next = max_tx_power;
 
-	if (il->bands[IEEE80211_BAND_5GHZ].n_channels == 0 &&
+	if (il->bands[NL80211_BAND_5GHZ].n_channels == 0 &&
 	    (il->cfg->sku & IL_SKU_A)) {
 		IL_INFO("Incorrectly detected BG card as ABG. "
 			"Please send your PCI ID 0x%04X:0x%04X to maintainer.\n",
@@ -3537,8 +3520,8 @@ il_init_geos(struct il_priv *il)
 	}
 
 	IL_INFO("Tunable channels: %d 802.11bg, %d 802.11a channels\n",
-		il->bands[IEEE80211_BAND_2GHZ].n_channels,
-		il->bands[IEEE80211_BAND_5GHZ].n_channels);
+		il->bands[NL80211_BAND_2GHZ].n_channels,
+		il->bands[NL80211_BAND_5GHZ].n_channels);
 
 	set_bit(S_GEO_CONFIGURED, &il->status);
 
@@ -3559,7 +3542,7 @@ il_free_geos(struct il_priv *il)
 EXPORT_SYMBOL(il_free_geos);
 
 static bool
-il_is_channel_extension(struct il_priv *il, enum ieee80211_band band,
+il_is_channel_extension(struct il_priv *il, enum nl80211_band band,
 			u16 channel, u8 extension_chan_offset)
 {
 	const struct il_channel_info *ch_info;
@@ -3771,7 +3754,7 @@ il_check_rxon_cmd(struct il_priv *il)
 }
 EXPORT_SYMBOL(il_check_rxon_cmd);
 
-/**
+/*
  * il_full_rxon_required - check if full RXON (vs RXON_ASSOC) cmd is needed
  * @il: staging_rxon is compared to active_rxon
  *
@@ -3922,14 +3905,14 @@ EXPORT_SYMBOL(il_set_rxon_ht);
 
 /* Return valid, unused, channel for a passive scan to reset the RF */
 u8
-il_get_single_channel_number(struct il_priv *il, enum ieee80211_band band)
+il_get_single_channel_number(struct il_priv *il, enum nl80211_band band)
 {
 	const struct il_channel_info *ch_info;
 	int i;
 	u8 channel = 0;
 	u8 min, max;
 
-	if (band == IEEE80211_BAND_5GHZ) {
+	if (band == NL80211_BAND_5GHZ) {
 		min = 14;
 		max = il->channel_count;
 	} else {
@@ -3951,7 +3934,7 @@ il_get_single_channel_number(struct il_priv *il, enum ieee80211_band band)
 }
 EXPORT_SYMBOL(il_get_single_channel_number);
 
-/**
+/*
  * il_set_rxon_channel - Set the band and channel values in staging RXON
  * @ch: requested channel as a pointer to struct ieee80211_channel
 
@@ -3961,14 +3944,14 @@ EXPORT_SYMBOL(il_get_single_channel_number);
 int
 il_set_rxon_channel(struct il_priv *il, struct ieee80211_channel *ch)
 {
-	enum ieee80211_band band = ch->band;
+	enum nl80211_band band = ch->band;
 	u16 channel = ch->hw_value;
 
 	if (le16_to_cpu(il->staging.channel) == channel && il->band == band)
 		return 0;
 
 	il->staging.channel = cpu_to_le16(channel);
-	if (band == IEEE80211_BAND_5GHZ)
+	if (band == NL80211_BAND_5GHZ)
 		il->staging.flags &= ~RXON_FLG_BAND_24G_MSK;
 	else
 		il->staging.flags |= RXON_FLG_BAND_24G_MSK;
@@ -3982,10 +3965,10 @@ il_set_rxon_channel(struct il_priv *il, struct ieee80211_channel *ch)
 EXPORT_SYMBOL(il_set_rxon_channel);
 
 void
-il_set_flags_for_band(struct il_priv *il, enum ieee80211_band band,
+il_set_flags_for_band(struct il_priv *il, enum nl80211_band band,
 		      struct ieee80211_vif *vif)
 {
-	if (band == IEEE80211_BAND_5GHZ) {
+	if (band == NL80211_BAND_5GHZ) {
 		il->staging.flags &=
 		    ~(RXON_FLG_BAND_24G_MSK | RXON_FLG_AUTO_DETECT_MSK |
 		      RXON_FLG_CCK_MSK);
@@ -4154,7 +4137,7 @@ il_print_rx_config_cmd(struct il_priv *il)
 }
 EXPORT_SYMBOL(il_print_rx_config_cmd);
 #endif
-/**
+/*
  * il_irq_handle_error - called for HW or SW error interrupt from card
  */
 void
@@ -4294,8 +4277,8 @@ il_apm_init(struct il_priv *il)
 	 *    power savings, even without L1.
 	 */
 	if (il->cfg->set_l0s) {
-		pcie_capability_read_word(il->pci_dev, PCI_EXP_LNKCTL, &lctl);
-		if (lctl & PCI_EXP_LNKCTL_ASPM_L1) {
+		ret = pcie_capability_read_word(il->pci_dev, PCI_EXP_LNKCTL, &lctl);
+		if (!ret && (lctl & PCI_EXP_LNKCTL_ASPM_L1)) {
 			/* L1-ASPM enabled; disable(!) L0S  */
 			il_set_bit(il, CSR_GIO_REG,
 				   CSR_GIO_REG_VAL_L0S_ENABLED);
@@ -4497,7 +4480,8 @@ il_clear_isr_stats(struct il_priv *il)
 }
 
 int
-il_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif, u16 queue,
+il_mac_conf_tx(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
+	       unsigned int link_id, u16 queue,
 	       const struct ieee80211_tx_queue_params *params)
 {
 	struct il_priv *il = hw->priv;
@@ -4646,8 +4630,9 @@ il_alloc_txq_mem(struct il_priv *il)
 {
 	if (!il->txq)
 		il->txq =
-		    kzalloc(sizeof(struct il_tx_queue) *
-			    il->cfg->num_of_queues, GFP_KERNEL);
+		    kcalloc(il->cfg->num_of_queues,
+			    sizeof(struct il_tx_queue),
+			    GFP_KERNEL);
 	if (!il->txq) {
 		IL_ERR("Not enough memory for txq\n");
 		return -ENOMEM;
@@ -4832,13 +4817,13 @@ il_check_stuck_queue(struct il_priv *il, int cnt)
 #define IL_WD_TICK(timeout) ((timeout) / 4)
 
 /*
- * Watchdog timer callback, we check each tx queue for stuck, if if hung
+ * Watchdog timer callback, we check each tx queue for stuck, if hung
  * we reset the firmware. If everything is fine just rearm the timer.
  */
 void
-il_bg_watchdog(unsigned long data)
+il_bg_watchdog(struct timer_list *t)
 {
-	struct il_priv *il = (struct il_priv *)data;
+	struct il_priv *il = from_timer(il, t, watchdog);
 	int cnt;
 	unsigned long timeout;
 
@@ -4949,8 +4934,7 @@ EXPORT_SYMBOL(il_add_beacon_time);
 static int
 il_pci_suspend(struct device *device)
 {
-	struct pci_dev *pdev = to_pci_dev(device);
-	struct il_priv *il = pci_get_drvdata(pdev);
+	struct il_priv *il = dev_get_drvdata(device);
 
 	/*
 	 * This function is called when system goes into suspend state
@@ -5019,7 +5003,7 @@ il_update_qos(struct il_priv *il)
 			      &il->qos_data.def_qos_parm, NULL);
 }
 
-/**
+/*
  * il_mac_config - mac80211 config callback
  */
 int
@@ -5139,6 +5123,8 @@ set_ch_out:
 
 	if (changed & (IEEE80211_CONF_CHANGE_PS | IEEE80211_CONF_CHANGE_IDLE)) {
 		il->power_data.ps_disabled = !(conf->flags & IEEE80211_CONF_PS);
+		if (!il->power_data.ps_disabled)
+			IL_WARN_ONCE("Enabling power save might cause firmware crashes\n");
 		ret = il_power_update_mode(il, false);
 		if (ret)
 			D_MAC80211("Error setting sleep level\n");
@@ -5188,8 +5174,7 @@ il_mac_reset_tsf(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	memset(&il->current_ht_config, 0, sizeof(struct il_ht_config));
 
 	/* new association get rid of ibss beacon skb */
-	if (il->beacon_skb)
-		dev_kfree_skb(il->beacon_skb);
+	dev_consume_skb_irq(il->beacon_skb);
 	il->beacon_skb = NULL;
 	il->timestamp = 0;
 
@@ -5238,7 +5223,7 @@ il_ht_conf(struct il_priv *il, struct ieee80211_vif *vif)
 		rcu_read_lock();
 		sta = ieee80211_find_sta(vif, bss_conf->bssid);
 		if (sta) {
-			struct ieee80211_sta_ht_cap *ht_cap = &sta->ht_cap;
+			struct ieee80211_sta_ht_cap *ht_cap = &sta->deflink.ht_cap;
 			int maxstreams;
 
 			maxstreams =
@@ -5292,7 +5277,7 @@ il_beacon_update(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	struct il_priv *il = hw->priv;
 	unsigned long flags;
 	__le64 timestamp;
-	struct sk_buff *skb = ieee80211_beacon_get(hw, vif);
+	struct sk_buff *skb = ieee80211_beacon_get(hw, vif, 0);
 
 	if (!skb)
 		return;
@@ -5308,10 +5293,7 @@ il_beacon_update(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 	}
 
 	spin_lock_irqsave(&il->lock, flags);
-
-	if (il->beacon_skb)
-		dev_kfree_skb(il->beacon_skb);
-
+	dev_consume_skb_irq(il->beacon_skb);
 	il->beacon_skb = skb;
 
 	timestamp = ((struct ieee80211_mgmt *)skb->data)->u.beacon.timestamp;
@@ -5330,13 +5312,13 @@ il_beacon_update(struct ieee80211_hw *hw, struct ieee80211_vif *vif)
 
 void
 il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
-			struct ieee80211_bss_conf *bss_conf, u32 changes)
+			struct ieee80211_bss_conf *bss_conf, u64 changes)
 {
 	struct il_priv *il = hw->priv;
 	int ret;
 
 	mutex_lock(&il->mutex);
-	D_MAC80211("enter: changes 0x%x\n", changes);
+	D_MAC80211("enter: changes 0x%llx\n", changes);
 
 	if (!il_is_alive(il)) {
 		D_MAC80211("leave - not alive\n");
@@ -5411,7 +5393,7 @@ il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	if (changes & BSS_CHANGED_ERP_CTS_PROT) {
 		D_MAC80211("ERP_CTS %d\n", bss_conf->use_cts_prot);
-		if (bss_conf->use_cts_prot && il->band != IEEE80211_BAND_5GHZ)
+		if (bss_conf->use_cts_prot && il->band != NL80211_BAND_5GHZ)
 			il->staging.flags |= RXON_FLG_TGG_PROTECT_MSK;
 		else
 			il->staging.flags &= ~RXON_FLG_TGG_PROTECT_MSK;
@@ -5446,8 +5428,8 @@ il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 	}
 
 	if (changes & BSS_CHANGED_ASSOC) {
-		D_MAC80211("ASSOC %d\n", bss_conf->assoc);
-		if (bss_conf->assoc) {
+		D_MAC80211("ASSOC %d\n", vif->cfg.assoc);
+		if (vif->cfg.assoc) {
 			il->timestamp = bss_conf->sync_tsf;
 
 			if (!il_is_rfkill(il))
@@ -5456,8 +5438,8 @@ il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 			il_set_no_assoc(il, vif);
 	}
 
-	if (changes && il_is_associated(il) && bss_conf->aid) {
-		D_MAC80211("Changes (%#x) while associated\n", changes);
+	if (changes && il_is_associated(il) && vif->cfg.aid) {
+		D_MAC80211("Changes (%#llx) while associated\n", changes);
 		ret = il_send_rxon_assoc(il);
 		if (!ret) {
 			/* Sync active_rxon with latest change. */
@@ -5478,10 +5460,10 @@ il_mac_bss_info_changed(struct ieee80211_hw *hw, struct ieee80211_vif *vif,
 
 	if (changes & BSS_CHANGED_IBSS) {
 		ret = il->ops->manage_ibss_station(il, vif,
-						   bss_conf->ibss_joined);
+						   vif->cfg.ibss_joined);
 		if (ret)
 			IL_ERR("failed to %s IBSS station %pM\n",
-			       bss_conf->ibss_joined ? "add" : "remove",
+			       vif->cfg.ibss_joined ? "add" : "remove",
 			       bss_conf->bssid);
 	}
 

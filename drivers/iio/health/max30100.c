@@ -1,19 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * max30100.c - Support for MAX30100 heart rate and pulse oximeter sensor
  *
- * Copyright (C) 2015 Matt Ranostay <mranostay@gmail.com>
+ * Copyright (C) 2015, 2018
+ * Author: Matt Ranostay <matt.ranostay@konsulko.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * TODO: allow LED current and pulse length controls via device tree properties
+ * TODO: enable pulse length controls via device tree properties
  */
 
 #include <linux/module.h>
@@ -24,6 +16,7 @@
 #include <linux/irq.h>
 #include <linux/i2c.h>
 #include <linux/mutex.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/buffer.h>
@@ -65,6 +58,7 @@
 #define MAX30100_REG_SPO2_CONFIG_1600US		0x3
 
 #define MAX30100_REG_LED_CONFIG			0x09
+#define MAX30100_REG_LED_CONFIG_LED_MASK	0x0f
 #define MAX30100_REG_LED_CONFIG_RED_LED_SHIFT	4
 
 #define MAX30100_REG_LED_CONFIG_24MA		0x07
@@ -109,6 +103,12 @@ static const struct regmap_config max30100_regmap_config = {
 	.cache_type = REGCACHE_FLAT,
 
 	.volatile_reg = max30100_is_volatile_reg,
+};
+
+static const unsigned int max30100_led_current_mapping[] = {
+	4400, 7600, 11000, 14200, 17400,
+	20800, 24000, 27100, 30600, 33800,
+	37000, 40200, 43600, 46800, 50000
 };
 
 static const unsigned long max30100_scan_masks[] = {0x3, 0};
@@ -230,12 +230,13 @@ static irqreturn_t max30100_interrupt_handler(int irq, void *private)
 
 	mutex_lock(&data->lock);
 
-	while (cnt-- || (cnt = max30100_fifo_count(data) > 0)) {
+	while (cnt || (cnt = max30100_fifo_count(data)) > 0) {
 		ret = max30100_read_measurement(data);
 		if (ret)
 			break;
 
 		iio_push_to_buffers(data->indio_dev, data->buffer);
+		cnt--;
 	}
 
 	mutex_unlock(&data->lock);
@@ -243,15 +244,75 @@ static irqreturn_t max30100_interrupt_handler(int irq, void *private)
 	return IRQ_HANDLED;
 }
 
+static int max30100_get_current_idx(unsigned int val, int *reg)
+{
+	int idx;
+
+	/* LED turned off */
+	if (val == 0) {
+		*reg = 0;
+		return 0;
+	}
+
+	for (idx = 0; idx < ARRAY_SIZE(max30100_led_current_mapping); idx++) {
+		if (max30100_led_current_mapping[idx] == val) {
+			*reg = idx + 1;
+			return 0;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static int max30100_led_init(struct max30100_data *data)
+{
+	struct device *dev = &data->client->dev;
+	unsigned int val[2];
+	int reg, ret;
+
+	ret = device_property_read_u32_array(dev, "maxim,led-current-microamp",
+					(unsigned int *) &val, 2);
+	if (ret) {
+		/* Default to 24 mA RED LED, 50 mA IR LED */
+		reg = (MAX30100_REG_LED_CONFIG_24MA <<
+			MAX30100_REG_LED_CONFIG_RED_LED_SHIFT) |
+			MAX30100_REG_LED_CONFIG_50MA;
+		dev_warn(dev, "no led-current-microamp set");
+
+		return regmap_write(data->regmap, MAX30100_REG_LED_CONFIG, reg);
+	}
+
+	/* RED LED current */
+	ret = max30100_get_current_idx(val[0], &reg);
+	if (ret) {
+		dev_err(dev, "invalid RED current setting %d", val[0]);
+		return ret;
+	}
+
+	ret = regmap_update_bits(data->regmap, MAX30100_REG_LED_CONFIG,
+		MAX30100_REG_LED_CONFIG_LED_MASK <<
+		MAX30100_REG_LED_CONFIG_RED_LED_SHIFT,
+		reg << MAX30100_REG_LED_CONFIG_RED_LED_SHIFT);
+	if (ret)
+		return ret;
+
+	/* IR LED current */
+	ret = max30100_get_current_idx(val[1], &reg);
+	if (ret) {
+		dev_err(dev, "invalid IR current setting %d", val[1]);
+		return ret;
+	}
+
+	return regmap_update_bits(data->regmap, MAX30100_REG_LED_CONFIG,
+		MAX30100_REG_LED_CONFIG_LED_MASK, reg);
+}
+
 static int max30100_chip_init(struct max30100_data *data)
 {
 	int ret;
 
-	/* RED IR LED = 24mA, IR LED = 50mA */
-	ret = regmap_write(data->regmap, MAX30100_REG_LED_CONFIG,
-				(MAX30100_REG_LED_CONFIG_24MA <<
-				 MAX30100_REG_LED_CONFIG_RED_LED_SHIFT) |
-				 MAX30100_REG_LED_CONFIG_50MA);
+	/* setup LED current settings */
+	ret = max30100_led_init(data);
 	if (ret)
 		return ret;
 
@@ -308,7 +369,7 @@ static int max30100_get_temp(struct max30100_data *data, int *val)
 	if (ret)
 		return ret;
 
-	usleep_range(35000, 50000);
+	msleep(35);
 
 	return max30100_read_temp(data, val);
 }
@@ -326,18 +387,21 @@ static int max30100_read_raw(struct iio_dev *indio_dev,
 		 * Temperature reading can only be acquired while engine
 		 * is running
 		 */
-		mutex_lock(&indio_dev->mlock);
-
-		if (!iio_buffer_enabled(indio_dev))
+		if (iio_device_claim_buffer_mode(indio_dev)) {
+			/*
+			 * Replacing -EBUSY or other error code
+			 * returned by iio_device_claim_buffer_mode()
+			 * because user space may rely on the current
+			 * one.
+			 */
 			ret = -EAGAIN;
-		else {
+		} else {
 			ret = max30100_get_temp(data, val);
 			if (!ret)
 				ret = IIO_VAL_INT;
 
+			iio_device_release_buffer_mode(indio_dev);
 		}
-
-		mutex_unlock(&indio_dev->mlock);
 		break;
 	case IIO_CHAN_INFO_SCALE:
 		*val = 1;  /* 0.0625 */
@@ -350,15 +414,12 @@ static int max30100_read_raw(struct iio_dev *indio_dev,
 }
 
 static const struct iio_info max30100_info = {
-	.driver_module = THIS_MODULE,
 	.read_raw = max30100_read_raw,
 };
 
-static int max30100_probe(struct i2c_client *client,
-			  const struct i2c_device_id *id)
+static int max30100_probe(struct i2c_client *client)
 {
 	struct max30100_data *data;
-	struct iio_buffer *buffer;
 	struct iio_dev *indio_dev;
 	int ret;
 
@@ -366,19 +427,17 @@ static int max30100_probe(struct i2c_client *client,
 	if (!indio_dev)
 		return -ENOMEM;
 
-	buffer = devm_iio_kfifo_allocate(&client->dev);
-	if (!buffer)
-		return -ENOMEM;
-
-	iio_device_attach_buffer(indio_dev, buffer);
-
 	indio_dev->name = MAX30100_DRV_NAME;
 	indio_dev->channels = max30100_channels;
 	indio_dev->info = &max30100_info;
 	indio_dev->num_channels = ARRAY_SIZE(max30100_channels);
 	indio_dev->available_scan_masks = max30100_scan_masks;
-	indio_dev->modes = (INDIO_BUFFER_SOFTWARE | INDIO_DIRECT_MODE);
-	indio_dev->setup_ops = &max30100_buffer_setup_ops;
+	indio_dev->modes = INDIO_DIRECT_MODE;
+
+	ret = devm_iio_kfifo_buffer_setup(&client->dev, indio_dev,
+					  &max30100_buffer_setup_ops);
+	if (ret)
+		return ret;
 
 	data = iio_priv(indio_dev);
 	data->indio_dev = indio_dev;
@@ -414,15 +473,13 @@ static int max30100_probe(struct i2c_client *client,
 	return iio_device_register(indio_dev);
 }
 
-static int max30100_remove(struct i2c_client *client)
+static void max30100_remove(struct i2c_client *client)
 {
 	struct iio_dev *indio_dev = i2c_get_clientdata(client);
 	struct max30100_data *data = iio_priv(indio_dev);
 
 	iio_device_unregister(indio_dev);
 	max30100_set_powermode(data, false);
-
-	return 0;
 }
 
 static const struct i2c_device_id max30100_id[] = {
@@ -440,7 +497,7 @@ MODULE_DEVICE_TABLE(of, max30100_dt_ids);
 static struct i2c_driver max30100_driver = {
 	.driver = {
 		.name	= MAX30100_DRV_NAME,
-		.of_match_table	= of_match_ptr(max30100_dt_ids),
+		.of_match_table	= max30100_dt_ids,
 	},
 	.probe		= max30100_probe,
 	.remove		= max30100_remove,
@@ -448,6 +505,6 @@ static struct i2c_driver max30100_driver = {
 };
 module_i2c_driver(max30100_driver);
 
-MODULE_AUTHOR("Matt Ranostay <mranostay@gmail.com>");
+MODULE_AUTHOR("Matt Ranostay <matt.ranostay@konsulko.com>");
 MODULE_DESCRIPTION("MAX30100 heart rate and pulse oximeter sensor");
 MODULE_LICENSE("GPL");

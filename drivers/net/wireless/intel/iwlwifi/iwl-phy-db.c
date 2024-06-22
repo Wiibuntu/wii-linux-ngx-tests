@@ -1,66 +1,8 @@
-/******************************************************************************
- *
- * This file is provided under a dual BSD/GPLv2 license.  When using or
- * redistributing this file, you may do so under either license.
- *
- * GPL LICENSE SUMMARY
- *
- * Copyright(c) 2007 - 2014 Intel Corporation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but
- * WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
- *
- * The full GNU General Public License is included in this distribution
- * in the file called COPYING.
- *
- * Contact Information:
- *  Intel Linux Wireless <linuxwifi@intel.com>
- * Intel Corporation, 5200 N.E. Elam Young Parkway, Hillsboro, OR 97124-6497
- *
- * BSD LICENSE
- *
- * Copyright(c) 2005 - 2014 Intel Corporation. All rights reserved.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- *
- *  * Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- *  * Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in
- *    the documentation and/or other materials provided with the
- *    distribution.
- *  * Neither the name Intel Corporation nor the names of its
- *    contributors may be used to endorse or promote products derived
- *    from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
- * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
- * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
- * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
- * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
- * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
- * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- *****************************************************************************/
-
+// SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
+/*
+ * Copyright (C) 2005-2014, 2020-2021 Intel Corporation
+ * Copyright (C) 2016 Intel Deutschland GmbH
+ */
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/export.h>
@@ -70,10 +12,6 @@
 #include "iwl-debug.h"
 #include "iwl-op-mode.h"
 #include "iwl-trans.h"
-
-#define CHANNEL_NUM_SIZE	4	/* num of channels in calib_ch size */
-#define IWL_NUM_PAPD_CH_GROUPS	9
-#define IWL_NUM_TXP_CH_GROUPS	9
 
 struct iwl_phy_db_entry {
 	u16	size;
@@ -85,15 +23,19 @@ struct iwl_phy_db_entry {
  *
  * @cfg: phy configuration.
  * @calib_nch: non channel specific calibration data.
- * @calib_ch: channel specific calibration data.
+ * @n_group_papd: number of entries in papd channel group.
  * @calib_ch_group_papd: calibration data related to papd channel group.
+ * @n_group_txp: number of entries in tx power channel group.
  * @calib_ch_group_txp: calibration data related to tx power chanel group.
+ * @trans: transport layer
  */
 struct iwl_phy_db {
 	struct iwl_phy_db_entry	cfg;
 	struct iwl_phy_db_entry	calib_nch;
-	struct iwl_phy_db_entry	calib_ch_group_papd[IWL_NUM_PAPD_CH_GROUPS];
-	struct iwl_phy_db_entry	calib_ch_group_txp[IWL_NUM_TXP_CH_GROUPS];
+	int n_group_papd;
+	struct iwl_phy_db_entry	*calib_ch_group_papd;
+	int n_group_txp;
+	struct iwl_phy_db_entry	*calib_ch_group_txp;
 
 	struct iwl_trans *trans;
 };
@@ -107,30 +49,12 @@ enum iwl_phy_db_section_type {
 	IWL_PHY_DB_MAX
 };
 
-#define PHY_DB_CMD 0x6c /* TEMP API - The actual is 0x8c */
-
-/*
- * phy db - configure operational ucode
- */
-struct iwl_phy_db_cmd {
-	__le16 type;
-	__le16 length;
-	u8 data[];
-} __packed;
+#define PHY_DB_CMD 0x6c
 
 /* for parsing of tx power channel group data that comes from the firmware*/
 struct iwl_phy_db_chg_txp {
 	__le32 space;
 	__le16 max_channel_idx;
-} __packed;
-
-/*
- * phy db - Receive phy db chunk after calibrations
- */
-struct iwl_calib_res_notif_phy_db {
-	__le16 type;
-	__le16 length;
-	u8 data[];
 } __packed;
 
 struct iwl_phy_db *iwl_phy_db_init(struct iwl_trans *trans)
@@ -142,6 +66,9 @@ struct iwl_phy_db *iwl_phy_db_init(struct iwl_trans *trans)
 		return phy_db;
 
 	phy_db->trans = trans;
+
+	phy_db->n_group_txp = -1;
+	phy_db->n_group_papd = -1;
 
 	/* TODO: add default values of the phy db. */
 	return phy_db;
@@ -166,11 +93,11 @@ iwl_phy_db_get_section(struct iwl_phy_db *phy_db,
 	case IWL_PHY_DB_CALIB_NCH:
 		return &phy_db->calib_nch;
 	case IWL_PHY_DB_CALIB_CHG_PAPD:
-		if (chg_id >= IWL_NUM_PAPD_CH_GROUPS)
+		if (chg_id >= phy_db->n_group_papd)
 			return NULL;
 		return &phy_db->calib_ch_group_papd[chg_id];
 	case IWL_PHY_DB_CALIB_CHG_TXP:
-		if (chg_id >= IWL_NUM_TXP_CH_GROUPS)
+		if (chg_id >= phy_db->n_group_txp)
 			return NULL;
 		return &phy_db->calib_ch_group_txp[chg_id];
 	default:
@@ -202,38 +129,78 @@ void iwl_phy_db_free(struct iwl_phy_db *phy_db)
 
 	iwl_phy_db_free_section(phy_db, IWL_PHY_DB_CFG, 0);
 	iwl_phy_db_free_section(phy_db, IWL_PHY_DB_CALIB_NCH, 0);
-	for (i = 0; i < IWL_NUM_PAPD_CH_GROUPS; i++)
+
+	for (i = 0; i < phy_db->n_group_papd; i++)
 		iwl_phy_db_free_section(phy_db, IWL_PHY_DB_CALIB_CHG_PAPD, i);
-	for (i = 0; i < IWL_NUM_TXP_CH_GROUPS; i++)
+	kfree(phy_db->calib_ch_group_papd);
+
+	for (i = 0; i < phy_db->n_group_txp; i++)
 		iwl_phy_db_free_section(phy_db, IWL_PHY_DB_CALIB_CHG_TXP, i);
+	kfree(phy_db->calib_ch_group_txp);
 
 	kfree(phy_db);
 }
 IWL_EXPORT_SYMBOL(iwl_phy_db_free);
 
-int iwl_phy_db_set_section(struct iwl_phy_db *phy_db, struct iwl_rx_packet *pkt,
-			   gfp_t alloc_ctx)
+int iwl_phy_db_set_section(struct iwl_phy_db *phy_db,
+			   struct iwl_rx_packet *pkt)
 {
+	unsigned int pkt_len = iwl_rx_packet_payload_len(pkt);
 	struct iwl_calib_res_notif_phy_db *phy_db_notif =
 			(struct iwl_calib_res_notif_phy_db *)pkt->data;
-	enum iwl_phy_db_section_type type = le16_to_cpu(phy_db_notif->type);
-	u16 size  = le16_to_cpu(phy_db_notif->length);
+	enum iwl_phy_db_section_type type;
+	u16 size;
 	struct iwl_phy_db_entry *entry;
 	u16 chg_id = 0;
+
+	if (pkt_len < sizeof(*phy_db_notif))
+		return -EINVAL;
+
+	type = le16_to_cpu(phy_db_notif->type);
+	size = le16_to_cpu(phy_db_notif->length);
+
+	if (pkt_len < sizeof(*phy_db_notif) + size)
+		return -EINVAL;
 
 	if (!phy_db)
 		return -EINVAL;
 
-	if (type == IWL_PHY_DB_CALIB_CHG_PAPD ||
-	    type == IWL_PHY_DB_CALIB_CHG_TXP)
+	if (type == IWL_PHY_DB_CALIB_CHG_PAPD) {
 		chg_id = le16_to_cpup((__le16 *)phy_db_notif->data);
+		if (phy_db && !phy_db->calib_ch_group_papd) {
+			/*
+			 * Firmware sends the largest index first, so we can use
+			 * it to know how much we should allocate.
+			 */
+			phy_db->calib_ch_group_papd = kcalloc(chg_id + 1,
+							      sizeof(struct iwl_phy_db_entry),
+							      GFP_ATOMIC);
+			if (!phy_db->calib_ch_group_papd)
+				return -ENOMEM;
+			phy_db->n_group_papd = chg_id + 1;
+		}
+	} else if (type == IWL_PHY_DB_CALIB_CHG_TXP) {
+		chg_id = le16_to_cpup((__le16 *)phy_db_notif->data);
+		if (phy_db && !phy_db->calib_ch_group_txp) {
+			/*
+			 * Firmware sends the largest index first, so we can use
+			 * it to know how much we should allocate.
+			 */
+			phy_db->calib_ch_group_txp = kcalloc(chg_id + 1,
+							     sizeof(struct iwl_phy_db_entry),
+							     GFP_ATOMIC);
+			if (!phy_db->calib_ch_group_txp)
+				return -ENOMEM;
+			phy_db->n_group_txp = chg_id + 1;
+		}
+	}
 
 	entry = iwl_phy_db_get_section(phy_db, type, chg_id);
 	if (!entry)
 		return -EINVAL;
 
 	kfree(entry->data);
-	entry->data = kmemdup(phy_db_notif->data, size, alloc_ctx);
+	entry->data = kmemdup(phy_db_notif->data, size, GFP_ATOMIC);
 	if (!entry->data) {
 		entry->size = 0;
 		return -ENOMEM;
@@ -296,7 +263,7 @@ static u16 channel_id_to_txp(struct iwl_phy_db *phy_db, u16 ch_id)
 	if (ch_index == 0xff)
 		return 0xff;
 
-	for (i = 0; i < IWL_NUM_TXP_CH_GROUPS; i++) {
+	for (i = 0; i < phy_db->n_group_txp; i++) {
 		txp_chg = (void *)phy_db->calib_ch_group_txp[i].data;
 		if (!txp_chg)
 			return 0xff;
@@ -447,7 +414,7 @@ int iwl_send_phy_db_data(struct iwl_phy_db *phy_db)
 	/* Send all the TXP channel specific data */
 	err = iwl_phy_db_send_all_channel_groups(phy_db,
 						 IWL_PHY_DB_CALIB_CHG_PAPD,
-						 IWL_NUM_PAPD_CH_GROUPS);
+						 phy_db->n_group_papd);
 	if (err) {
 		IWL_ERR(phy_db->trans,
 			"Cannot send channel specific PAPD groups\n");
@@ -457,7 +424,7 @@ int iwl_send_phy_db_data(struct iwl_phy_db *phy_db)
 	/* Send all the TXP channel specific data */
 	err = iwl_phy_db_send_all_channel_groups(phy_db,
 						 IWL_PHY_DB_CALIB_CHG_TXP,
-						 IWL_NUM_TXP_CH_GROUPS);
+						 phy_db->n_group_txp);
 	if (err) {
 		IWL_ERR(phy_db->trans,
 			"Cannot send channel specific TX power groups\n");

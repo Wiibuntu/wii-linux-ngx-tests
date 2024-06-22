@@ -1,9 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (C) 2015 Linaro Ltd <ard.biesheuvel@linaro.org>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #ifndef __ASM_ARM_EFI_H
@@ -16,34 +13,21 @@
 #include <asm/highmem.h>
 #include <asm/mach/map.h>
 #include <asm/mmu_context.h>
-#include <asm/pgtable.h>
+#include <asm/ptrace.h>
 
 #ifdef CONFIG_EFI
 void efi_init(void);
+void arm_efi_init(void);
 
 int efi_create_mapping(struct mm_struct *mm, efi_memory_desc_t *md);
+int efi_set_mapping_permissions(struct mm_struct *mm, efi_memory_desc_t *md, bool);
 
-#define efi_call_virt(f, ...)						\
-({									\
-	efi_##f##_t *__f;						\
-	efi_status_t __s;						\
-									\
-	efi_virtmap_load();						\
-	__f = efi.systab->runtime->f;					\
-	__s = __f(__VA_ARGS__);						\
-	efi_virtmap_unload();						\
-	__s;								\
-})
+#define arch_efi_call_virt_setup()	efi_virtmap_load()
+#define arch_efi_call_virt_teardown()	efi_virtmap_unload()
 
-#define __efi_call_virt(f, ...)						\
-({									\
-	efi_##f##_t *__f;						\
-									\
-	efi_virtmap_load();						\
-	__f = efi.systab->runtime->f;					\
-	__f(__VA_ARGS__);						\
-	efi_virtmap_unload();						\
-})
+#define ARCH_EFI_IRQ_FLAGS_MASK \
+	(PSR_J_BIT | PSR_E_BIT | PSR_A_BIT | PSR_I_BIT | PSR_F_BIT | \
+	 PSR_T_BIT | MODE_MASK)
 
 static inline void efi_set_pgd(struct mm_struct *mm)
 {
@@ -54,12 +38,10 @@ void efi_virtmap_load(void);
 void efi_virtmap_unload(void);
 
 #else
-#define efi_init()
+#define arm_efi_init()
 #endif /* CONFIG_EFI */
 
 /* arch specific definitions used by the stub code */
-
-#define efi_call_early(f, ...) sys_table_arg->boottime->f(__VA_ARGS__)
 
 /*
  * A reasonable upper bound for the uncompressed kernel size is 32 MBytes,
@@ -71,13 +53,29 @@ void efi_virtmap_unload(void);
 #define MAX_UNCOMP_KERNEL_SIZE	SZ_32M
 
 /*
- * The kernel zImage should preferably be located between 32 MB and 128 MB
- * from the base of DRAM. The min address leaves space for a maximal size
- * uncompressed image, and the max address is due to how the zImage decompressor
- * picks a destination address.
+ * phys-to-virt patching requires that the physical to virtual offset is a
+ * multiple of 2 MiB. However, using an alignment smaller than TEXT_OFFSET
+ * here throws off the memory allocation logic, so let's use the lowest power
+ * of two greater than 2 MiB and greater than TEXT_OFFSET.
  */
-#define ZIMAGE_OFFSET_LIMIT	SZ_128M
-#define MIN_ZIMAGE_OFFSET	MAX_UNCOMP_KERNEL_SIZE
-#define MAX_FDT_OFFSET		ZIMAGE_OFFSET_LIMIT
+#define EFI_PHYS_ALIGN		max(UL(SZ_2M), roundup_pow_of_two(TEXT_OFFSET))
+
+/* on ARM, the initrd should be loaded in a lowmem region */
+static inline unsigned long efi_get_max_initrd_addr(unsigned long image_addr)
+{
+	return round_down(image_addr, SZ_4M) + SZ_512M;
+}
+
+struct efi_arm_entry_state {
+	u32	cpsr_before_ebs;
+	u32	sctlr_before_ebs;
+	u32	cpsr_after_ebs;
+	u32	sctlr_after_ebs;
+};
+
+static inline void efi_capsule_flush_cache_range(void *addr, int size)
+{
+	__cpuc_flush_dcache_area(addr, size);
+}
 
 #endif /* _ASM_ARM_EFI_H */

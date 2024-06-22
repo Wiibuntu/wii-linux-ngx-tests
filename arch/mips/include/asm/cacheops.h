@@ -21,6 +21,7 @@
 #define Cache_I				0x00
 #define Cache_D				0x01
 #define Cache_T				0x02
+#define Cache_V				0x02 /* Loongson-3 */
 #define Cache_S				0x03
 
 #define Index_Writeback_Inv		0x00
@@ -47,7 +48,7 @@
  * R4000-specific cacheops
  */
 #define Create_Dirty_Excl_D		(Cache_D | 0x0c)
-#define Fill				(Cache_I | 0x14)
+#define Fill_I				(Cache_I | 0x14)
 #define Hit_Writeback_I			(Cache_I | Hit_Writeback)
 #define Hit_Writeback_D			(Cache_D | Hit_Writeback)
 
@@ -106,5 +107,10 @@
  * Loongson2-specific cacheops
  */
 #define Hit_Invalidate_I_Loongson2	(Cache_I | 0x00)
+
+/*
+ * Loongson3-specific cacheops
+ */
+#define Index_Writeback_Inv_V		(Cache_V | Index_Writeback_Inv)
 
 #endif	/* __ASM_CACHEOPS_H */

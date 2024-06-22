@@ -1,18 +1,17 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * tascam.c - a part of driver for TASCAM FireWire series
  *
  * Copyright (c) 2015 Takashi Sakamoto
- *
- * Licensed under the terms of the GNU General Public License, version 2.
  */
 
 #include "tascam.h"
 
 MODULE_DESCRIPTION("TASCAM FireWire series Driver");
 MODULE_AUTHOR("Takashi Sakamoto <o-takashi@sakamocchi.jp>");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
 
-static struct snd_tscm_spec model_specs[] = {
+static const struct snd_tscm_spec model_specs[] = {
 	{
 		.name = "FW-1884",
 		.has_adat = true,
@@ -92,9 +91,8 @@ static void tscm_card_free(struct snd_card *card)
 	snd_tscm_transaction_unregister(tscm);
 	snd_tscm_stream_destroy_duplex(tscm);
 
-	fw_unit_put(tscm->unit);
-
 	mutex_destroy(&tscm->mutex);
+	fw_unit_put(tscm->unit);
 }
 
 static int snd_tscm_probe(struct fw_unit *unit,
@@ -104,17 +102,15 @@ static int snd_tscm_probe(struct fw_unit *unit,
 	struct snd_tscm *tscm;
 	int err;
 
-	/* create card */
-	err = snd_card_new(&unit->device, -1, NULL, THIS_MODULE,
-			   sizeof(struct snd_tscm), &card);
+	err = snd_card_new(&unit->device, -1, NULL, THIS_MODULE, sizeof(*tscm), &card);
 	if (err < 0)
 		return err;
 	card->private_free = tscm_card_free;
 
-	/* initialize myself */
 	tscm = card->private_data;
-	tscm->card = card;
 	tscm->unit = fw_unit_get(unit);
+	dev_set_drvdata(&unit->device, tscm);
+	tscm->card = card;
 
 	mutex_init(&tscm->mutex);
 	spin_lock_init(&tscm->lock);
@@ -124,17 +120,17 @@ static int snd_tscm_probe(struct fw_unit *unit,
 	if (err < 0)
 		goto error;
 
-	snd_tscm_proc_init(tscm);
+	err = snd_tscm_transaction_register(tscm);
+	if (err < 0)
+		goto error;
 
 	err = snd_tscm_stream_init_duplex(tscm);
 	if (err < 0)
 		goto error;
 
-	err = snd_tscm_create_pcm_devices(tscm);
-	if (err < 0)
-		goto error;
+	snd_tscm_proc_init(tscm);
 
-	err = snd_tscm_transaction_register(tscm);
+	err = snd_tscm_create_pcm_devices(tscm);
 	if (err < 0)
 		goto error;
 
@@ -150,9 +146,7 @@ static int snd_tscm_probe(struct fw_unit *unit,
 	if (err < 0)
 		goto error;
 
-	dev_set_drvdata(&unit->device, tscm);
-
-	return err;
+	return 0;
 error:
 	snd_card_free(card);
 	return err;
@@ -173,18 +167,45 @@ static void snd_tscm_remove(struct fw_unit *unit)
 {
 	struct snd_tscm *tscm = dev_get_drvdata(&unit->device);
 
-	/* No need to wait for releasing card object in this context. */
-	snd_card_free_when_closed(tscm->card);
+	// Block till all of ALSA character devices are released.
+	snd_card_free(tscm->card);
 }
 
 static const struct ieee1394_device_id snd_tscm_id_table[] = {
+	// Tascam, FW-1884.
 	{
 		.match_flags = IEEE1394_MATCH_VENDOR_ID |
-			       IEEE1394_MATCH_SPECIFIER_ID,
+			       IEEE1394_MATCH_SPECIFIER_ID |
+			       IEEE1394_MATCH_VERSION,
 		.vendor_id = 0x00022e,
 		.specifier_id = 0x00022e,
+		.version = 0x800000,
 	},
-	/* FE-08 requires reverse-engineering because it just has faders. */
+	// Tascam, FE-8 (.version = 0x800001)
+	// This kernel module doesn't support FE-8 because the most of features
+	// can be implemented in userspace without any specific support of this
+	// module.
+	//
+	// .version = 0x800002 is unknown.
+	//
+	// Tascam, FW-1082.
+	{
+		.match_flags = IEEE1394_MATCH_VENDOR_ID |
+			       IEEE1394_MATCH_SPECIFIER_ID |
+			       IEEE1394_MATCH_VERSION,
+		.vendor_id = 0x00022e,
+		.specifier_id = 0x00022e,
+		.version = 0x800003,
+	},
+	// Tascam, FW-1804.
+	{
+		.match_flags = IEEE1394_MATCH_VENDOR_ID |
+			       IEEE1394_MATCH_SPECIFIER_ID |
+			       IEEE1394_MATCH_VERSION,
+		.vendor_id = 0x00022e,
+		.specifier_id = 0x00022e,
+		.version = 0x800004,
+	},
 	{}
 };
 MODULE_DEVICE_TABLE(ieee1394, snd_tscm_id_table);
@@ -192,7 +213,7 @@ MODULE_DEVICE_TABLE(ieee1394, snd_tscm_id_table);
 static struct fw_driver tscm_driver = {
 	.driver = {
 		.owner = THIS_MODULE,
-		.name = "snd-firewire-tascam",
+		.name = KBUILD_MODNAME,
 		.bus = &fw_bus_type,
 	},
 	.probe    = snd_tscm_probe,

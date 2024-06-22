@@ -57,26 +57,26 @@
 				clock-frequency = <12288000>;
 			};
 			rtc@68 {
-				compatible = "stm,m41t62";
+				compatible = "st,m41t62";
 				reg = <0x68>;
 			};
-			adt7461@4c{
+			adt7461@4c {
 				compatible = "adi,adt7461";
 				reg = <0x4c>;
 			};
-			zl6100@21{
+			zl6100@21 {
 				compatible = "isil,zl6100";
 				reg = <0x21>;
 			};
-			zl6100@24{
+			zl6100@24 {
 				compatible = "isil,zl6100";
 				reg = <0x24>;
 			};
-			zl6100@26{
+			zl6100@26 {
 				compatible = "isil,zl6100";
 				reg = <0x26>;
 			};
-			zl6100@29{
+			zl6100@29 {
 				compatible = "isil,zl6100";
 				reg = <0x29>;
 			};
@@ -86,7 +86,7 @@
 			flash@0 {
 				#address-cells = <1>;
 				#size-cells = <1>;
-				compatible = "spansion,m25p80";
+				compatible = "spansion,m25p80", "jedec,spi-nor";
 				reg = <0>;
 				spi-max-frequency = <1000000>;
 				partition@0 {

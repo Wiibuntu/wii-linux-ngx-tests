@@ -1,13 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Focaltech TouchPad PS/2 mouse driver
  *
  * Copyright (c) 2014 Red Hat Inc.
  * Copyright (c) 2014 Mathias Gottschlag <mgottschlag@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  *
  * Red Hat authors:
  *
@@ -43,7 +39,7 @@ int focaltech_detect(struct psmouse *psmouse, bool set_properties)
 
 	if (set_properties) {
 		psmouse->vendor = "FocalTech";
-		psmouse->name = "FocalTech Touchpad";
+		psmouse->name = "Touchpad";
 	}
 
 	return 0;
@@ -146,8 +142,8 @@ static void focaltech_report_state(struct psmouse *psmouse)
 	}
 	input_mt_report_pointer_emulation(dev, true);
 
-	input_report_key(psmouse->dev, BTN_LEFT, state->pressed);
-	input_sync(psmouse->dev);
+	input_report_key(dev, BTN_LEFT, state->pressed);
+	input_sync(dev);
 }
 
 static void focaltech_process_touch_packet(struct psmouse *psmouse,
@@ -206,8 +202,8 @@ static void focaltech_process_rel_packet(struct psmouse *psmouse,
 	state->pressed = packet[0] >> 7;
 	finger1 = ((packet[0] >> 4) & 0x7) - 1;
 	if (finger1 < FOC_MAX_FINGERS) {
-		state->fingers[finger1].x += (char)packet[1];
-		state->fingers[finger1].y += (char)packet[2];
+		state->fingers[finger1].x += (s8)packet[1];
+		state->fingers[finger1].y += (s8)packet[2];
 	} else {
 		psmouse_err(psmouse, "First finger in rel packet invalid: %d\n",
 			    finger1);
@@ -222,8 +218,8 @@ static void focaltech_process_rel_packet(struct psmouse *psmouse,
 	 */
 	finger2 = ((packet[3] >> 4) & 0x7) - 1;
 	if (finger2 < FOC_MAX_FINGERS) {
-		state->fingers[finger2].x += (char)packet[4];
-		state->fingers[finger2].y += (char)packet[5];
+		state->fingers[finger2].x += (s8)packet[4];
+		state->fingers[finger2].y += (s8)packet[5];
 	}
 }
 
@@ -390,7 +386,8 @@ static int focaltech_read_size(struct psmouse *psmouse)
 	return 0;
 }
 
-void focaltech_set_resolution(struct psmouse *psmouse, unsigned int resolution)
+static void focaltech_set_resolution(struct psmouse *psmouse,
+				     unsigned int resolution)
 {
 	/* not supported yet */
 }

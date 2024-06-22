@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright 2015, Michael Neuling, IBM Corp.
- * Licensed under GPLv2.
  *
  * Test the kernel's signal return code to ensure that it doesn't
  * crash when both the transactional and suspend MSR bits are set in
@@ -40,7 +40,7 @@ void signal_usr1(int signum, siginfo_t *info, void *uc)
 #ifdef __powerpc64__
 	ucp->uc_mcontext.gp_regs[PT_MSR] |= (7ULL << 32);
 #else
-	ucp->uc_mcontext.regs->gpr[PT_MSR] |= (7ULL);
+	ucp->uc_mcontext.uc_regs->gregs[PT_MSR] |= (7ULL);
 #endif
 	/* Should segv on return becuase of invalid context */
 	segv_expected = 1;

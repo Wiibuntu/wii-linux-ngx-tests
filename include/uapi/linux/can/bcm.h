@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: ((GPL-2.0-only WITH Linux-syscall-note) OR BSD-3-Clause) */
 /*
  * linux/can/bcm.h
  *
@@ -70,7 +71,7 @@ struct bcm_msg_head {
 	struct bcm_timeval ival1, ival2;
 	canid_t can_id;
 	__u32 nframes;
-	struct can_frame frames[0];
+	struct can_frame frames[];
 };
 
 enum {
@@ -99,5 +100,6 @@ enum {
 #define RX_ANNOUNCE_RESUME  0x0100
 #define TX_RESET_MULTI_IDX  0x0200
 #define RX_RTR_FRAME        0x0400
+#define CAN_FD_FRAME        0x0800
 
 #endif /* !_UAPI_CAN_BCM_H */

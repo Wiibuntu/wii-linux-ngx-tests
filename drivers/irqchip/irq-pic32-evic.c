@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Cristian Birsan <cristian.birsan@microchip.com>
  * Joshua Henderson <joshua.henderson@microchip.com>
  * Copyright (C) 2016 Microchip Technology Inc.  All rights reserved.
- *
- * This program is free software; you can redistribute  it and/or modify it
- * under  the terms of  the GNU General  Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -46,11 +42,10 @@ static void __iomem *evic_base;
 
 asmlinkage void __weak plat_irq_dispatch(void)
 {
-	unsigned int irq, hwirq;
+	unsigned int hwirq;
 
 	hwirq = readl(evic_base + REG_INTSTAT) & 0xFF;
-	irq = irq_linear_revmap(evic_irq_domain, hwirq);
-	do_IRQ(irq);
+	do_domain_IRQ(evic_irq_domain, hwirq);
 }
 
 static struct evic_chip_data *irqd_to_priv(struct irq_data *data)
@@ -91,7 +86,7 @@ static int pic32_set_type_edge(struct irq_data *data,
 	/* set polarity for external interrupts only */
 	for (i = 0; i < ARRAY_SIZE(priv->ext_irqs); i++) {
 		if (priv->ext_irqs[i] == data->hwirq) {
-			ret = pic32_set_ext_polarity(i + 1, flow_type);
+			ret = pic32_set_ext_polarity(i, flow_type);
 			if (ret)
 				return ret;
 		}

@@ -1,11 +1,20 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef __RK3288_CRYPTO_H__
 #define __RK3288_CRYPTO_H__
 
 #include <crypto/aes.h>
-#include <crypto/des.h>
-#include <crypto/algapi.h>
+#include <crypto/engine.h>
+#include <crypto/internal/des.h>
+#include <crypto/internal/hash.h>
+#include <crypto/internal/skcipher.h>
+#include <crypto/md5.h>
+#include <crypto/sha1.h>
+#include <crypto/sha2.h>
+#include <linux/dma-mapping.h>
 #include <linux/interrupt.h>
-#include <linux/delay.h>
+#include <linux/pm_runtime.h>
+#include <linux/scatterlist.h>
+#include <linux/types.h>
 
 #define _SBF(v, f)			((v) << (f))
 
@@ -149,61 +158,116 @@
 #define RK_CRYPTO_TDES_KEY3_0		0x0130
 #define RK_CRYPTO_TDES_KEY3_1		0x0134
 
+/* HASH */
+#define RK_CRYPTO_HASH_CTRL		0x0180
+#define RK_CRYPTO_HASH_SWAP_DO		BIT(3)
+#define RK_CRYPTO_HASH_SWAP_DI		BIT(2)
+#define RK_CRYPTO_HASH_SHA1		_SBF(0x00, 0)
+#define RK_CRYPTO_HASH_MD5		_SBF(0x01, 0)
+#define RK_CRYPTO_HASH_SHA256		_SBF(0x02, 0)
+#define RK_CRYPTO_HASH_PRNG		_SBF(0x03, 0)
+
+#define RK_CRYPTO_HASH_STS		0x0184
+#define RK_CRYPTO_HASH_DONE		BIT(0)
+
+#define RK_CRYPTO_HASH_MSG_LEN		0x0188
+#define RK_CRYPTO_HASH_DOUT_0		0x018c
+#define RK_CRYPTO_HASH_DOUT_1		0x0190
+#define RK_CRYPTO_HASH_DOUT_2		0x0194
+#define RK_CRYPTO_HASH_DOUT_3		0x0198
+#define RK_CRYPTO_HASH_DOUT_4		0x019c
+#define RK_CRYPTO_HASH_DOUT_5		0x01a0
+#define RK_CRYPTO_HASH_DOUT_6		0x01a4
+#define RK_CRYPTO_HASH_DOUT_7		0x01a8
+
 #define CRYPTO_READ(dev, offset)		  \
 		readl_relaxed(((dev)->reg + (offset)))
 #define CRYPTO_WRITE(dev, offset, val)	  \
 		writel_relaxed((val), ((dev)->reg + (offset)))
 
+#define RK_MAX_CLKS 4
+
+/*
+ * struct rockchip_ip - struct for managing a list of RK crypto instance
+ * @dev_list:		Used for doing a list of rk_crypto_info
+ * @lock:		Control access to dev_list
+ * @dbgfs_dir:		Debugfs dentry for statistic directory
+ * @dbgfs_stats:	Debugfs dentry for statistic counters
+ */
+struct rockchip_ip {
+	struct list_head	dev_list;
+	spinlock_t		lock; /* Control access to dev_list */
+	struct dentry		*dbgfs_dir;
+	struct dentry		*dbgfs_stats;
+};
+
+struct rk_clks {
+	const char *name;
+	unsigned long max;
+};
+
+struct rk_variant {
+	int num_clks;
+	struct rk_clks rkclks[RK_MAX_CLKS];
+};
+
 struct rk_crypto_info {
+	struct list_head		list;
 	struct device			*dev;
-	struct clk			*aclk;
-	struct clk			*hclk;
-	struct clk			*sclk;
-	struct clk			*dmaclk;
+	struct clk_bulk_data		*clks;
+	int				num_clks;
 	struct reset_control		*rst;
 	void __iomem			*reg;
 	int				irq;
-	struct crypto_queue		queue;
-	struct tasklet_struct		crypto_tasklet;
-	struct ablkcipher_request	*ablk_req;
-	/* device lock */
-	spinlock_t			lock;
+	const struct rk_variant *variant;
+	unsigned long nreq;
+	struct crypto_engine *engine;
+	struct completion complete;
+	int status;
+};
 
-	/* the public variable */
-	struct scatterlist		*sg_src;
-	struct scatterlist		*sg_dst;
-	struct scatterlist		sg_tmp;
-	struct scatterlist		*first;
-	unsigned int			left_bytes;
-	void				*addr_vir;
-	int				aligned;
-	int				align_size;
-	size_t				nents;
-	unsigned int			total;
-	unsigned int			count;
+/* the private variable of hash */
+struct rk_ahash_ctx {
+	/* for fallback */
+	struct crypto_ahash		*fallback_tfm;
+};
+
+/* the private variable of hash for fallback */
+struct rk_ahash_rctx {
+	struct rk_crypto_info		*dev;
+	struct ahash_request		fallback_req;
 	u32				mode;
-	dma_addr_t			addr_in;
-	dma_addr_t			addr_out;
-	int (*start)(struct rk_crypto_info *dev);
-	int (*update)(struct rk_crypto_info *dev);
-	void (*complete)(struct rk_crypto_info *dev, int err);
-	int (*enable_clk)(struct rk_crypto_info *dev);
-	void (*disable_clk)(struct rk_crypto_info *dev);
-	int (*load_data)(struct rk_crypto_info *dev,
-			 struct scatterlist *sg_src,
-			 struct scatterlist *sg_dst);
-	void (*unload_data)(struct rk_crypto_info *dev);
+	int nrsg;
 };
 
 /* the private variable of cipher */
 struct rk_cipher_ctx {
-	struct rk_crypto_info		*dev;
 	unsigned int			keylen;
+	u8				key[AES_MAX_KEY_SIZE];
+	u8				iv[AES_BLOCK_SIZE];
+	struct crypto_skcipher *fallback_tfm;
+};
+
+struct rk_cipher_rctx {
+	struct rk_crypto_info		*dev;
+	u8 backup_iv[AES_BLOCK_SIZE];
+	u32				mode;
+	struct skcipher_request fallback_req;   // keep at the end
 };
 
 struct rk_crypto_tmp {
-	struct rk_crypto_info *dev;
-	struct crypto_alg alg;
+	u32 type;
+	struct rk_crypto_info           *dev;
+	union {
+		struct skcipher_engine_alg skcipher;
+		struct ahash_engine_alg hash;
+	} alg;
+	unsigned long stat_req;
+	unsigned long stat_fb;
+	unsigned long stat_fb_len;
+	unsigned long stat_fb_sglen;
+	unsigned long stat_fb_align;
+	unsigned long stat_fb_sgdiff;
 };
 
 extern struct rk_crypto_tmp rk_ecb_aes_alg;
@@ -213,4 +277,9 @@ extern struct rk_crypto_tmp rk_cbc_des_alg;
 extern struct rk_crypto_tmp rk_ecb_des3_ede_alg;
 extern struct rk_crypto_tmp rk_cbc_des3_ede_alg;
 
+extern struct rk_crypto_tmp rk_ahash_sha1;
+extern struct rk_crypto_tmp rk_ahash_sha256;
+extern struct rk_crypto_tmp rk_ahash_md5;
+
+struct rk_crypto_info *get_rk_crypto(void);
 #endif

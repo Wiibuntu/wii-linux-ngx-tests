@@ -26,7 +26,15 @@
 
 #include <core/option.h>
 #include <core/pci.h>
-#include <subdev/mc.h>
+
+void
+nvkm_pci_msi_rearm(struct nvkm_device *device)
+{
+	struct nvkm_pci *pci = device->pci;
+
+	if (pci && pci->msi)
+		pci->func->msi_rearm(pci);
+}
 
 u32
 nvkm_pci_rd32(struct nvkm_pci *pci, u16 addr)
@@ -65,31 +73,10 @@ nvkm_pci_rom_shadow(struct nvkm_pci *pci, bool shadow)
 	nvkm_pci_wr32(pci, 0x0050, data);
 }
 
-static irqreturn_t
-nvkm_pci_intr(int irq, void *arg)
-{
-	struct nvkm_pci *pci = arg;
-	struct nvkm_mc *mc = pci->subdev.device->mc;
-	bool handled = false;
-	if (likely(mc)) {
-		nvkm_mc_intr_unarm(mc);
-		if (pci->msi)
-			pci->func->msi_rearm(pci);
-		nvkm_mc_intr(mc, &handled);
-		nvkm_mc_intr_rearm(mc);
-	}
-	return handled ? IRQ_HANDLED : IRQ_NONE;
-}
-
 static int
 nvkm_pci_fini(struct nvkm_subdev *subdev, bool suspend)
 {
 	struct nvkm_pci *pci = nvkm_pci(subdev);
-
-	if (pci->irq >= 0) {
-		free_irq(pci->irq, pci);
-		pci->irq = -1;
-	};
 
 	if (pci->agp.bridge)
 		nvkm_agp_fini(pci);
@@ -110,8 +97,14 @@ static int
 nvkm_pci_oneinit(struct nvkm_subdev *subdev)
 {
 	struct nvkm_pci *pci = nvkm_pci(subdev);
-	if (pci_is_pcie(pci->pdev))
-		return nvkm_pcie_oneinit(pci);
+	int ret;
+
+	if (pci_is_pcie(pci->pdev)) {
+		ret = nvkm_pcie_oneinit(pci);
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -119,7 +112,6 @@ static int
 nvkm_pci_init(struct nvkm_subdev *subdev)
 {
 	struct nvkm_pci *pci = nvkm_pci(subdev);
-	struct pci_dev *pdev = pci->pdev;
 	int ret;
 
 	if (pci->agp.bridge) {
@@ -133,21 +125,25 @@ nvkm_pci_init(struct nvkm_subdev *subdev)
 	if (pci->func->init)
 		pci->func->init(pci);
 
-	ret = request_irq(pdev->irq, nvkm_pci_intr, IRQF_SHARED, "nvkm", pci);
-	if (ret)
-		return ret;
+	/* Ensure MSI interrupts are armed, for the case where there are
+	 * already interrupts pending (for whatever reason) at load time.
+	 */
+	if (pci->msi)
+		pci->func->msi_rearm(pci);
 
-	pci->irq = pdev->irq;
-	return ret;
+	return 0;
 }
 
 static void *
 nvkm_pci_dtor(struct nvkm_subdev *subdev)
 {
 	struct nvkm_pci *pci = nvkm_pci(subdev);
+
 	nvkm_agp_dtor(pci);
+
 	if (pci->msi)
 		pci_disable_msi(pci->pdev);
+
 	return nvkm_pci(subdev);
 }
 
@@ -162,16 +158,15 @@ nvkm_pci_func = {
 
 int
 nvkm_pci_new_(const struct nvkm_pci_func *func, struct nvkm_device *device,
-	      int index, struct nvkm_pci **ppci)
+	      enum nvkm_subdev_type type, int inst, struct nvkm_pci **ppci)
 {
 	struct nvkm_pci *pci;
 
 	if (!(pci = *ppci = kzalloc(sizeof(**ppci), GFP_KERNEL)))
 		return -ENOMEM;
-	nvkm_subdev_ctor(&nvkm_pci_func, device, index, 0, &pci->subdev);
+	nvkm_subdev_ctor(&nvkm_pci_func, device, type, inst, &pci->subdev);
 	pci->func = func;
 	pci->pdev = device->func->pci(device)->pdev;
-	pci->irq = -1;
 	pci->pcie.speed = -1;
 	pci->pcie.width = -1;
 
@@ -193,6 +188,10 @@ nvkm_pci_new_(const struct nvkm_pci_func *func, struct nvkm_device *device,
 			break;
 		}
 	}
+
+#ifdef __BIG_ENDIAN
+	pci->msi = false;
+#endif
 
 	pci->msi = nvkm_boolopt(device->cfgopt, "NvMSI", pci->msi);
 	if (pci->msi && func->msi_rearm) {

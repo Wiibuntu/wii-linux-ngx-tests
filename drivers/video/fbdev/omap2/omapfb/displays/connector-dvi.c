@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Generic DVI Connector driver
  *
  * Copyright (C) 2013 Texas Instruments
  * Author: Tomi Valkeinen <tomi.valkeinen@ti.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
  */
 
 #include <linux/i2c.h>
@@ -16,8 +13,7 @@
 
 #include <drm/drm_edid.h>
 
-#include <video/omapdss.h>
-#include <video/omap-panel-data.h>
+#include <video/omapfb_dss.h>
 
 static const struct omap_video_timings dvic_default_timings = {
 	.x_res		= 640,
@@ -55,16 +51,11 @@ static int dvic_connect(struct omap_dss_device *dssdev)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
 	struct omap_dss_device *in = ddata->in;
-	int r;
 
 	if (omapdss_device_is_connected(dssdev))
 		return 0;
 
-	r = in->ops.dvi->connect(in, dssdev);
-	if (r)
-		return r;
-
-	return 0;
+	return in->ops.dvi->connect(in, dssdev);
 }
 
 static void dvic_disconnect(struct omap_dss_device *dssdev)
@@ -236,46 +227,6 @@ static struct omap_dss_driver dvic_driver = {
 	.detect		= dvic_detect,
 };
 
-static int dvic_probe_pdata(struct platform_device *pdev)
-{
-	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
-	struct connector_dvi_platform_data *pdata;
-	struct omap_dss_device *in, *dssdev;
-	int i2c_bus_num;
-
-	pdata = dev_get_platdata(&pdev->dev);
-	i2c_bus_num = pdata->i2c_bus_num;
-
-	if (i2c_bus_num != -1) {
-		struct i2c_adapter *adapter;
-
-		adapter = i2c_get_adapter(i2c_bus_num);
-		if (!adapter) {
-			dev_err(&pdev->dev,
-					"Failed to get I2C adapter, bus %d\n",
-					i2c_bus_num);
-			return -EPROBE_DEFER;
-		}
-
-		ddata->i2c_adapter = adapter;
-	}
-
-	in = omap_dss_find_output(pdata->source);
-	if (in == NULL) {
-		i2c_put_adapter(ddata->i2c_adapter);
-
-		dev_err(&pdev->dev, "Failed to find video source\n");
-		return -EPROBE_DEFER;
-	}
-
-	ddata->in = in;
-
-	dssdev = &ddata->dssdev;
-	dssdev->name = pdata->name;
-
-	return 0;
-}
-
 static int dvic_probe_of(struct platform_device *pdev)
 {
 	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
@@ -295,6 +246,7 @@ static int dvic_probe_of(struct platform_device *pdev)
 	adapter_node = of_parse_phandle(node, "ddc-i2c-bus", 0);
 	if (adapter_node) {
 		adapter = of_get_i2c_adapter_by_node(adapter_node);
+		of_node_put(adapter_node);
 		if (adapter == NULL) {
 			dev_err(&pdev->dev, "failed to parse ddc-i2c-bus\n");
 			omap_dss_put_device(ddata->in);
@@ -313,23 +265,18 @@ static int dvic_probe(struct platform_device *pdev)
 	struct omap_dss_device *dssdev;
 	int r;
 
+	if (!pdev->dev.of_node)
+		return -ENODEV;
+
 	ddata = devm_kzalloc(&pdev->dev, sizeof(*ddata), GFP_KERNEL);
 	if (!ddata)
 		return -ENOMEM;
 
 	platform_set_drvdata(pdev, ddata);
 
-	if (dev_get_platdata(&pdev->dev)) {
-		r = dvic_probe_pdata(pdev);
-		if (r)
-			return r;
-	} else if (pdev->dev.of_node) {
-		r = dvic_probe_of(pdev);
-		if (r)
-			return r;
-	} else {
-		return -ENODEV;
-	}
+	r = dvic_probe_of(pdev);
+	if (r)
+		return r;
 
 	ddata->timings = dvic_default_timings;
 

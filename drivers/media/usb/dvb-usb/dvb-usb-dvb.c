@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 /* dvb-usb-dvb.c is part of the DVB USB library.
  *
- * Copyright (C) 2004-6 Patrick Boettcher (patrick.boettcher@desy.de)
+ * Copyright (C) 2004-6 Patrick Boettcher (patrick.boettcher@posteo.de)
  * see dvb-usb-init.c for copyright information.
  *
  * This file contains functions for initializing and handling the
  * linux-dvb API.
  */
 #include "dvb-usb-common.h"
+#include <media/media-device.h>
 
 /* does the complete input transfer handling */
 static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
@@ -54,9 +56,6 @@ static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 	 * for reception.
 	 */
 	if (adap->feedcount == onoff && adap->feedcount > 0) {
-		deb_ts("submitting all URBs\n");
-		usb_urb_submit(&adap->fe_adap[adap->active_fe].stream);
-
 		deb_ts("controlling pid parser\n");
 		if (adap->props.fe[adap->active_fe].caps & DVB_USB_ADAP_HAS_PID_FILTER &&
 			adap->props.fe[adap->active_fe].caps &
@@ -78,6 +77,8 @@ static int dvb_usb_ctrl_feed(struct dvb_demux_feed *dvbdmxfeed, int onoff)
 			}
 		}
 
+		deb_ts("submitting all URBs\n");
+		usb_urb_submit(&adap->fe_adap[adap->active_fe].stream);
 	}
 	return 0;
 }
@@ -106,15 +107,7 @@ static int dvb_usb_media_device_init(struct dvb_usb_adapter *adap)
 	if (!mdev)
 		return -ENOMEM;
 
-	mdev->dev = &udev->dev;
-	strlcpy(mdev->model, d->desc->name, sizeof(mdev->model));
-	if (udev->serial)
-		strlcpy(mdev->serial, udev->serial, sizeof(mdev->serial));
-	strcpy(mdev->bus_info, udev->devpath);
-	mdev->hw_revision = le16_to_cpu(udev->descriptor.bcdDevice);
-	mdev->driver_version = LINUX_VERSION_CODE;
-
-	media_device_init(mdev);
+	media_device_usb_init(mdev, udev, d->desc->name);
 
 	dvb_register_media_controller(&adap->dvb_adap, mdev);
 
@@ -138,10 +131,14 @@ static void dvb_usb_media_device_unregister(struct dvb_usb_adapter *adap)
 	if (!adap->dvb_adap.mdev)
 		return;
 
+	mutex_lock(&adap->dvb_adap.mdev_lock);
+
 	media_device_unregister(adap->dvb_adap.mdev);
 	media_device_cleanup(adap->dvb_adap.mdev);
 	kfree(adap->dvb_adap.mdev);
 	adap->dvb_adap.mdev = NULL;
+
+	mutex_unlock(&adap->dvb_adap.mdev_lock);
 #endif
 }
 
@@ -284,8 +281,7 @@ int dvb_usb_adapter_frontend_init(struct dvb_usb_adapter *adap)
 	for (i = 0; i < adap->props.num_frontends; i++) {
 
 		if (adap->props.fe[i].frontend_attach == NULL) {
-			err("strange: '%s' #%d,%d "
-			    "doesn't want to attach a frontend.",
+			err("strange: '%s' #%d,%d doesn't want to attach a frontend.",
 			    adap->dev->desc->name, adap->id, i);
 
 			return 0;
@@ -327,8 +323,6 @@ int dvb_usb_adapter_frontend_init(struct dvb_usb_adapter *adap)
 
 		adap->num_frontends_initialized++;
 	}
-	if (ret)
-		return ret;
 
 	ret = dvb_create_media_graph(&adap->dvb_adap, true);
 	if (ret)

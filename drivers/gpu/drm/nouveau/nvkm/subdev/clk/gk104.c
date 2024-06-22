@@ -393,11 +393,17 @@ gk104_clk_prog_2(struct gk104_clk *clk, int idx)
 	if (info->coef) {
 		nvkm_wr32(device, addr + 0x04, info->coef);
 		nvkm_mask(device, addr + 0x00, 0x00000001, 0x00000001);
+
+		/* Test PLL lock */
+		nvkm_mask(device, addr + 0x00, 0x00000010, 0x00000000);
 		nvkm_msec(device, 2000,
 			if (nvkm_rd32(device, addr + 0x00) & 0x00020000)
 				break;
 		);
-		nvkm_mask(device, addr + 0x00, 0x00020004, 0x00000004);
+		nvkm_mask(device, addr + 0x00, 0x00000010, 0x00000010);
+
+		/* Enable sync mode */
+		nvkm_mask(device, addr + 0x00, 0x00000004, 0x00000004);
 	}
 }
 
@@ -485,7 +491,7 @@ gk104_clk = {
 	.domains = {
 		{ nv_clk_src_crystal, 0xff },
 		{ nv_clk_src_href   , 0xff },
-		{ nv_clk_src_gpc    , 0x00, NVKM_CLK_DOM_FLAG_CORE, "core", 2000 },
+		{ nv_clk_src_gpc    , 0x00, NVKM_CLK_DOM_FLAG_CORE | NVKM_CLK_DOM_FLAG_VPSTATE, "core", 2000 },
 		{ nv_clk_src_hubk07 , 0x01, NVKM_CLK_DOM_FLAG_CORE },
 		{ nv_clk_src_rop    , 0x02, NVKM_CLK_DOM_FLAG_CORE },
 		{ nv_clk_src_mem    , 0x03, 0, "memory", 500 },
@@ -498,7 +504,8 @@ gk104_clk = {
 };
 
 int
-gk104_clk_new(struct nvkm_device *device, int index, struct nvkm_clk **pclk)
+gk104_clk_new(struct nvkm_device *device, enum nvkm_subdev_type type, int inst,
+	      struct nvkm_clk **pclk)
 {
 	struct gk104_clk *clk;
 
@@ -506,5 +513,5 @@ gk104_clk_new(struct nvkm_device *device, int index, struct nvkm_clk **pclk)
 		return -ENOMEM;
 	*pclk = &clk->base;
 
-	return nvkm_clk_ctor(&gk104_clk, device, index, true, &clk->base);
+	return nvkm_clk_ctor(&gk104_clk, device, type, inst, true, &clk->base);
 }

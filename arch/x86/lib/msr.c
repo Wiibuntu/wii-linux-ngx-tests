@@ -1,4 +1,6 @@
-#include <linux/module.h>
+// SPDX-License-Identifier: GPL-2.0
+#include <linux/export.h>
+#include <linux/percpu.h>
 #include <linux/preempt.h>
 #include <asm/msr.h>
 #define CREATE_TRACE_POINTS
@@ -25,16 +27,16 @@ void msrs_free(struct msr *msrs)
 EXPORT_SYMBOL(msrs_free);
 
 /**
- * Read an MSR with error handling
- *
+ * msr_read - Read an MSR with error handling
  * @msr: MSR to read
  * @m: value to read into
  *
  * It returns read data only on success, otherwise it doesn't change the output
  * argument @m.
  *
+ * Return: %0 for success, otherwise an error code
  */
-int msr_read(u32 msr, struct msr *m)
+static int msr_read(u32 msr, struct msr *m)
 {
 	int err;
 	u64 val;
@@ -47,12 +49,14 @@ int msr_read(u32 msr, struct msr *m)
 }
 
 /**
- * Write an MSR with error handling
+ * msr_write - Write an MSR with error handling
  *
  * @msr: MSR to write
  * @m: value to write
+ *
+ * Return: %0 for success, otherwise an error code
  */
-int msr_write(u32 msr, struct msr *m)
+static int msr_write(u32 msr, struct msr *m)
 {
 	return wrmsrl_safe(msr, m->q);
 }
@@ -86,12 +90,14 @@ static inline int __flip_bit(u32 msr, u8 bit, bool set)
 }
 
 /**
- * Set @bit in a MSR @msr.
+ * msr_set_bit - Set @bit in a MSR @msr.
+ * @msr: MSR to write
+ * @bit: bit number to set
  *
- * Retval:
- * < 0: An error was encountered.
- * = 0: Bit was already set.
- * > 0: Hardware accepted the MSR write.
+ * Return:
+ * * < 0: An error was encountered.
+ * * = 0: Bit was already set.
+ * * > 0: Hardware accepted the MSR write.
  */
 int msr_set_bit(u32 msr, u8 bit)
 {
@@ -99,12 +105,14 @@ int msr_set_bit(u32 msr, u8 bit)
 }
 
 /**
- * Clear @bit in a MSR @msr.
+ * msr_clear_bit - Clear @bit in a MSR @msr.
+ * @msr: MSR to write
+ * @bit: bit number to clear
  *
- * Retval:
- * < 0: An error was encountered.
- * = 0: Bit was already cleared.
- * > 0: Hardware accepted the MSR write.
+ * Return:
+ * * < 0: An error was encountered.
+ * * = 0: Bit was already cleared.
+ * * > 0: Hardware accepted the MSR write.
  */
 int msr_clear_bit(u32 msr, u8 bit)
 {
@@ -112,14 +120,14 @@ int msr_clear_bit(u32 msr, u8 bit)
 }
 
 #ifdef CONFIG_TRACEPOINTS
-void do_trace_write_msr(unsigned msr, u64 val, int failed)
+void do_trace_write_msr(unsigned int msr, u64 val, int failed)
 {
 	trace_write_msr(msr, val, failed);
 }
 EXPORT_SYMBOL(do_trace_write_msr);
 EXPORT_TRACEPOINT_SYMBOL(write_msr);
 
-void do_trace_read_msr(unsigned msr, u64 val, int failed)
+void do_trace_read_msr(unsigned int msr, u64 val, int failed)
 {
 	trace_read_msr(msr, val, failed);
 }

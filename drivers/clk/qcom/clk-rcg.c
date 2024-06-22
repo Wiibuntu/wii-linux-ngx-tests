@@ -1,14 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013, The Linux Foundation. All rights reserved.
- *
- * This software is licensed under the terms of the GNU General Public
- * License version 2, as published by the Free Software Foundation, and
- * may be copied, distributed, and modified under those terms.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -534,6 +526,19 @@ static int clk_rcg_set_rate(struct clk_hw *hw, unsigned long rate,
 	return __clk_rcg_set_rate(rcg, f);
 }
 
+static int clk_rcg_set_floor_rate(struct clk_hw *hw, unsigned long rate,
+				  unsigned long parent_rate)
+{
+	struct clk_rcg *rcg = to_clk_rcg(hw);
+	const struct freq_tbl *f;
+
+	f = qcom_find_freq_floor(rcg->freq_tbl, rate);
+	if (!f)
+		return -EINVAL;
+
+	return __clk_rcg_set_rate(rcg, f);
+}
+
 static int clk_rcg_bypass_set_rate(struct clk_hw *hw, unsigned long rate,
 				unsigned long parent_rate)
 {
@@ -638,7 +643,6 @@ static int clk_rcg_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 		return ret;
 
 	src = ns_to_src(&rcg->s, ns);
-	f.pre_div = ns_to_pre_div(&rcg->p, ns) + 1;
 
 	for (i = 0; i < num_parents; i++) {
 		if (src == rcg->s.parent_map[i].cfg) {
@@ -646,6 +650,9 @@ static int clk_rcg_pixel_set_rate(struct clk_hw *hw, unsigned long rate,
 			break;
 		}
 	}
+
+	/* bypass the pre divider */
+	f.pre_div = 1;
 
 	/* let us find appropriate m/n values for this */
 	for (; frac->num; frac++) {
@@ -821,6 +828,17 @@ const struct clk_ops clk_rcg_ops = {
 	.set_rate = clk_rcg_set_rate,
 };
 EXPORT_SYMBOL_GPL(clk_rcg_ops);
+
+const struct clk_ops clk_rcg_floor_ops = {
+	.enable = clk_enable_regmap,
+	.disable = clk_disable_regmap,
+	.get_parent = clk_rcg_get_parent,
+	.set_parent = clk_rcg_set_parent,
+	.recalc_rate = clk_rcg_recalc_rate,
+	.determine_rate = clk_rcg_determine_rate,
+	.set_rate = clk_rcg_set_floor_rate,
+};
+EXPORT_SYMBOL_GPL(clk_rcg_floor_ops);
 
 const struct clk_ops clk_rcg_bypass_ops = {
 	.enable = clk_enable_regmap,

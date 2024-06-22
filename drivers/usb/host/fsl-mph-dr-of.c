@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0+
 /*
  * Setup platform devices needed by the Freescale multi-port host
  * and/or dual-role USB controller modules based on the description
  * in flat device tree.
- *
- * This program is free software; you can redistribute  it and/or modify it
- * under  the terms of  the GNU General  Public License as published by the
- * Free Software Foundation;  either version 2 of the  License, or (at your
- * option) any later version.
  */
 
 #include <linux/kernel.h>
@@ -14,9 +10,11 @@
 #include <linux/fsl_devices.h>
 #include <linux/err.h>
 #include <linux/io.h>
-#include <linux/of_platform.h>
+#include <linux/of.h>
+#include <linux/of_device.h>
 #include <linux/clk.h>
 #include <linux/module.h>
+#include <linux/dma-mapping.h>
 
 struct fsl_usb2_dev_data {
 	char *dr_mode;		/* controller mode */
@@ -54,8 +52,8 @@ static struct fsl_usb2_dev_data *get_dr_mode_data(struct device_node *np)
 				return &dr_mode_data[i];
 		}
 	}
-	pr_warn("%s: Invalid 'dr_mode' property, fallback to host mode\n",
-		np->full_name);
+	pr_warn("%pOF: Invalid 'dr_mode' property, fallback to host mode\n",
+		np);
 	return &dr_mode_data[0]; /* mode not specified, use host */
 }
 
@@ -96,7 +94,14 @@ static struct platform_device *fsl_usb2_device_register(
 	pdev->dev.parent = &ofdev->dev;
 
 	pdev->dev.coherent_dma_mask = ofdev->dev.coherent_dma_mask;
-	*pdev->dev.dma_mask = *ofdev->dev.dma_mask;
+
+	if (!pdev->dev.dma_mask) {
+		pdev->dev.dma_mask = &ofdev->dev.coherent_dma_mask;
+	} else {
+		retval = dma_set_mask(&pdev->dev, DMA_BIT_MASK(32));
+		if (retval)
+			goto error;
+	}
 
 	retval = platform_device_add_data(pdev, pdata, sizeof(*pdata));
 	if (retval)
@@ -107,6 +112,8 @@ static struct platform_device *fsl_usb2_device_register(
 		if (retval)
 			goto error;
 	}
+
+	device_set_of_node_from_dev(&pdev->dev, &ofdev->dev);
 
 	retval = platform_device_add(pdev);
 	if (retval)
@@ -194,19 +201,16 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
 	dev_data = get_dr_mode_data(np);
 
 	if (of_device_is_compatible(np, "fsl-usb2-mph")) {
-		if (of_get_property(np, "port0", NULL))
+		if (of_property_present(np, "port0"))
 			pdata->port_enables |= FSL_USB2_PORT0_ENABLED;
 
-		if (of_get_property(np, "port1", NULL))
+		if (of_property_present(np, "port1"))
 			pdata->port_enables |= FSL_USB2_PORT1_ENABLED;
 
 		pdata->operating_mode = FSL_USB2_MPH_HOST;
 	} else {
-		if (of_get_property(np, "fsl,invert-drvvbus", NULL))
-			pdata->invert_drvvbus = 1;
-
-		if (of_get_property(np, "fsl,invert-pwr-fault", NULL))
-			pdata->invert_pwr_fault = 1;
+		pdata->invert_drvvbus = of_property_read_bool(np, "fsl,invert-drvvbus");
+		pdata->invert_pwr_fault = of_property_read_bool(np, "fsl,invert-pwr-fault");
 
 		/* setup mode selected in the device tree */
 		pdata->operating_mode = dev_data->op_mode;
@@ -217,23 +221,23 @@ static int fsl_usb2_mph_dr_of_probe(struct platform_device *ofdev)
 	pdata->controller_ver = usb_get_ver_info(np);
 
 	/* Activate Erratum by reading property in device tree */
-	if (of_get_property(np, "fsl,usb-erratum-a007792", NULL))
-		pdata->has_fsl_erratum_a007792 = 1;
-	else
-		pdata->has_fsl_erratum_a007792 = 0;
-	if (of_get_property(np, "fsl,usb-erratum-a005275", NULL))
-		pdata->has_fsl_erratum_a005275 = 1;
-	else
-		pdata->has_fsl_erratum_a005275 = 0;
+	pdata->has_fsl_erratum_a007792 =
+		of_property_read_bool(np, "fsl,usb-erratum-a007792");
+	pdata->has_fsl_erratum_a005275 =
+		of_property_read_bool(np, "fsl,usb-erratum-a005275");
+	pdata->has_fsl_erratum_a005697 =
+		of_property_read_bool(np, "fsl,usb_erratum-a005697");
+	pdata->has_fsl_erratum_a006918 =
+		of_property_read_bool(np, "fsl,usb_erratum-a006918");
+	pdata->has_fsl_erratum_14 =
+		of_property_read_bool(np, "fsl,usb_erratum-14");
 
 	/*
 	 * Determine whether phy_clk_valid needs to be checked
 	 * by reading property in device tree
 	 */
-	if (of_get_property(np, "phy-clk-valid", NULL))
-		pdata->check_phy_clk_valid = 1;
-	else
-		pdata->check_phy_clk_valid = 0;
+	pdata->check_phy_clk_valid =
+		of_property_read_bool(np, "phy-clk-valid");
 
 	if (pdata->have_sysif_regs) {
 		if (pdata->controller_ver == FSL_USB_VER_NONE) {
@@ -262,10 +266,9 @@ static int __unregister_subdev(struct device *dev, void *d)
 	return 0;
 }
 
-static int fsl_usb2_mph_dr_of_remove(struct platform_device *ofdev)
+static void fsl_usb2_mph_dr_of_remove(struct platform_device *ofdev)
 {
 	device_for_each_child(&ofdev->dev, NULL, __unregister_subdev);
-	return 0;
 }
 
 #ifdef CONFIG_PPC_MPC512x
@@ -359,7 +362,7 @@ static struct platform_driver fsl_usb2_mph_dr_driver = {
 		.of_match_table = fsl_usb2_mph_dr_of_match,
 	},
 	.probe	= fsl_usb2_mph_dr_of_probe,
-	.remove	= fsl_usb2_mph_dr_of_remove,
+	.remove_new = fsl_usb2_mph_dr_of_remove,
 };
 
 module_platform_driver(fsl_usb2_mph_dr_driver);

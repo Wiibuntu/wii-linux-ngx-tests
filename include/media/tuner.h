@@ -1,18 +1,9 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
  * tuner.h - definition for different tuners
  *
  * Copyright (C) 1997 Markus Schroeder (schroedm@uni-duesseldorf.de)
  * minor modifications by Ralph Metzler (rjkm@thp.uni-koeln.de)
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #ifndef _TUNER_H
@@ -20,14 +11,7 @@
 #ifdef __KERNEL__
 
 #include <linux/videodev2.h>
-
-/* Tuner PADs */
-/* FIXME: is this the right place for it? */
-enum tuner_pad_index {
-	TUNER_PAD_RF_INPUT,
-	TUNER_PAD_IF_OUTPUT,
-	TUNER_NUM_PADS
-};
+#include <media/v4l2-mc.h>
 
 #define ADDR_UNSET (255)
 
@@ -148,6 +132,7 @@ enum tuner_pad_index {
 #define TUNER_SONY_BTF_PG472Z		89	/* PAL+SECAM */
 #define TUNER_SONY_BTF_PK467Z		90	/* NTSC_JP */
 #define TUNER_SONY_BTF_PB463Z		91	/* NTSC */
+#define TUNER_SI2157			92
 
 /* tv card specific */
 #define TDA9887_PRESENT			(1<<0)

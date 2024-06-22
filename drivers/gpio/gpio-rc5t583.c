@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * GPIO driver for RICOH583 power management chip.
  *
@@ -6,27 +7,13 @@
  *
  * Based on code
  *	Copyright (C) 2011 RICOH COMPANY,LTD
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
-#include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/device.h>
-#include <linux/gpio.h>
+#include <linux/gpio/driver.h>
 #include <linux/mfd/rc5t583.h>
 
 struct rc5t583_gpio {
@@ -134,17 +121,8 @@ static int rc5t583_gpio_probe(struct platform_device *pdev)
 	if (pdata && pdata->gpio_base)
 		rc5t583_gpio->gpio_chip.base = pdata->gpio_base;
 
-	platform_set_drvdata(pdev, rc5t583_gpio);
-
-	return gpiochip_add_data(&rc5t583_gpio->gpio_chip, rc5t583_gpio);
-}
-
-static int rc5t583_gpio_remove(struct platform_device *pdev)
-{
-	struct rc5t583_gpio *rc5t583_gpio = platform_get_drvdata(pdev);
-
-	gpiochip_remove(&rc5t583_gpio->gpio_chip);
-	return 0;
+	return devm_gpiochip_add_data(&pdev->dev, &rc5t583_gpio->gpio_chip,
+				      rc5t583_gpio);
 }
 
 static struct platform_driver rc5t583_gpio_driver = {
@@ -152,7 +130,6 @@ static struct platform_driver rc5t583_gpio_driver = {
 		.name    = "rc5t583-gpio",
 	},
 	.probe		= rc5t583_gpio_probe,
-	.remove		= rc5t583_gpio_remove,
 };
 
 static int __init rc5t583_gpio_init(void)
@@ -160,14 +137,3 @@ static int __init rc5t583_gpio_init(void)
 	return platform_driver_register(&rc5t583_gpio_driver);
 }
 subsys_initcall(rc5t583_gpio_init);
-
-static void __exit rc5t583_gpio_exit(void)
-{
-	platform_driver_unregister(&rc5t583_gpio_driver);
-}
-module_exit(rc5t583_gpio_exit);
-
-MODULE_AUTHOR("Laxman Dewangan <ldewangan@nvidia.com>");
-MODULE_DESCRIPTION("GPIO interface for RC5T583");
-MODULE_LICENSE("GPL v2");
-MODULE_ALIAS("platform:rc5t583-gpio");
