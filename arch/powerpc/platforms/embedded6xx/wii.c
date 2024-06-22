@@ -54,6 +54,7 @@
 #define HW_GPIO_SENSOR_BAR	(1<<8)
 
 
+static enum starlet_ipc_flavour starlet_ipc_flavour;
 static void __iomem *hw_ctrl;
 static void __iomem *hw_gpio;
 
@@ -227,6 +228,7 @@ EXPORT_SYMBOL_GPL(starlet_get_ipc_flavour);
 
 #ifdef CONFIG_KEXEC
 
+#if 0
 static int restore_lowmem_stub(struct kimage *image)
 {
 	struct device_node *node;
@@ -280,6 +282,7 @@ static int wii_machine_kexec_prepare(struct kimage *image)
 		printk(KERN_ERR "%s: error %d\n", __func__, error);
 	return error;
 }
+#endif
 
 static void wii_machine_kexec(struct kimage *image)
 {
@@ -308,25 +311,6 @@ static void wii_shutdown(void)
 	exi_quiesce();
 	flipper_quiesce();
 }
-
-define_machine(wii) {
-	.name			= "wii",
-	.probe			= wii_probe,
-	.init_early		= wii_init_early,
-	.setup_arch		= wii_setup_arch,
-	.restart		= wii_restart,
-	.show_cpuinfo		= wii_show_cpuinfo,
-	.halt			= wii_halt,
-	.init_IRQ		= wii_pic_probe,
-	.get_irq		= flipper_pic_get_irq,
-	.calibrate_decr		= generic_calibrate_decr,
-	.progress		= udbg_progress,
-	.machine_shutdown	= wii_shutdown,
-#ifdef CONFIG_KEXEC	/* REMOVE THIS (as of 2.6.39)? */
-	.machine_kexec_prepare	= wii_machine_kexec_prepare,
-	.machine_kexec		= wii_machine_kexec,
-#endif
-};
 
 static const struct of_device_id wii_of_bus[] = {
 	{ .compatible = "nintendo,hollywood", },
@@ -358,16 +342,21 @@ static int __init wii_device_probe(void)
 	return 0;
 }
 machine_device_initcall(wii, wii_device_probe);
-
 define_machine(wii) {
 	.name			= "wii",
-	.compatible		= "nintendo,wii",
 	.probe			= wii_probe,
 	.setup_arch		= wii_setup_arch,
 	.restart		= wii_restart,
+	.show_cpuinfo		= wii_show_cpuinfo,
 	.halt			= wii_halt,
 	.init_IRQ		= wii_pic_probe,
 	.get_irq		= flipper_pic_get_irq,
+	.calibrate_decr		= generic_calibrate_decr,
 	.progress		= udbg_progress,
 	.machine_shutdown	= wii_shutdown,
+#ifdef CONFIG_KEXEC	/* REMOVE THIS (as of 2.6.39)? */
+	//.machine_kexec_prepare	= wii_machine_kexec_prepare,
+	.machine_kexec		= wii_machine_kexec,
+#endif
 };
+

@@ -25,7 +25,7 @@
 #include <linux/slab.h>
 #include <linux/delay.h>	/* for mdelay() */
 #include <asm/pgtable.h>	/* for _PAGE_KERNEL_NC */
-#include <asm/time.h>		/* for get_tbl() */
+#include <asm/time.h>		/* for mftb() */
 #include <asm/starlet-mini.h>
 
 #include "hlwd-pic.h"
@@ -105,8 +105,8 @@ struct mipc_device {
 };
 
 #define __spin_event_timeout(condition, timeout_usecs, result, __end_tbl) \
-	for (__end_tbl = get_tbl() + tb_ticks_per_usec * timeout_usecs;	\
-	     !(result = (condition)) && (int)(__end_tbl - get_tbl()) > 0;)
+	for (__end_tbl = mftb() + tb_ticks_per_usec * timeout_usecs;	\
+	     !(result = (condition)) && (int)(__end_tbl - mftb()) > 0;)
 
 /*
  * Update control and status register.
@@ -634,13 +634,13 @@ int mipc_discover(struct mipc_infohdr **hdrp)
 	}
 
 	hdr = (struct mipc_infohdr *)ioremap_prot(*p, sizeof(*hdr),
-						      PAGE_KERNEL);
+						      pgprot_val(PAGE_KERNEL));
 	if (!hdr) {
 		pr_err("unable to ioremap mini ipc header\n");
 		error = -ENOMEM;
 		goto out_unmap_p;
 	}
-	__dma_sync(hdr, sizeof(*hdr), DMA_FROM_DEVICE);
+	/*__dma_sync(hdr, sizeof(*hdr), DMA_FROM_DEVICE);*/
 
 	memcpy(magic, hdr->magic, 3);
 	magic[3] = 0;
@@ -731,25 +731,25 @@ static void mipc_simple_tests(struct mipc_device *ipc_dev)
 	}
 
 	for (i = 0; i < 64000; i++) {
-		t0 = get_tbl();
+		t0 = mftb();
 		in_be32(io_base + MIPC_CSR);
-		t_read = get_tbl() - t0;
+		t_read = mftb() - t0;
 
-		t0 = get_tbl();
+		t0 = mftb();
 		out_be32(io_base + MIPC_CSR, 0);
-		t_write = get_tbl() - t0;
+		t_write = mftb() - t0;
 
-		t0 = get_tbl();
+		t0 = mftb();
 		val = mipc_readl(gpio);
-		t_mipc_read = get_tbl() - t0;
+		t_mipc_read = mftb() - t0;
 
-		t0 = get_tbl();
+		t0 = mftb();
 		mipc_writel(val & ~0x20, gpio);
-		t_mipc_write = get_tbl() - t0;
+		t_mipc_write = mftb() - t0;
 
-		t0 = get_tbl();
+		t0 = mftb();
 		mipc_ping(ipc_dev, MIPC_SYS_IO_TIMEOUT);
-		t_mipc_ping = get_tbl() - t0;
+		t_mipc_ping = mftb() - t0;
 	}
 
 	pr_info("io timings in timebase ticks"

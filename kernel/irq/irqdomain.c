@@ -802,6 +802,7 @@ unsigned int irq_create_fwspec_mapping(struct irq_fwspec *fwspec)
 			domain = irq_find_matching_fwspec(fwspec, DOMAIN_BUS_ANY);
 	} else {
 		domain = irq_default_domain;
+	}
 
 	if (!domain) {
 		pr_warn("no irq domain found for %s !\n",

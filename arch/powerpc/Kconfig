@@ -538,7 +538,7 @@ config SWIOTLB
 	depends on !GAMECUBE_COMMON
 	default n
 	select IOMMU_HELPER
-	---help---
+	help
 	  Support for IO bounce buffering for systems without an IOMMU.
 	  This allows us to DMA to the full physical address space on
 	  platforms where the size of a physical address is larger

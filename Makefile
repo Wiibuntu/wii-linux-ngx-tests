@@ -538,8 +538,7 @@ endif
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   =
 LDFLAGS_MODULE  =
-CFLAGS_KERNEL	= $(MODFLAGS)
-		  -Wbitwise -Wno-return-void -Wno-unknown-attribute $(CF)
+CFLAGS_KERNEL	= $(MODFLAGS) -Wbitwise -Wno-return-void -Wno-unknown-attribute $(CF)
 NOSTDINC_FLAGS :=
 CFLAGS_MODULE   =
 RUSTFLAGS_MODULE =

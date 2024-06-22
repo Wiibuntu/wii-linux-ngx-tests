@@ -1233,7 +1233,7 @@ static void vi_setup_tv_mode(struct vi_ctl *ctl)
 	std = (var->xres_virtual * TV_BYTES_PER_PIXEL) / VI_HORZ_WORD_SIZE;
 	if (!(mode->flags & VI_VMF_PROGRESSIVE))
 		std *= 2;
-	ppl = _ALIGN_UP((var->xoffset & VI_HORZ_ALIGN) + var->xres,
+	ppl = ALIGN((var->xoffset & VI_HORZ_ALIGN) + var->xres,
 			VI_HORZ_ALIGN+1);
 	out_be16(io_base + VI_PCR,
 		 vi_pcr_std(std) |
@@ -1965,7 +1965,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	yres = var->yres;
 	if (yres & VI_VERT_ALIGN)
-		yres = _ALIGN_UP(yres, VI_VERT_ALIGN+1);
+		yres = ALIGN(yres, VI_VERT_ALIGN+1);
 	if (yres > mode->height) {
 		if (!nostalgic) {
 			drv_printk(KERN_ERR, "yres %u out of bounds\n", yres);
@@ -1987,7 +1987,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	xres = var->xres;
 	if (xres & VI_HORZ_ALIGN)
-		xres = _ALIGN_UP(xres, VI_HORZ_ALIGN+1);
+		xres = ALIGN(xres, VI_HORZ_ALIGN+1);
 	if (xres > mode->width) {
 		drv_printk(KERN_ERR, "xres %u out of bounds\n", var->xres);
 		return -EINVAL;
@@ -1997,7 +1997,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	xres_virtual = var->xres_virtual;
 	if (xres_virtual & VI_HORZ_ALIGN)
-		xres_virtual = _ALIGN_UP(xres_virtual, VI_HORZ_ALIGN+1);
+		xres_virtual = ALIGN(xres_virtual, VI_HORZ_ALIGN+1);
 	if (!xres_virtual || xres_virtual < xres)
 		xres_virtual = xres;
 

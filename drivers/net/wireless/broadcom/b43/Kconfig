@@ -93,7 +93,7 @@ config B43_SDIO
 config B43_DEFAULT_QOS_OFF
 	bool "Start with QoS disabled"
 	depends on B43
-	---help---
+	help
 	  This will start the driver with Quality Of Service disabled.
 
 	  Say Y if you are using an OpenFWWF firmware without QoS support
