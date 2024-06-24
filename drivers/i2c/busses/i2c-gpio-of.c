@@ -12,19 +12,39 @@
 #include "i2c-gpio-common.h"
 
 #include <linux/of_platform.h>
-
-#include <linux/of_gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/i2c-algo-bit.h>
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 
-#define DRV_MODULE_NAME	"i2c-gpio-of"
-#define DRV_DESCRIPTION	"GPIO-based bitbanging I2C driver with OF bindings"
-#define DRV_AUTHOR	"Albert Herranz"
+#define DRV_MODULE_NAME "i2c-gpio-of"
+#define DRV_DESCRIPTION "GPIO-based bitbanging I2C driver with OF bindings"
+#define DRV_AUTHOR "Albert Herranz"
 
 #define drv_printk(level, format, arg...) \
 	printk(level DRV_MODULE_NAME ": " format , ## arg)
+
+
+/*
+ * Taken from drivers/i2c/busses/i2c-gpio.c
+ *
+ */
+struct i2c_gpio_private_data {
+	struct gpio_desc *sda;
+	struct gpio_desc *scl;
+	struct i2c_adapter adap;
+	struct i2c_algo_bit_data bit_data;
+	struct i2c_gpio_platform_data pdata;
+#ifdef CONFIG_I2C_GPIO_FAULT_INJECTOR
+	struct dentry *debug_dir;
+	/* these must be protected by bus lock */
+	struct completion scl_irq_completion;
+	u64 scl_irq_data;
+#endif
+};
+
+
 
 /*
  * OF platform bindings.
@@ -34,29 +54,32 @@
 static int i2c_gpio_of_probe(struct platform_device *odev)
 {
 	struct i2c_gpio_platform_data *pdata;
+	struct i2c_gpio_private_data *priv;
 	struct i2c_adapter *adap;
+	struct gpio_desc *sda_gpiod, *scl_gpiod;
 	const unsigned long *prop;
-	int sda_pin, scl_pin;
 	int error = -ENOMEM;
 
 	pdata = kzalloc(sizeof(*pdata), GFP_KERNEL);
-	if (!pdata)
+	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
+	if (!pdata || !priv)
 		goto err_alloc_pdata;
 	adap = kzalloc(sizeof(*adap), GFP_KERNEL);
 	if (!adap)
 		goto err_alloc_adap;
 
-	sda_pin = of_get_gpio(odev->dev.of_node, 0);
-	scl_pin = of_get_gpio(odev->dev.of_node, 1);
-	if (sda_pin < 0 || scl_pin < 0) {
-		error = -EINVAL;
-		pr_err("%s: invalid GPIO pins, sda=%d/scl=%d\n",
-			 odev->dev.of_node->full_name, sda_pin, scl_pin);
+	sda_gpiod = devm_gpiod_get_index(&odev->dev, NULL, 0, GPIOD_ASIS);
+	scl_gpiod = devm_gpiod_get_index(&odev->dev, NULL, 1, GPIOD_ASIS);
+	if (IS_ERR(sda_gpiod) || IS_ERR(scl_gpiod)) {
+		error = PTR_ERR(sda_gpiod);
+		if (!IS_ERR(scl_gpiod))
+			error = PTR_ERR(scl_gpiod);
+		pr_err("%s: invalid GPIO pins\n", odev->dev.of_node->full_name);
 		goto err_gpio_pin;
 	}
 
-	pdata->sda_pin = sda_pin;
-	pdata->scl_pin = scl_pin;
+	priv->sda = desc_to_gpio(sda_gpiod);
+	priv->scl = desc_to_gpio(scl_gpiod);
 
 	prop = of_get_property(odev->dev.of_node, "sda-is-open-drain", NULL);
 	if (prop)
@@ -75,17 +98,15 @@ static int i2c_gpio_of_probe(struct platform_device *odev)
 		pdata->udelay = *prop;
 	prop = of_get_property(odev->dev.of_node, "timeout", NULL);
 	if (prop)
-		pdata->timeout =  msecs_to_jiffies(*prop);
+		pdata->timeout = msecs_to_jiffies(*prop);
 
 	error = i2c_gpio_adapter_probe(adap, pdata, &odev->dev,
-										odev->dev.of_node->phandle, THIS_MODULE);
+		odev->dev.of_node->phandle, THIS_MODULE);
 
 	if (error)
 		goto err_probe;
 
 	dev_set_drvdata(&odev->dev, adap);
-
-
 
 	return 0;
 
@@ -94,6 +115,7 @@ err_gpio_pin:
 	kfree(adap);
 err_alloc_adap:
 	kfree(pdata);
+	kfree(priv);
 err_alloc_pdata:
 	return error;
 };
@@ -152,3 +174,4 @@ module_exit(i2c_gpio_of_exit);
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_AUTHOR);
 MODULE_LICENSE("GPL");
+

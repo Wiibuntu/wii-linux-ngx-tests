@@ -148,10 +148,13 @@ __devm_ioremap_resource(struct device *dev, const struct resource *res,
 		return IOMEM_ERR_PTR(-ENOMEM);
 	}
 
+#ifndef CONFIG_GAMECUBE_COMMON
+#error "crap"
 	if (!devm_request_mem_region(dev, res->start, size, pretty_name)) {
 		dev_err(dev, "can't request region for resource %pR\n", res);
 		return IOMEM_ERR_PTR(-EBUSY);
 	}
+#endif
 
 	dest_ptr = __devm_ioremap(dev, res->start, size, type);
 	if (!dest_ptr) {

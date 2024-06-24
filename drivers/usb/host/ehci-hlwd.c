@@ -29,6 +29,8 @@
 
 #include <linux/of.h>
 #include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <asm/starlet.h>
 
 #define DRV_MODULE_NAME "ehci-hlwd"
@@ -160,9 +162,7 @@ static int ehci_hcd_hlwd_probe(struct platform_device *op)
 		coherent_mem_size = res.end - res.start + 1;
 		if (!dma_declare_coherent_memory(&op->dev, coherent_mem_addr,
 						 coherent_mem_addr,
-						 coherent_mem_size,
-						 DMA_MEMORY_MAP |
-						 DMA_MEMORY_EXCLUSIVE)) {
+						 coherent_mem_size)) {
 			dev_err(&op->dev, "error declaring %u bytes of"
 				" coherent memory at 0x%p\n",
 				coherent_mem_size, (void *)coherent_mem_addr);
@@ -172,7 +172,7 @@ static int ehci_hcd_hlwd_probe(struct platform_device *op)
 	}
 
 	irq = irq_of_parse_and_map(dn, 0);
-	if (irq == NO_IRQ) {
+	if (!irq) {
 		printk(KERN_ERR __FILE__ ": irq_of_parse_and_map failed\n");
 		error = -EBUSY;
 		goto err_irq;
@@ -201,7 +201,8 @@ static int ehci_hcd_hlwd_probe(struct platform_device *op)
 err_ioremap:
 	irq_dispose_mapping(irq);
 err_irq:
-	dma_release_declared_memory(&op->dev);
+	dma_release_coherent_memory(&op->dev);
+	op->dev.dma_mem = NULL;
 err_decl_coherent:
 	usb_put_hcd(hcd);
 out:
@@ -220,7 +221,8 @@ static int ehci_hcd_hlwd_remove(struct platform_device *op)
 	usb_remove_hcd(hcd);
 	iounmap(hcd->regs);
 	irq_dispose_mapping(hcd->irq);
-	dma_release_declared_memory(&op->dev);
+	dma_release_coherent_memory(&op->dev);
+	op->dev.dma_mem = NULL;
 	usb_put_hcd(hcd);
 
 	return 0;

@@ -34,7 +34,7 @@
 #define DRV_DESCRIPTION		"IPC driver for 'mini'"
 #define DRV_AUTHOR		"Albert Herranz"
 
-static char mipc_driver_version[] = "0.4i";
+char mipc_driver_version[] = "0.4i";
 
 
 /*
@@ -111,7 +111,7 @@ struct mipc_device {
 /*
  * Update control and status register.
  */
-static inline void mipc_update_csr(void __iomem *io_base, u32 val)
+inline void mipc_update_csr(void __iomem *io_base, u32 val)
 {
 	u32 csr;
 
@@ -122,27 +122,27 @@ static inline void mipc_update_csr(void __iomem *io_base, u32 val)
 	out_be32(io_base + MIPC_CSR, csr);
 }
 
-static u16 mipc_peek_outtail(void __iomem *io_base)
+u16 mipc_peek_outtail(void __iomem *io_base)
 {
 	return in_be32(io_base + MIPC_RXBUF) & 0xffff;
 }
 
-static u16 mipc_peek_inhead(void __iomem *io_base)
+u16 mipc_peek_inhead(void __iomem *io_base)
 {
 	return in_be32(io_base + MIPC_RXBUF) >> 16;
 }
 
-static u16 mipc_peek_first_intail(void __iomem *io_base)
+noinline u16 mipc_peek_first_intail(void __iomem *io_base)
 {
 	return in_be32(io_base + MIPC_TXBUF) & 0xffff;
 }
 
-static u16 mipc_peek_first_outhead(void __iomem *io_base)
+u16 mipc_peek_first_outhead(void __iomem *io_base)
 {
 	return in_be32(io_base + MIPC_TXBUF) >> 16;
 }
 
-static void mipc_poke_intail(struct mipc_device *ipc_dev, u16 val)
+void mipc_poke_intail(struct mipc_device *ipc_dev, u16 val)
 {
 	void __iomem *io_base = ipc_dev->io_base;
 	unsigned long flags;
@@ -153,7 +153,7 @@ static void mipc_poke_intail(struct mipc_device *ipc_dev, u16 val)
 	spin_unlock_irqrestore(&ipc_dev->io_lock, flags);
 }
 
-static void mipc_poke_outhead(struct mipc_device *ipc_dev, u16 val)
+void mipc_poke_outhead(struct mipc_device *ipc_dev, u16 val)
 {
 	void __iomem *io_base = ipc_dev->io_base;
 	unsigned long flags;
@@ -166,21 +166,21 @@ static void mipc_poke_outhead(struct mipc_device *ipc_dev, u16 val)
 
 
 
-static u16 mipc_get_next_intail(struct mipc_device *ipc_dev)
+u16 mipc_get_next_intail(struct mipc_device *ipc_dev)
 {
 	return (ipc_dev->intail_idx + 1) & (ipc_dev->in_ring_size - 1);
 }
 
-static u16 mipc_get_next_outhead(struct mipc_device *ipc_dev)
+u16 mipc_get_next_outhead(struct mipc_device *ipc_dev)
 {
 	return (ipc_dev->outhead_idx + 1) & (ipc_dev->out_ring_size - 1);
 }
 
-static void mipc_print_req(struct mipc_req *req)
+void mipc_print_req(struct mipc_req *req)
 {
 	int i;
 
-	pr_info("req %pP = {\n", req);
+	pr_info("req 0x%lX = {\n", req);
 	pr_cont("code = %08X, tag = %08X\n", req->code, req->tag);
 	for (i = 0; i < MIPC_REQ_MAX_ARGS; i++)
 		pr_cont("arg[%d] = %08X\n", i, req->args[i]);
@@ -188,7 +188,7 @@ static void mipc_print_req(struct mipc_req *req)
 }
 
 #ifdef DEBUG_RINGS
-static void mipc_dump_ring(struct mipc_req *req, size_t count)
+void mipc_dump_ring(struct mipc_req *req, size_t count)
 {
 	int i;
 
@@ -197,7 +197,7 @@ static void mipc_dump_ring(struct mipc_req *req, size_t count)
 }
 #endif
 
-static void mipc_print_status(struct mipc_device *ipc_dev)
+void mipc_print_status(struct mipc_device *ipc_dev)
 {
 	size_t in_size, out_size;
 
@@ -209,12 +209,12 @@ static void mipc_print_status(struct mipc_device *ipc_dev)
 	pr_cont("arm: inhead_idx=%u, outtail_idx=%u\n",
 		mipc_peek_inhead(ipc_dev->io_base),
 		mipc_peek_outtail(ipc_dev->io_base));
-	pr_cont("in_ring=%uK@%p, out_ring=%uK@%p\n",
+	pr_cont("in_ring=%uK@0x%lX, out_ring=%uK@0x%lX\n",
 		in_size / 1024, ipc_dev->in_ring,
 		out_size / 1024, ipc_dev->out_ring);
 }
 
-static int mipc_send_req(struct mipc_device *ipc_dev, unsigned long timeout,
+int mipc_send_req(struct mipc_device *ipc_dev, unsigned long timeout,
 			 struct mipc_req *req)
 {
 	void __iomem *io_base = ipc_dev->io_base;
@@ -249,7 +249,7 @@ out:
 	return error;
 }
 
-static int __mipc_recv_req(struct mipc_device *ipc_dev, unsigned long timeout,
+int __mipc_recv_req(struct mipc_device *ipc_dev, unsigned long timeout,
 			   struct mipc_req *req)
 {
 	void __iomem *io_base = ipc_dev->io_base;
@@ -275,7 +275,7 @@ out:
 	return error;
 }
 
-static int mipc_recv_req(struct mipc_device *ipc_dev, unsigned long timeout,
+int mipc_recv_req(struct mipc_device *ipc_dev, unsigned long timeout,
 			 struct mipc_req *req)
 {
 	int error;
@@ -286,7 +286,7 @@ static int mipc_recv_req(struct mipc_device *ipc_dev, unsigned long timeout,
 	return error;
 }
 
-static int mipc_recv_tagged(struct mipc_device *ipc_dev,
+int mipc_recv_tagged(struct mipc_device *ipc_dev,
 				unsigned long timeout,
 				u32 code, u32 tag,
 				struct mipc_req *req)
@@ -329,13 +329,13 @@ out:
 	return error;
 }
 
-static void __mipc_fill_req(struct mipc_req *req, u32 code)
+void __mipc_fill_req(struct mipc_req *req, u32 code)
 {
 	memset(req, 0, sizeof(*req));
 	req->code = code;
 }
 
-static int mipc_sendrecv_call(struct mipc_device *ipc_dev,
+int mipc_sendrecv_call(struct mipc_device *ipc_dev,
 			      unsigned long timeout,
 			      struct mipc_req *req, struct mipc_req *resp)
 {
@@ -354,7 +354,7 @@ out:
 	return error;
 }
 
-static int mipc_sendrecv1_call(struct mipc_device *ipc_dev,
+int mipc_sendrecv1_call(struct mipc_device *ipc_dev,
 			       unsigned long timeout,
 			       struct mipc_req *resp, u32 code, u32 arg)
 {
@@ -366,7 +366,7 @@ static int mipc_sendrecv1_call(struct mipc_device *ipc_dev,
 }
 
 
-static int mipc_send_call(struct mipc_device *ipc_dev, unsigned long timeout,
+int mipc_send_call(struct mipc_device *ipc_dev, unsigned long timeout,
 			  struct mipc_req *req)
 {
 	unsigned long flags;
@@ -380,7 +380,7 @@ static int mipc_send_call(struct mipc_device *ipc_dev, unsigned long timeout,
 	return error;
 }
 
-static int mipc_send2_call(struct mipc_device *ipc_dev, unsigned long timeout,
+int mipc_send2_call(struct mipc_device *ipc_dev, unsigned long timeout,
 			   u32 code, u32 arg1, u32 arg2)
 {
 	struct mipc_req req;
@@ -391,7 +391,7 @@ static int mipc_send2_call(struct mipc_device *ipc_dev, unsigned long timeout,
 	return mipc_send_call(ipc_dev, timeout, &req);
 }
 
-static int mipc_send3_call(struct mipc_device *ipc_dev, unsigned long timeout,
+int mipc_send3_call(struct mipc_device *ipc_dev, unsigned long timeout,
 			   u32 code, u32 arg1, u32 arg2, u32 arg3)
 {
 	struct mipc_req req;
@@ -403,7 +403,7 @@ static int mipc_send3_call(struct mipc_device *ipc_dev, unsigned long timeout,
 	return mipc_send_call(ipc_dev, timeout, &req);
 }
 
-static int mipc_flush_send(struct mipc_device *ipc_dev, unsigned long timeout)
+int mipc_flush_send(struct mipc_device *ipc_dev, unsigned long timeout)
 {
 	void __iomem *io_base = ipc_dev->io_base;
 	unsigned long ctx;
@@ -426,7 +426,7 @@ out:
 	return error;
 }
 
-static void mipc_flush_recv(struct mipc_device *ipc_dev,
+void mipc_flush_recv(struct mipc_device *ipc_dev,
 			    unsigned long timeout)
 {
 	struct mipc_req req;
@@ -439,7 +439,7 @@ static void mipc_flush_recv(struct mipc_device *ipc_dev,
 
 
 
-static struct mipc_device *mipc_device_instance;
+struct mipc_device *mipc_device_instance;
 
 struct mipc_device *mipc_get_device(void)
 {
@@ -448,7 +448,7 @@ struct mipc_device *mipc_get_device(void)
 	return mipc_device_instance;
 }
 
-static int mipc_ping(struct mipc_device *ipc_dev, unsigned long timeout)
+int mipc_ping(struct mipc_device *ipc_dev, unsigned long timeout)
 {
 	struct mipc_req resp;
 	int error;
@@ -470,7 +470,7 @@ void mipc_##_name##_suffix(_size a, void __iomem *addr) \
 	if (!error)							\
 		return;							\
 									\
-	pr_devel(__stringify(_name, _suffix) "(%p,%x)\n", addr, a);	\
+	pr_devel(__stringify(_name, _suffix) "(0x%lX,%x)\n", addr, a);	\
 	BUG();								\
 }
 
@@ -485,7 +485,7 @@ void mipc_##_name##_suffix(_size a, _size b, void __iomem *addr) \
 	if (!error)							\
 		return;							\
 									\
-	pr_devel(__stringify(_name, _suffix) "(%p,%x,%x)\n", addr, a, b);\
+	pr_devel(__stringify(_name, _suffix) "(0x%lX,%x,%x)\n", addr, a, b);\
 	BUG();								\
 }
 
@@ -501,7 +501,7 @@ _size mipc_##_name##_suffix(void __iomem *addr) \
 	if (!error)							\
 		return resp.args[0];					\
 									\
-	pr_devel(__stringify(_name, _suffix) "(%p)\n", addr);		\
+	pr_devel(__stringify(_name, _suffix) "(0x%lX)\n", addr);		\
 	BUG();								\
 	return 0;							\
 }
@@ -603,7 +603,7 @@ void mipc_out_8(const volatile u8 __iomem *addr, u8 val)
 
 
 
-static int mipc_check_address(phys_addr_t pa)
+int mipc_check_address(phys_addr_t pa)
 {
 	if (pa < 0x10000000 || pa > 0x14000000)
 		return -EINVAL;
@@ -628,7 +628,7 @@ int mipc_discover(struct mipc_infohdr **hdrp)
 	}
 	/* check that the header pointer points to MEM2 */
 	if (mipc_check_address(*p)) {
-		pr_devel("wrong mini ipc header address %pP\n", (void *)*p);
+		pr_devel("wrong mini ipc header address 0x%lX\n", (void *)*p);
 		error = -ENODEV;
 		goto out_unmap_p;
 	}
@@ -657,18 +657,18 @@ int mipc_discover(struct mipc_infohdr **hdrp)
 		goto out_unmap_hdr;
 	}
 	if (mipc_check_address(hdr->mem2_boundary)) {
-		pr_err("invalid mem2_boundary %pP\n",
+		pr_err("invalid mem2_boundary 0x%lX\n",
 		       (void *)hdr->mem2_boundary);
 		error = -EINVAL;
 		goto out_unmap_hdr;
 	}
 	if (mipc_check_address(hdr->ipc_in)) {
-		pr_err("invalid ipc_in %pP\n", (void *)hdr->ipc_in);
+		pr_err("invalid ipc_in 0x%lX\n", (void *)hdr->ipc_in);
 		error = -EINVAL;
 		goto out_unmap_hdr;
 	}
 	if (mipc_check_address(hdr->ipc_out)) {
-		pr_err("invalid ipc_out %pP\n", (void *)hdr->ipc_out);
+		pr_err("invalid ipc_out 0x%lX\n", (void *)hdr->ipc_out);
 		error = -EINVAL;
 		goto out_unmap_hdr;
 	}
@@ -685,21 +685,21 @@ out:
 	return error;
 }
 
-static void mipc_print_infohdr(struct mipc_infohdr *hdr)
+void mipc_print_infohdr(struct mipc_infohdr *hdr)
 {
-	pr_info("magic=%c%c%c, version=%d, mem2_boundary=%pP\n",
+	pr_info("magic=%c%c%c, version=%d, mem2_boundary=0x%lX\n",
 		hdr->magic[0], hdr->magic[1], hdr->magic[2],
 		hdr->version,
 		(void *)hdr->mem2_boundary);
-	pr_cont("ipc_in[%u] @ %pP, ipc_out[%u] @ %pP\n",
+	pr_cont("ipc_in[%u] @ 0x%lX, ipc_out[%u] @ 0x%lX\n",
 		hdr->ipc_in_size, (void *)hdr->ipc_in,
 		hdr->ipc_out_size, (void *)hdr->ipc_out);
 }
 
-static int mipc_do_simple_tests = 0;
+int mipc_do_simple_tests = 0;
 
 #ifndef MODULE
-static int __init mipc_simple_tests_setup(char *str)
+int __init mipc_simple_tests_setup(char *str)
 {
 	if (*str)
 		return 0;
@@ -709,12 +709,12 @@ static int __init mipc_simple_tests_setup(char *str)
 __setup("mipc_simple_tests", mipc_simple_tests_setup);
 #endif
 
-static unsigned long tbl_to_ns(unsigned long tbl)
+unsigned long tbl_to_ns(unsigned long tbl)
 {
 	return (tbl * 1000) / tb_ticks_per_usec;
 }
 
-static void mipc_simple_tests(struct mipc_device *ipc_dev)
+void mipc_simple_tests(struct mipc_device *ipc_dev)
 {
 	void __iomem *io_base = ipc_dev->io_base;
 	void *gpio;
@@ -765,7 +765,7 @@ static void mipc_simple_tests(struct mipc_device *ipc_dev)
 	mipc_iounmap(gpio);
 }
 
-static void mipc_shutdown_mini_devs(struct mipc_device *ipc_dev)
+void mipc_shutdown_mini_devs(struct mipc_device *ipc_dev)
 {
 	struct mipc_req resp;
 	int error;
@@ -777,7 +777,7 @@ static void mipc_shutdown_mini_devs(struct mipc_device *ipc_dev)
 		pr_err("unable to shutdown mini SDHC subsystem\n");
 }
 
-static void mipc_starlet_fixups(struct mipc_device *ipc_dev)
+void mipc_starlet_fixups(struct mipc_device *ipc_dev)
 {
 	void __iomem *gpio;
 
@@ -795,7 +795,7 @@ static void mipc_starlet_fixups(struct mipc_device *ipc_dev)
 	mipc_shutdown_mini_devs(ipc_dev);
 }
 
-static void mipc_init_ahbprot(struct mipc_device *ipc_dev)
+void mipc_init_ahbprot(struct mipc_device *ipc_dev)
 {
 	void __iomem *hw_ahbprot = (void __iomem *)0x0d800064;
 	u32 initial_ahbprot, ahbprot;
@@ -813,7 +813,7 @@ static void mipc_init_ahbprot(struct mipc_device *ipc_dev)
 		pr_err("failed to set AHBPROT\n");
 }
 
-static int mipc_init(struct mipc_device *ipc_dev, struct resource *mem, int irq)
+int mipc_init(struct mipc_device *ipc_dev, struct resource *mem, int irq)
 {
 	struct mipc_infohdr *hdr;
 	void __iomem *io_base;
@@ -825,6 +825,7 @@ static int mipc_init(struct mipc_device *ipc_dev, struct resource *mem, int irq)
 		pr_err("unable to find mini ipc instance\n");
 		goto out;
 	}
+
 
 	spin_lock_init(&ipc_dev->call_lock);
 	spin_lock_init(&ipc_dev->io_lock);
@@ -869,7 +870,7 @@ out:
 	return error;
 }
 
-static void mipc_exit(struct mipc_device *ipc_dev)
+void mipc_exit(struct mipc_device *ipc_dev)
 {
 	if (ipc_dev->in_ring)
 		iounmap(ipc_dev->in_ring);
@@ -883,7 +884,7 @@ static void mipc_exit(struct mipc_device *ipc_dev)
  *
  */
 
-static int mipc_do_probe(struct device *dev, struct resource *mem, int irq)
+int mipc_do_probe(struct device *dev, struct resource *mem, int irq)
 {
 	struct mipc_device *ipc_dev;
 	int error;
@@ -911,7 +912,7 @@ out:
 	return error;
 }
 
-static int mipc_do_remove(struct device *dev)
+int mipc_do_remove(struct device *dev)
 {
 	struct mipc_device *ipc_dev = dev_get_drvdata(dev);
 	int error = 0;
@@ -928,7 +929,7 @@ out:
 	return error;
 }
 
-static int mipc_do_shutdown(struct device *dev)
+int mipc_do_shutdown(struct device *dev)
 {
 	struct mipc_device *ipc_dev = dev_get_drvdata(dev);
 	int error = 0;
@@ -946,7 +947,7 @@ out:
  *
  */
 
-static int mipc_of_probe(struct platform_device *odev)
+int mipc_of_probe(struct platform_device *odev)
 {
 	struct resource mem[2];
 	int error;
@@ -963,24 +964,24 @@ out:
 	return error;
 }
 
-static int mipc_of_remove(struct platform_device *odev)
+int mipc_of_remove(struct platform_device *odev)
 {
 	return mipc_do_remove(&odev->dev);
 }
 
-static void mipc_of_shutdown(struct platform_device *odev)
+void mipc_of_shutdown(struct platform_device *odev)
 {
 	mipc_do_shutdown(&odev->dev);
 }
 
-static struct of_device_id mipc_of_match[] = {
+struct of_device_id mipc_of_match[] = {
 	{ .compatible = "twiizers,starlet-mini-ipc" },
 	{ },
 };
 
 MODULE_DEVICE_TABLE(of, mipc_of_match);
 
-static struct platform_driver mipc_of_driver = {
+struct platform_driver mipc_of_driver = {
 	.driver = {
 		.name = DRV_MODULE_NAME,
 		.owner = THIS_MODULE,
@@ -996,14 +997,14 @@ static struct platform_driver mipc_of_driver = {
  *
  */
 
-static int __init mipc_init_module(void)
+int __init mipc_init_module(void)
 {
 	pr_info("%s - version %s\n", DRV_DESCRIPTION, mipc_driver_version);
 
 	return platform_driver_register(&mipc_of_driver);
 }
 
-static void __exit mipc_exit_module(void)
+void __exit mipc_exit_module(void)
 {
 	platform_driver_unregister(&mipc_of_driver);
 }

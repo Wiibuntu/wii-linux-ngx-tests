@@ -68,7 +68,7 @@ int hcd_buffer_create(struct usb_hcd *hcd)
 	int		i, size;
 
 	if ((!hcd->self.controller->dma_mask &&
-	    !(hcd->driver->flags & HCD_LOCAL_MEM)) ||
+	     !hcd->localmem_pool) ||
 	    (hcd->driver->flags & HCD_NO_COHERENT_MEM))
 		return 0;
 
@@ -132,14 +132,14 @@ void *hcd_buffer_alloc(
 
 	/* some USB hosts just use PIO */
 	if ((!bus->controller->dma_mask &&
-	    !(hcd->driver->flags & HCD_LOCAL_MEM)) ||
+	    !hcd->localmem_pool) ||
 	    (hcd->driver->flags & HCD_NO_COHERENT_MEM)) {
 		*dma = ~(dma_addr_t) 0;
 		return kmalloc(size, mem_flags);
 	}
 
 	/* make sure that we allocate correctly aligned dma memory */
-	size = _ALIGN_UP(size, dma_get_cache_alignment());
+	size = ALIGN(size, dma_get_cache_alignment());
 
 	for (i = 0; i < HCD_BUFFER_POOLS; i++) {
 		if (size <= pool_max[i])
@@ -168,14 +168,14 @@ void hcd_buffer_free(
 	}
 
 	if ((!bus->controller->dma_mask &&
-	    !(hcd->driver->flags & HCD_LOCAL_MEM)) ||
+	    !hcd->localmem_pool) ||
 	    (hcd->driver->flags & HCD_NO_COHERENT_MEM)) {
 		kfree(addr);
 		return;
 	}
 
 	/* account for the real size */
-	size = _ALIGN_UP(size, dma_get_cache_alignment());
+	size = ALIGN(size, dma_get_cache_alignment());
 
 	for (i = 0; i < HCD_BUFFER_POOLS; i++) {
 		if (size <= pool_max[i]) {

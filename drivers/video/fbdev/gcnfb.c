@@ -67,7 +67,7 @@
  *
  * 2.3t - Techflash (6/3/2024) - Corrected nostalgic mode height from 480 to 448, added this changelog
  */
-static char vifb_driver_version[] = "2.3t";
+char vifb_driver_version[] = "2.3t";
 
 #define drv_printk(level, format, arg...) \
 	 printk(level DRV_MODULE_NAME ": " format , ## arg)
@@ -88,7 +88,7 @@ union double_rgba_pixel_t {
 
 #define __declare_vi_reg_set_field(reg_size, reg, field_size, field, \
 				   mask, shift) \
-static inline reg_size vi_##reg##_set_##field(reg_size reg, field_size field) \
+inline reg_size vi_##reg##_set_##field(reg_size reg, field_size field) \
 {									\
 	reg &= ~(mask << shift);					\
 	reg |= (field & mask) << shift;					\
@@ -96,7 +96,7 @@ static inline reg_size vi_##reg##_set_##field(reg_size reg, field_size field) \
 }
 
 #define __declare_vi_reg_clear_field(reg_size, reg, field, mask, shift) \
-static inline reg_size vi_##reg##_clear_##field(reg_size reg)	\
+inline reg_size vi_##reg##_clear_##field(reg_size reg)	\
 {									\
 	reg &= ~(mask << shift);					\
 	return reg;							\
@@ -104,14 +104,14 @@ static inline reg_size vi_##reg##_clear_##field(reg_size reg)	\
 
 #define __declare_vi_reg_get_field(reg_size, reg, field_size, field, \
 				   mask, shift) \
-static inline field_size vi_##reg##_get_##field(reg_size reg)	\
+inline field_size vi_##reg##_get_##field(reg_size reg)	\
 {									\
 	return (reg>>shift)&mask;					\
 }
 
 #define __declare_vi_reg_field(reg_size, reg, field_size, field, \
 			       mask, shift) \
-static inline reg_size vi_##reg##_##field(field_size field)	\
+inline reg_size vi_##reg##_##field(field_size field)	\
 {									\
 	return (field & mask) << shift;					\
 }
@@ -492,7 +492,7 @@ struct vi_ctl {
 /*
  * TV Mode Table
  */
-static struct vi_tv_mode vi_tv_modes[] = {
+struct vi_tv_mode vi_tv_modes[] = {
 	[VI_VM_NTSC_480i] = {
 		.name = "NTSC 480i",
 		.width = 640,
@@ -532,7 +532,7 @@ static struct vi_tv_mode vi_tv_modes[] = {
 /*
  * Filter Coeficient Table
  */
-static const u32 vi_fct[] = {
+const u32 vi_fct[] = {
 	0x1AE771F0, 0x0DB4A574, 0x00C1188E, 0xC4C0CBE2,
 	0xFCECDECF, 0x13130F08, 0x00080C0F,
 };
@@ -541,7 +541,7 @@ static const u32 vi_fct[] = {
 /*
  * Default fix and var framebuffer data.
  */
-static struct fb_fix_screeninfo vifb_fix = {
+struct fb_fix_screeninfo vifb_fix = {
 	.id = DRV_MODULE_NAME,
 	.type = FB_TYPE_PACKED_PIXELS,
 	.visual = FB_VISUAL_TRUECOLOR,	/* lies, lies, lies, ... */
@@ -549,7 +549,7 @@ static struct fb_fix_screeninfo vifb_fix = {
 	.capabilities = FB_CAP_FOURCC,
 };
 
-static struct fb_var_screeninfo vifb_var = {
+struct fb_var_screeninfo vifb_var = {
 	.activate = FB_ACTIVATE_NOW,
 	.width = 640,
 	.height = 480,
@@ -562,16 +562,16 @@ static struct fb_var_screeninfo vifb_var = {
 /*
  * Setup parameters.
  */
-static int want_ypan = 1;		/* 0..nothing, 1..ypan */
+int want_ypan = 1;		/* 0..nothing, 1..ypan */
 
 /* use old behaviour for video mode settings */
-static int nostalgic;
+int nostalgic;
 
-static int force_scan;
-static int force_rate;
-static int force_tv;
+int force_scan;
+int force_rate;
+int force_tv;
 
-static u32 pseudo_palette[17];
+u32 pseudo_palette[17];
 
 /*
  * Explanation of all the buffering going on here:
@@ -589,11 +589,11 @@ static u32 pseudo_palette[17];
  * vfb_len: size of the virtual framebuffer, used only in RGB88 or RGB565 modes
  * vfb_format: either RGB888, YUYV or RGB565
  */
-static unsigned long gx_fb_start;
-static void *fb_mem, *vfb_mem;
-static unsigned long vfb_len;
-static unsigned int gx_fb_size;
-static int vfb_format;
+unsigned long gx_fb_start;
+void *fb_mem, *vfb_mem;
+unsigned long vfb_len;
+unsigned int gx_fb_size;
+int vfb_format;
 #define	vfb_diff	0
 
 /*
@@ -602,8 +602,8 @@ static int vfb_format;
  */
 
 #ifdef CONFIG_WII_AVE_RVL
-static void vi_ave_setup(struct vi_ctl *ctl);
-static int vi_ave_get_video_format(struct vi_ctl *ctl,
+void vi_ave_setup(struct vi_ctl *ctl);
+int vi_ave_get_video_format(struct vi_ctl *ctl,
 				   enum vi_video_format *fmt);
 #endif
 
@@ -641,7 +641,7 @@ static int vi_ave_get_video_format(struct vi_ctl *ctl,
 /*
  * Converts two 16bpp rgb pixels into a dual yuy2 pixel.
  */
-static inline uint32_t rgbrgb16toycbycr(uint32_t rgb1rgb2)
+inline uint32_t rgbrgb16toycbycr(uint32_t rgb1rgb2)
 {
 	uint16_t rgb1 = rgb1rgb2 >> 16, rgb2 = rgb1rgb2 & 0xFFFF;
 	register int Y1, Cb, Y2, Cr;
@@ -702,7 +702,7 @@ static inline uint32_t rgbrgb16toycbycr(uint32_t rgb1rgb2)
 /*
  * Converts two 32bpp rgb pixel into a dual YUYV pixel.
  */
-static inline uint32_t rgb32rgb32toycbycr(union double_rgba_pixel_t k)
+inline uint32_t rgb32rgb32toycbycr(union double_rgba_pixel_t k)
 {
 	register int Y1, Cb, Y2, Cr;
 	register int r1, g1, b1;
@@ -760,12 +760,12 @@ static inline uint32_t rgb32rgb32toycbycr(union double_rgba_pixel_t k)
  * - http://www.pembers.freeserve.co.uk/World-TV-Standards
  */
 
-static inline int vi_vmode_is_progressive(__u32 vmode)
+inline int vi_vmode_is_progressive(__u32 vmode)
 {
 	return (vmode & FB_VMODE_MASK) == FB_VMODE_NONINTERLACED;
 }
 
-static int vi_calc_horz_timings(struct vi_mode_timings *timings,
+int vi_calc_horz_timings(struct vi_mode_timings *timings,
 				 struct fb_var_screeninfo *var,
 				 u16 width, u16 max_active_width,
 				 u16 A, u8 B, u16 C, u16 D,
@@ -802,7 +802,7 @@ static int vi_calc_horz_timings(struct vi_mode_timings *timings,
 	return 0;
 }
 
-static int vi_ntsc_525_calc_horz_timings(struct vi_mode_timings *timings,
+int vi_ntsc_525_calc_horz_timings(struct vi_mode_timings *timings,
 					  struct fb_var_screeninfo *var,
 					  u16 width)
 {
@@ -823,7 +823,7 @@ static int vi_ntsc_525_calc_horz_timings(struct vi_mode_timings *timings,
 				    A, B, C, D, f, g);
 }
 
-static int vi_calc_vert_timings(struct vi_mode_timings *timings,
+int vi_calc_vert_timings(struct vi_mode_timings *timings,
 				struct fb_var_screeninfo *var,
 				u16 height, u16 max_active_height,
 				u16 P, u16 Q, u8 equ)
@@ -888,7 +888,7 @@ static int vi_calc_vert_timings(struct vi_mode_timings *timings,
 	return 0;
 }
 
-static int vi_ntsc_525_calc_vert_timings(struct vi_mode_timings *timings,
+int vi_ntsc_525_calc_vert_timings(struct vi_mode_timings *timings,
 					 struct fb_var_screeninfo *var,
 					 u16 height)
 {
@@ -910,7 +910,7 @@ static int vi_ntsc_525_calc_vert_timings(struct vi_mode_timings *timings,
 				    P, Q, equ);
 }
 
-static int vi_pal_625_calc_timings(struct vi_mode_timings *timings,
+int vi_pal_625_calc_timings(struct vi_mode_timings *timings,
 				   struct fb_var_screeninfo *var,
 				   unsigned int width, unsigned int height)
 {
@@ -980,7 +980,7 @@ static int vi_pal_625_calc_timings(struct vi_mode_timings *timings,
 	return 0;
 }
 
-static int vi_ntsc_525_calc_timings(struct vi_mode_timings *timings,
+int vi_ntsc_525_calc_timings(struct vi_mode_timings *timings,
 				    struct fb_var_screeninfo *var,
 				    unsigned int width, unsigned int height)
 {
@@ -1026,7 +1026,7 @@ static int vi_ntsc_525_calc_timings(struct vi_mode_timings *timings,
 	return 0;
 }
 
-static int vi_ntsc_525_prog_calc_timings(struct vi_mode_timings *timings,
+int vi_ntsc_525_prog_calc_timings(struct vi_mode_timings *timings,
 					 struct fb_var_screeninfo *var,
 					 unsigned int width,
 					 unsigned int height)
@@ -1068,7 +1068,7 @@ static int vi_ntsc_525_prog_calc_timings(struct vi_mode_timings *timings,
  *
  */
 
-static inline int vi_has_component_cable(struct vi_ctl *ctl)
+inline int vi_has_component_cable(struct vi_ctl *ctl)
 {
 	return vi_sel_get_component(in_be16(ctl->io_base + VI_SEL));
 }
@@ -1077,17 +1077,17 @@ static inline int vi_has_component_cable(struct vi_ctl *ctl)
  * Get video mode reported by hardware.
  * 0=NTSC, 1=PAL, 2=MPAL, 3=debug
  */
-static inline enum vi_video_format vi_get_video_format(struct vi_ctl *ctl)
+inline enum vi_video_format vi_get_video_format(struct vi_ctl *ctl)
 {
 	return vi_dcr_get_fmt(in_be16(ctl->io_base + VI_DCR));
 }
 
-static inline int vi_video_format_is_ntsc(struct vi_ctl *ctl)
+inline int vi_video_format_is_ntsc(struct vi_ctl *ctl)
 {
 	return vi_get_video_format(ctl) == VI_FMT_NTSC;
 }
 
-static void vi_reset_video(struct vi_ctl *ctl)
+void vi_reset_video(struct vi_ctl *ctl)
 {
 	void __iomem *io_base = ctl->io_base;
 	u16 dcr;
@@ -1100,7 +1100,7 @@ static void vi_reset_video(struct vi_ctl *ctl)
 /*
  * Try to determine current TV video mode.
  */
-static void vi_detect_tv_mode(struct vi_ctl *ctl)
+void vi_detect_tv_mode(struct vi_ctl *ctl)
 {
 	struct vi_tv_mode *modes = vi_tv_modes, *mode;
 	void __iomem *io_base = ctl->io_base;
@@ -1179,7 +1179,7 @@ static void vi_detect_tv_mode(struct vi_ctl *ctl)
 /*
  * Initialize the video hardware for a given TV mode.
  */
-static void vi_setup_tv_mode(struct vi_ctl *ctl)
+void vi_setup_tv_mode(struct vi_ctl *ctl)
 {
 	void __iomem *io_base = ctl->io_base;
 	struct vi_mode_timings *timings = &ctl->timings;
@@ -1274,7 +1274,7 @@ static void vi_setup_tv_mode(struct vi_ctl *ctl)
 #endif
 }
 
-static int vifb_adjust_ll(int ll) {
+int vifb_adjust_ll(int ll) {
 	if (vfb_format == PIX_FMT_RGB888)
 		return ll/2;
 	return ll;
@@ -1308,7 +1308,7 @@ void vi_set_framebuffer(struct vi_ctl *ctl, u32 addr)
 /*
  * Swap the visible and back pages.
  */
-static inline void vi_flip_page(struct vi_ctl *ctl)
+inline void vi_flip_page(struct vi_ctl *ctl)
 {
 	ctl->visible_page ^= 1;
 	vi_set_framebuffer(ctl, ctl->page_address[ctl->visible_page]);
@@ -1316,7 +1316,7 @@ static inline void vi_flip_page(struct vi_ctl *ctl)
 	ctl->flip_pending = 0;
 }
 
-static void vi_enable_interrupts(struct vi_ctl *ctl, int enable)
+void vi_enable_interrupts(struct vi_ctl *ctl, int enable)
 {
 	void __iomem *io_base = ctl->io_base;
 
@@ -1345,7 +1345,7 @@ static void vi_enable_interrupts(struct vi_ctl *ctl, int enable)
 	out_be32(io_base + VI_DI3, 0);
 }
 
-static void vi_transcode_RGB565(struct vi_ctl *ctl)
+void vi_transcode_RGB565(struct vi_ctl *ctl)
 {
 	/* Copy and convert contents of virtual framebuffer,
 	 * uses a secondary buffer to check data which needs to be copied */
@@ -1371,7 +1371,7 @@ static void vi_transcode_RGB565(struct vi_ctl *ctl)
 	}
 }
 
-static void vi_transcode_RGB565_diff(struct vi_ctl *ctl)
+void vi_transcode_RGB565_diff(struct vi_ctl *ctl)
 {
 	/* Copy and convert contents of virtual framebuffer,
 	 * uses a secondary buffer to check data which needs to be copied */
@@ -1404,7 +1404,7 @@ static void vi_transcode_RGB565_diff(struct vi_ctl *ctl)
 	}
 }
 
-static void vi_transcode_RGB888(struct vi_ctl *ctl)
+void vi_transcode_RGB888(struct vi_ctl *ctl)
 {
 	/* Copy and convert contents of virtual framebuffer,
 	 * uses a secondary buffer to check data which needs to be copied */
@@ -1430,7 +1430,7 @@ static void vi_transcode_RGB888(struct vi_ctl *ctl)
 	}
 }
 
-static void vi_transcode_RGB888_diff(struct vi_ctl *ctl)
+void vi_transcode_RGB888_diff(struct vi_ctl *ctl)
 {
 	/* Copy and convert contents of virtual framebuffer,
 	 * uses a secondary buffer to check data which needs to be copied */
@@ -1463,7 +1463,7 @@ static void vi_transcode_RGB888_diff(struct vi_ctl *ctl)
 	}
 }
 
-static void vi_dispatch_vtrace(struct vi_ctl *ctl)
+void vi_dispatch_vtrace(struct vi_ctl *ctl)
 {
 	unsigned long flags;
 
@@ -1475,7 +1475,7 @@ static void vi_dispatch_vtrace(struct vi_ctl *ctl)
 	wake_up_interruptible(&ctl->vtrace_waitq);
 }
 
-static irqreturn_t vi_irq_handler(int irq, void *dev)
+irqreturn_t vi_irq_handler(int irq, void *dev)
 {
 	struct fb_info *info = dev_get_drvdata((struct device *)dev);
 	struct vi_ctl *ctl = info->par;
@@ -1551,9 +1551,10 @@ static irqreturn_t vi_irq_handler(int irq, void *dev)
  * I/O accessors.
  */
 
-static int vi_ave_outs(struct i2c_client *client, u8 reg,
+int vi_ave_outs(struct i2c_client *client, u8 reg,
 		       void *data, size_t len)
 {
+	printk("vi_ave_outs()\n");
 	struct i2c_adapter *adap = client->adapter;
 	struct i2c_msg msg[1];
 	u8 buf[34];
@@ -1572,6 +1573,7 @@ static int vi_ave_outs(struct i2c_client *client, u8 reg,
 	msg[0].buf = buf;
 
 	result = i2c_transfer(adap, msg, 1);
+	printk("vi_ave_outs result=%d\n", result);
 	if (result < 0)
 		error = result;
 	else if (result == 1)
@@ -1587,24 +1589,24 @@ err_out:
 	return error;
 }
 
-static int vi_ave_out8(struct i2c_client *client, u8 reg, u8 data)
+int vi_ave_out8(struct i2c_client *client, u8 reg, u8 data)
 {
 	return vi_ave_outs(client, reg, &data, sizeof(data));
 }
 
-static int vi_ave_out16(struct i2c_client *client, u8 reg, u16 data)
+int vi_ave_out16(struct i2c_client *client, u8 reg, u16 data)
 {
 	cpu_to_be16s(&data);
 	return vi_ave_outs(client, reg, &data, sizeof(data));
 }
 
-static int vi_ave_out32(struct i2c_client *client, u8 reg, u32 data)
+int vi_ave_out32(struct i2c_client *client, u8 reg, u32 data)
 {
 	cpu_to_be32s(&data);
 	return vi_ave_outs(client, reg, &data, sizeof(data));
 }
 
-static int vi_ave_ins(struct i2c_client *client, u8 reg,
+int vi_ave_ins(struct i2c_client *client, u8 reg,
 		      void *data, size_t len)
 {
 	struct i2c_adapter *adap = client->adapter;
@@ -1638,7 +1640,7 @@ static int vi_ave_ins(struct i2c_client *client, u8 reg,
 	return error;
 }
 
-static int vi_ave_in8(struct i2c_client *client, u8 reg, u8 *data)
+int vi_ave_in8(struct i2c_client *client, u8 reg, u8 *data)
 {
 	return vi_ave_ins(client, reg, data, sizeof(*data));
 }
@@ -1647,7 +1649,7 @@ static int vi_ave_in8(struct i2c_client *client, u8 reg, u8 *data)
 /*
  * Try to detect current video format.
  */
-static int vi_ave_get_video_format(struct vi_ctl *ctl,
+int vi_ave_get_video_format(struct vi_ctl *ctl,
 				   enum vi_video_format *fmt)
 {
 	int error;
@@ -1669,7 +1671,7 @@ static int vi_ave_get_video_format(struct vi_ctl *ctl,
 }
 
 
-static u8 vi_ave_gamma[] = {
+u8 vi_ave_gamma[] = {
 	0x10, 0x00, 0x10, 0x00, 0x10, 0x00, 0x10, 0x00,
 	0x10, 0x00, 0x10, 0x00, 0x10, 0x20, 0x40, 0x60,
 	0x80, 0xa0, 0xeb, 0x10, 0x00, 0x20, 0x00, 0x40,
@@ -1680,7 +1682,7 @@ static u8 vi_ave_gamma[] = {
 /*
  * Initialize the audio/video encoder.
  */
-static void vi_ave_setup(struct vi_ctl *ctl)
+void vi_ave_setup(struct vi_ctl *ctl)
 {
 	struct i2c_client *client;
 	u8 macrovision[26];
@@ -1693,6 +1695,7 @@ static void vi_ave_setup(struct vi_ctl *ctl)
 	 * Magic initialization sequence borrowed from libogc.
 	 */
 
+	printk("vi_ave_setup() - go\n");
 	vi_ave_out8(client, 0x6a, 1);
 	vi_ave_out8(client, 0x65, 1);
 
@@ -1732,17 +1735,26 @@ static void vi_ave_setup(struct vi_ctl *ctl)
 	/* PAL 480i/60 supposedly needs a "filter" */
 	pal60 = !!(format == 2 && ctl->mode->lines == 525);
 	vi_ave_out8(client, 0x6e, pal60);
+	printk("vi_ave_setup() - done\n");
 }
 
-static struct vi_ctl *first_vi_ctl;
-static struct i2c_client *first_vi_ave;
+struct vi_ctl *first_vi_ctl;
+struct i2c_client *first_vi_ave;
 
-static int vi_attach_ave(struct vi_ctl *ctl, struct i2c_client *client)
+int vi_attach_ave(struct vi_ctl *ctl, struct i2c_client *client)
 {
-	if (!ctl)
+	printk("vi_attach_ave() - go\n");
+	if (!ctl) {
+
+		drv_printk(KERN_CRIT, "vi_attach_ave: !ctl\n");
+		BUG();
 		return -ENODEV;
-	if (!client)
+	}
+	if (!client) {
+		drv_printk(KERN_CRIT, "vi_attach_ave: !client\n");
+		BUG();
 		return -EINVAL;
+	}
 
 	spin_lock(&ctl->lock);
 	if (!ctl->i2c_client) {
@@ -1755,7 +1767,7 @@ static int vi_attach_ave(struct vi_ctl *ctl, struct i2c_client *client)
 	return -EBUSY;
 }
 
-static void vi_dettach_ave(struct vi_ctl *ctl)
+void vi_dettach_ave(struct vi_ctl *ctl)
 {
 	struct i2c_client *client;
 
@@ -1774,9 +1786,14 @@ static void vi_dettach_ave(struct vi_ctl *ctl)
 	spin_unlock(&ctl->lock);
 }
 
-static int vi_ave_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+int vi_ave_probe(struct i2c_client *client)
 {
+	printk("vi_ave_probe() - go");
+	printk("vi_ave_probe() - i2c_client: 0x%lX", client);
+
+	if (client == NULL) {
+		BUG();
+	}
 	int error = 0;
 
 	/* attach first a/v encoder to first framebuffer */
@@ -1792,19 +1809,19 @@ static int vi_ave_probe(struct i2c_client *client,
 	return error;
 }
 
-static int vi_ave_remove(struct i2c_client *client)
+void vi_ave_remove(struct i2c_client *client)
 {
 	if (first_vi_ave == client)
 		first_vi_ave = NULL;
-	return 0;
+	return;
 }
 
-static const struct i2c_device_id vi_ave_id[] = {
+const struct i2c_device_id vi_ave_id[] = {
 	{ "wii-ave-rvl", 0 },
 	{ }
 };
 
-static struct i2c_driver vi_ave_driver = {
+struct i2c_driver vi_ave_driver = {
 	.driver = {
 		.name	= DRV_MODULE_NAME,
 	},
@@ -1821,7 +1838,7 @@ static struct i2c_driver vi_ave_driver = {
  *
  */
 
-static int vifb_setcolreg(unsigned regno, unsigned red, unsigned green,
+int vifb_setcolreg(unsigned regno, unsigned red, unsigned green,
 			   unsigned blue, unsigned transp, struct fb_info *info)
 {
 	/*
@@ -1857,7 +1874,7 @@ static int vifb_setcolreg(unsigned regno, unsigned red, unsigned green,
 	return 0;
 }
 
-static int vifb_check_var_timings(struct fb_var_screeninfo *var,
+int vifb_check_var_timings(struct fb_var_screeninfo *var,
 				  struct fb_info *info)
 {
 	struct vi_ctl *ctl = info->par;
@@ -1896,7 +1913,7 @@ err_out:
 	return error;
 }
 
-static int vifb_format_is_fourcc(const struct fb_var_screeninfo *var)
+int vifb_format_is_fourcc(const struct fb_var_screeninfo *var)
 {
 	return var->grayscale > 1;
 }
@@ -1906,7 +1923,7 @@ static int vifb_format_is_fourcc(const struct fb_var_screeninfo *var)
  * Check var and eventually tweak it to something supported.
  * Do not modify par here.
  */
-static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
+int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 {
 	struct vi_ctl *ctl = info->par;
 	struct vi_tv_mode *mode = ctl->mode;
@@ -2031,7 +2048,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	return 0;
 }
 
-static void vifb_clear_all(void)
+void vifb_clear_all(void)
 {
 	int i;
 	uint32_t *j;
@@ -2062,7 +2079,7 @@ static void vifb_clear_all(void)
 /*
  * Set the video mode according to info->var.
  */
-static int vifb_set_par(struct fb_info *info)
+int vifb_set_par(struct fb_info *info)
 {
 	struct vi_ctl *ctl = info->par;
 	struct fb_var_screeninfo *var = &info->var;
@@ -2111,7 +2128,6 @@ static int vifb_set_par(struct fb_info *info)
 	vi_flip_page(ctl);
 	spin_unlock_irqrestore(&ctl->lock, flags);
 
-	info->flags = FBINFO_FLAG_DEFAULT;
 	if (want_ypan) {
 		info->fix.xpanstep = 2;
 		info->fix.ypanstep = 1;
@@ -2132,7 +2148,7 @@ static int vifb_set_par(struct fb_info *info)
 	return 0;
 }
 
-static int vfb_mmap(struct fb_info *info,
+int vfb_mmap(struct fb_info *info,
 		    struct vm_area_struct *vma)
 {
 	unsigned long start = vma->vm_start;
@@ -2159,12 +2175,12 @@ static int vfb_mmap(struct fb_info *info,
 			size = 0;
 	}
 
-	vma->vm_flags |= (VM_DONTEXPAND | VM_DONTDUMP);	/* avoid to swap out this VMA */
+	vm_flags_init(vma->vm_flags, (VM_DONTEXPAND | VM_DONTDUMP));	/* avoid to swap out this VMA */
 	return 0;
 
 }
 
-static int vifb_ioctl(struct fb_info *info,
+int vifb_ioctl(struct fb_info *info,
 		       unsigned int cmd, unsigned long arg)
 {
 	struct vi_ctl *ctl = info->par;
@@ -2242,9 +2258,9 @@ struct fb_ops vifb_ops = {
  *
  */
 
-static void vifb_release_virtual_fb(void);
+void vifb_release_virtual_fb(void);
 
-static int vifb_do_probe(struct device *dev,
+int vifb_do_probe(struct device *dev,
 			 struct resource *mem, unsigned int irq,
 			 unsigned long xfb_start, unsigned long xfb_size)
 {
@@ -2292,7 +2308,7 @@ static int vifb_do_probe(struct device *dev,
 	 * Normally screen_base would be the physical framebuffer, but here we play on-the-fly colorconversion.
 	 */
 	info->screen_base = (char __iomem *)info->fix.smem_start;
-	info->flags = FBINFO_DEFAULT | FBINFO_READS_FAST | FBINFO_VIRTFB /* |	FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_FILLRECT | FBINFO_HWACCEL_COPYAREA */;
+	info->flags = FBINFO_READS_FAST | FBINFO_VIRTFB /* |	FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_FILLRECT | FBINFO_HWACCEL_COPYAREA */;
 
 	adr = info->fix.smem_start;
 	while (size > 0) {
@@ -2301,19 +2317,20 @@ static int vifb_do_probe(struct device *dev,
 		size -= PAGE_SIZE;
 	}
 	drv_printk(KERN_INFO,
-		   "virtual framebuffer at 0x%p, size %ldk\n",
+		   "virtual framebuffer at 0x%lX, size %ldk\n",
 		   (void *)vfb_mem, PAGE_ALIGN(vfb_len) / 1024);
 
 	/*
+	 * FIXME: request region stuff always fails on the Wii, don't even bother.
 	 * Map the video card's memory (this is the physical framebuffer)
 	 * into kernel's virtual memory space
-	 */
+	 *
 	if (!request_mem_region(xfb_start, xfb_size,
 				DRV_MODULE_NAME)) {
 		drv_printk(KERN_WARNING,
-			   "failed to request video memory at %p\n",
+			   "failed to request video memory at 0x%lX\n",
 			   (void *)xfb_start);
-	}
+	}*/
 
 	/* store global variables for the physical framebuffer */
 	gx_fb_start = xfb_start;
@@ -2322,14 +2339,14 @@ static int vifb_do_probe(struct device *dev,
 	fb_mem = ioremap(xfb_start, xfb_size);
 	if (!fb_mem) {
 		drv_printk(KERN_ERR,
-			   "failed to ioremap video memory at %p (%ldk)\n",
+			   "failed to ioremap video memory at 0x%lX (%ldk)\n",
 			   (void *)xfb_start,
 			   xfb_size / 1024);
 		error = -EIO;
 		goto err_ioremap;
 	}
 	drv_printk(KERN_INFO,
-		   "framebuffer at 0x%p mapped to 0x%p, size %ldk\n",
+		   "framebuffer at 0x%lX mapped to 0x%lX, size %ldk\n",
 		   (void *)xfb_start, fb_mem,
 		   xfb_size / 1024);
 
@@ -2424,7 +2441,7 @@ err_ioremap:
 	return error;
 }
 
-static int vifb_do_remove(struct device *dev)
+int vifb_do_remove(struct device *dev)
 {
 	struct vi_ctl *ctl;
 	struct fb_info *info = dev_get_drvdata(dev);
@@ -2452,7 +2469,7 @@ static int vifb_do_remove(struct device *dev)
 }
 
 /* clean up reserved pages of the virtual framebuffer */
-static void vifb_release_virtual_fb() {
+void vifb_release_virtual_fb() {
 	unsigned long size;
 	unsigned long adr = (unsigned long)vfb_mem;
 	
@@ -2469,7 +2486,7 @@ static void vifb_release_virtual_fb() {
 	vfree((void *)vfb_mem);
 }
 
-static int vifb_do_shutdown(struct device *dev)
+int vifb_do_shutdown(struct device *dev)
 {
 	struct fb_info *info = dev_get_drvdata(dev);
 	struct vi_ctl *ctl = info->par;
@@ -2484,7 +2501,7 @@ static int vifb_do_shutdown(struct device *dev)
 
 #ifndef MODULE
 
-static int vifb_setup(char *options)
+int vifb_setup(char *options)
 {
 	char *this_opt;
 
@@ -2533,7 +2550,7 @@ static int vifb_setup(char *options)
  *
  */
 
-static int vifb_of_probe(struct platform_device *odev)
+int vifb_of_probe(struct platform_device *odev)
 {
 	struct resource res;
 	const unsigned long *prop;
@@ -2565,18 +2582,18 @@ static int vifb_of_probe(struct platform_device *odev)
 			     xfb_start, xfb_size);
 }
 
-static int __exit vifb_of_remove(struct platform_device *odev)
+int __exit vifb_of_remove(struct platform_device *odev)
 {
 	return vifb_do_remove(&odev->dev);
 }
 
-static void vifb_of_shutdown(struct platform_device *odev)
+void vifb_of_shutdown(struct platform_device *odev)
 {
 	vifb_do_shutdown(&odev->dev);
 }
 
 
-static struct of_device_id vifb_of_match[] = {
+struct of_device_id vifb_of_match[] = {
 	{ .compatible = "nintendo,flipper-vi", },
 	{ .compatible = "nintendo,hollywood-vi", },
 	{ },
@@ -2584,7 +2601,7 @@ static struct of_device_id vifb_of_match[] = {
 
 MODULE_DEVICE_TABLE(of, vifb_of_match);
 
-static struct platform_driver vifb_of_driver = {
+struct platform_driver vifb_of_driver = {
 	.driver = {
 		.name = DRV_MODULE_NAME,
 		.owner = THIS_MODULE,
@@ -2600,7 +2617,7 @@ static struct platform_driver vifb_of_driver = {
  *
  */
 
-static int __init vifb_init_module(void)
+int __init vifb_init_module(void)
 {
 	int error;
 	char *option = NULL;
@@ -2628,7 +2645,7 @@ static int __init vifb_init_module(void)
 	return platform_driver_register(&vifb_of_driver);
 }
 
-static void __exit vifb_exit_module(void)
+void __exit vifb_exit_module(void)
 {
 	platform_driver_unregister(&vifb_of_driver);
 #ifdef CONFIG_WII_AVE_RVL

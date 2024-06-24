@@ -28,10 +28,12 @@
 
 #include <linux/signal.h>
 #include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 
 #include <asm/prom.h>
 #include <asm/starlet.h>
-#include <asm/time.h>	/* for get_tbl() */
+#include <asm/time.h>	/* for mftb() */
 
 #define DRV_MODULE_NAME "ohci-hlwd"
 #define DRV_DESCRIPTION "Nintendo Wii OHCI Host Controller"
@@ -42,8 +44,8 @@
 #define HLWD_EHCI_CTL_OH1INTE	(1<<12)	/* oh1 interrupt enable */
 
 #define __spin_event_timeout(condition, timeout_usecs, result, __end_tbl) \
-        for (__end_tbl = get_tbl() + tb_ticks_per_usec * timeout_usecs; \
-             !(result = (condition)) && (int)(__end_tbl - get_tbl()) > 0;)
+        for (__end_tbl = mftb() + tb_ticks_per_usec * timeout_usecs; \
+             !(result = (condition)) && (int)(__end_tbl - mftb()) > 0;)
 
 
 static DEFINE_SPINLOCK(control_quirk_lock);
@@ -254,9 +256,7 @@ static int ohci_hcd_hlwd_probe(struct platform_device *op)
 		coherent_mem_size = res.end - res.start + 1;
 		if (!dma_declare_coherent_memory(&op->dev, coherent_mem_addr,
 						 coherent_mem_addr,
-						 coherent_mem_size,
-						 DMA_MEMORY_MAP |
-						 DMA_MEMORY_EXCLUSIVE)) {
+						 coherent_mem_size)) {
 			dev_err(&op->dev, "error declaring %u bytes of"
 				" coherent memory at 0x%p\n",
 				coherent_mem_size, (void *)coherent_mem_addr);
@@ -266,7 +266,7 @@ static int ohci_hcd_hlwd_probe(struct platform_device *op)
 	}
 
 	irq = irq_of_parse_and_map(dn, 0);
-	if (irq == NO_IRQ) {
+	if (!irq) {
 		printk(KERN_ERR __FILE__ ": irq_of_parse_and_map failed\n");
 		error = -EBUSY;
 		goto err_irq;
@@ -295,7 +295,8 @@ err_add_hcd:
 err_ioremap:
 	irq_dispose_mapping(irq);
 err_irq:
-	dma_release_declared_memory(&op->dev);
+	dma_release_coherent_memory(&op->dev);
+	op->dev.dma_mem = NULL;
 err_decl_coherent:
 	usb_put_hcd(hcd);
 out:
@@ -313,7 +314,8 @@ static int ohci_hcd_hlwd_remove(struct platform_device *op)
 	usb_remove_hcd(hcd);
 	iounmap(hcd->regs);
 	irq_dispose_mapping(hcd->irq);
-	dma_release_declared_memory(&op->dev);
+	dma_release_coherent_memory(&op->dev);
+	op->dev.dma_mem = NULL;
 	usb_put_hcd(hcd);
 
 	return 0;

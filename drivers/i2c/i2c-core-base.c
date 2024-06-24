@@ -2267,6 +2267,7 @@ int __i2c_transfer(struct i2c_adapter *adap, struct i2c_msg *msgs, int num)
 		trace_i2c_result(adap, num, ret);
 	}
 
+	printk("i2c: transfered, returning %d\n", ret);
 	return ret;
 }
 EXPORT_SYMBOL(__i2c_transfer);

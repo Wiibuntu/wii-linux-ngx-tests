@@ -23,6 +23,8 @@
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
 #include <linux/dma-mapping.h>
+#include <linux/dma-map-ops.h>
+#include <linux/swiotlb.h>
 
 #define DRV_MODULE_NAME	"exi"
 #define DRV_DESCRIPTION	"Nintendo GameCube/Wii EXternal Interface (EXI) driver"
@@ -46,7 +48,7 @@ static void exi_bus_device_release(struct device *dev);
 static int exi_bus_match(struct device *dev, struct device_driver *drv);
 
 
-static struct bus_type exi_bus_type = {
+struct bus_type exi_bus_type = {
 	.name = "exi",
 	.match = exi_bus_match,
 };
@@ -184,7 +186,9 @@ static void exi_device_init(struct exi_device *exi_device,
 	exi_device->dev.bus = &exi_bus_type;
 	dev_set_name(&exi_device->dev, "exi%01x:%01x", channel, device);
 	exi_device->dev.platform_data = to_exi_channel(channel);
-	set_dma_ops(&exi_device->dev, &dma_direct_ops);
+	#ifdef CONFIG_SWIOTLB
+		set_dma_ops(&exi_device->dev, &swiotlb_dma_ops);
+	#endif
 	exi_device->dev.release = exi_device_release;
 }
 

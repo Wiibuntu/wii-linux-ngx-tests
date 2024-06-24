@@ -42,13 +42,13 @@ __ioremap_caller(phys_addr_t addr, unsigned long size, pgprot_t prot, void *call
 	/*
 	 * Don't allow anybody to remap normal RAM that we're using.
 	 * mem_init() sets high_memory so only do the check after that.
-	 */
-	if (slab_is_available() && p <= virt_to_phys(high_memory - 1) &&
+	 *
+	if (slab_is_available() && p <= virt_to_phys(high_memory - 1) 
 	    page_is_ram(__phys_to_pfn(p))) {
 		pr_warn("%s(): phys addr 0x%llx is RAM lr %ps\n", __func__,
 			(unsigned long long)p, __builtin_return_address(0));
 		return NULL;
-	}
+	}*/
 #endif
 
 	if (size == 0)

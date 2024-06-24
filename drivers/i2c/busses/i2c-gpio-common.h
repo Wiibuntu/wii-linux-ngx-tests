@@ -11,7 +11,7 @@
 #define __I2C_GPIO_COMMON_H
 
 #include <linux/i2c.h>
-#include <linux/i2c-gpio.h>
+#include <linux/platform_data/i2c-gpio.h>
 #include <linux/module.h>
 #include <linux/device.h>
 

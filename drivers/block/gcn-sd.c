@@ -53,6 +53,7 @@
 #define SD_DEBUG
 
 #include <linux/blkdev.h>
+#include <linux/blk-mq.h>
 #include <linux/crc-ccitt.h>
 #include <linux/delay.h>
 #include <linux/hdreg.h>
@@ -61,6 +62,7 @@
 #include <linux/kthread.h>
 #include <linux/major.h>
 #include <linux/module.h>
+#include <linux/semaphore.h>
 #include <linux/slab.h>
 
 /*
@@ -71,6 +73,8 @@
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
 #include <linux/mmc/sd.h>
+
+#include "../mmc/core/card.h"
 
 #include <linux/exi.h>
 
@@ -155,11 +159,11 @@ static const unsigned char tran_mant[] = {
 	35, 40, 45, 50, 55, 60, 70, 80,
 };
 
-static const unsigned int tacc_exp[] = {
+static const unsigned int taac_exp[] = {
 	1, 10, 100, 1000, 10000, 100000, 1000000, 10000000,
 };
 
-static const unsigned int tacc_mant[] = {
+static const unsigned int taac_mant[] = {
 	0, 10, 12, 13, 15, 20, 25, 30,
 	35, 40, 45, 50, 55, 60, 70, 80,
 };
@@ -393,8 +397,8 @@ static void mmc_decode_csd(struct mmc_card *card)
 	case 0:
 		m = UNSTUFF_BITS(resp, 115, 4);
 		e = UNSTUFF_BITS(resp, 112, 3);
-		csd->tacc_ns	 = (tacc_exp[e] * tacc_mant[m] + 9) / 10;
-		csd->tacc_clks	 = UNSTUFF_BITS(resp, 104, 8) * 100;
+		csd->taac_ns	 = (taac_exp[e] * taac_mant[m] + 9) / 10;
+		csd->taac_clks	 = UNSTUFF_BITS(resp, 104, 8) * 100;
 
 		m = UNSTUFF_BITS(resp, 99, 4);
 		e = UNSTUFF_BITS(resp, 96, 3);
@@ -422,8 +426,8 @@ static void mmc_decode_csd(struct mmc_card *card)
 		 */
 		mmc_card_set_blockaddr(card);
 
-		csd->tacc_ns	 = 0; /* Unused */
-		csd->tacc_clks	 = 0; /* Unused */
+		csd->taac_ns	 = 0; /* Unused */
+		csd->taac_clks	 = 0; /* Unused */
 
 		m = UNSTUFF_BITS(resp, 99, 4);
 		e = UNSTUFF_BITS(resp, 96, 3);
@@ -1312,9 +1316,6 @@ static int sd_check_request(struct sd_host *host, struct request *req)
 {
 	unsigned long nr_sectors;
 
-	if (req->cmd_type != REQ_TYPE_FS)
-		return -EIO;
-
 	if (test_bit(__SD_MEDIA_CHANGED, &host->flags)) {
 		sd_printk(KERN_ERR, "media changed, aborting\n");
 		return -ENOMEDIUM;
@@ -1438,8 +1439,10 @@ static void sd_request_func(struct request_queue *q)
  *
  * Driver interface.
  */
-
-static DEFINE_SEMAPHORE(open_lock);
+#ifndef DEFINE_SEMAPHORE
+#error "what"
+#endif
+static DEFINE_SEMAPHORE(open_lock, 1);
 
 /*
  * Opens the drive device.
