@@ -221,7 +221,14 @@ static struct sa_info *sa1100_setup_mtd(struct platform_device *pdev,
 		info->mtd = info->subdev[0].mtd;
 		ret = 0;
 	} else if (info->num_subdev > 1) {
-		struct mtd_info *cdev[nr];
+		struct mtd_info **cdev;
+
+		cdev = kmalloc_array(nr, sizeof(*cdev), GFP_KERNEL);
+		if (!cdev) {
+			ret = -ENOMEM;
+			goto err;
+		}
+
 		/*
 		 * We detected multiple devices.  Concatenate them together.
 		 */
@@ -230,8 +237,11 @@ static struct sa_info *sa1100_setup_mtd(struct platform_device *pdev,
 
 		info->mtd = mtd_concat_create(cdev, info->num_subdev,
 					      plat->name);
-		if (info->mtd == NULL)
+		kfree(cdev);
+		if (info->mtd == NULL) {
 			ret = -ENXIO;
+			goto err;
+		}
 	}
 	info->mtd->dev.parent = &pdev->dev;
 

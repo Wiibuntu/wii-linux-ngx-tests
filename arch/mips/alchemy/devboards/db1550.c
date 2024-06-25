@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Alchemy Db1550/Pb1550 board support
  *
@@ -12,8 +13,7 @@
 #include <linux/io.h>
 #include <linux/interrupt.h>
 #include <linux/mtd/mtd.h>
-#include <linux/mtd/nand.h>
-#include <linux/mtd/partitions.h>
+#include <linux/mtd/platnand.h>
 #include <linux/platform_device.h>
 #include <linux/pm.h>
 #include <linux/spi/spi.h>
@@ -125,11 +125,10 @@ static struct i2c_board_info db1550_i2c_devs[] __initdata = {
 
 /**********************************************************************/
 
-static void au1550_nand_cmd_ctrl(struct mtd_info *mtd, int cmd,
+static void au1550_nand_cmd_ctrl(struct nand_chip *this, int cmd,
 				 unsigned int ctrl)
 {
-	struct nand_chip *this = mtd_to_nand(mtd);
-	unsigned long ioaddr = (unsigned long)this->IO_ADDR_W;
+	unsigned long ioaddr = (unsigned long)this->legacy.IO_ADDR_W;
 
 	ioaddr &= 0xffffff00;
 
@@ -141,14 +140,14 @@ static void au1550_nand_cmd_ctrl(struct mtd_info *mtd, int cmd,
 		/* assume we want to r/w real data  by default */
 		ioaddr += MEM_STNAND_DATA;
 	}
-	this->IO_ADDR_R = this->IO_ADDR_W = (void __iomem *)ioaddr;
+	this->legacy.IO_ADDR_R = this->legacy.IO_ADDR_W = (void __iomem *)ioaddr;
 	if (cmd != NAND_CMD_NONE) {
-		__raw_writeb(cmd, this->IO_ADDR_W);
+		__raw_writeb(cmd, this->legacy.IO_ADDR_W);
 		wmb();
 	}
 }
 
-static int au1550_nand_device_ready(struct mtd_info *mtd)
+static int au1550_nand_device_ready(struct nand_chip *this)
 {
 	return alchemy_rdsmem(AU1000_MEM_STSTAT) & 1;
 }
@@ -514,7 +513,7 @@ static void __init db1550_devices(void)
 		AU1000_PCMCIA_MEM_PHYS_ADDR  + 0x000400000 - 1,
 		AU1000_PCMCIA_IO_PHYS_ADDR,
 		AU1000_PCMCIA_IO_PHYS_ADDR   + 0x000010000 - 1,
-		AU1550_GPIO3_INT, AU1550_GPIO0_INT,
+		AU1550_GPIO3_INT, 0,
 		/*AU1550_GPIO21_INT*/0, 0, 0);
 
 	db1x_register_pcmcia_socket(
@@ -524,7 +523,7 @@ static void __init db1550_devices(void)
 		AU1000_PCMCIA_MEM_PHYS_ADDR  + 0x004400000 - 1,
 		AU1000_PCMCIA_IO_PHYS_ADDR   + 0x004000000,
 		AU1000_PCMCIA_IO_PHYS_ADDR   + 0x004010000 - 1,
-		AU1550_GPIO5_INT, AU1550_GPIO1_INT,
+		AU1550_GPIO5_INT, 1,
 		/*AU1550_GPIO22_INT*/0, 0, 1);
 
 	platform_device_register(&db1550_nand_dev);

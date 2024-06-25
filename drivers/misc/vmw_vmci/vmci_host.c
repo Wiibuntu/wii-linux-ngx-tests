@@ -15,7 +15,6 @@
 
 #include <linux/vmw_vmci_defs.h>
 #include <linux/vmw_vmci_api.h>
-#include <linux/moduleparam.h>
 #include <linux/miscdevice.h>
 #include <linux/interrupt.h>
 #include <linux/highmem.h>
@@ -24,6 +23,7 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/sched.h>
+#include <linux/cred.h>
 #include <linux/slab.h>
 #include <linux/file.h>
 #include <linux/init.h>
@@ -165,11 +165,11 @@ static int vmci_host_close(struct inode *inode, struct file *filp)
  * This is used to wake up the VMX when a VMCI call arrives, or
  * to wake up select() or poll() at the next clock tick.
  */
-static unsigned int vmci_host_poll(struct file *filp, poll_table *wait)
+static __poll_t vmci_host_poll(struct file *filp, poll_table *wait)
 {
 	struct vmci_host_dev *vmci_host_dev = filp->private_data;
 	struct vmci_ctx *context = vmci_host_dev->context;
-	unsigned int mask = 0;
+	__poll_t mask = 0;
 
 	if (vmci_host_dev->ct_type == VMCIOBJ_CONTEXT) {
 		/* Check for VMCI calls to this VM context. */
@@ -181,7 +181,7 @@ static unsigned int vmci_host_poll(struct file *filp, poll_table *wait)
 		if (context->pending_datagrams > 0 ||
 		    vmci_handle_arr_get_size(
 				context->pending_doorbell_array) > 0) {
-			mask = POLLIN;
+			mask = EPOLLIN;
 		}
 		spin_unlock(&context->lock);
 	}
@@ -381,18 +381,12 @@ static int vmci_host_do_send_datagram(struct vmci_host_dev *vmci_host_dev,
 		return -EINVAL;
 	}
 
-	dg = kmalloc(send_info.len, GFP_KERNEL);
-	if (!dg) {
+	dg = memdup_user((void __user *)(uintptr_t)send_info.addr,
+			 send_info.len);
+	if (IS_ERR(dg)) {
 		vmci_ioctl_err(
 			"cannot allocate memory to dispatch datagram\n");
-		return -ENOMEM;
-	}
-
-	if (copy_from_user(dg, (void __user *)(uintptr_t)send_info.addr,
-			   send_info.len)) {
-		vmci_ioctl_err("error getting datagram\n");
-		kfree(dg);
-		return -EFAULT;
+		return PTR_ERR(dg);
 	}
 
 	if (VMCI_DG_SIZE(dg) != send_info.len) {
@@ -453,14 +447,11 @@ static int vmci_host_do_alloc_queuepair(struct vmci_host_dev *vmci_host_dev,
 	struct vmci_handle handle;
 	int vmci_status;
 	int __user *retptr;
-	u32 cid;
 
 	if (vmci_host_dev->ct_type != VMCIOBJ_CONTEXT) {
 		vmci_ioctl_err("only valid for contexts\n");
 		return -EINVAL;
 	}
-
-	cid = vmci_ctx_get_id(vmci_host_dev->context);
 
 	if (vmci_host_dev->user_version < VMCI_VERSION_NOVMVM) {
 		struct vmci_qp_alloc_info_vmvm alloc_info;

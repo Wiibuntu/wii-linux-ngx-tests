@@ -1,7 +1,7 @@
 /*
  * TFP410 DPI-to-DVI encoder driver
  *
- * Copyright (C) 2013 Texas Instruments
+ * Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com/
  * Author: Tomi Valkeinen <tomi.valkeinen@ti.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -9,71 +9,37 @@
  * the Free Software Foundation.
  */
 
-#include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
-#include <linux/of_gpio.h>
 
-#include <video/omapdss.h>
-#include <video/omap-panel-data.h>
+#include "../dss/omapdss.h"
 
 struct panel_drv_data {
 	struct omap_dss_device dssdev;
-	struct omap_dss_device *in;
 
-	int pd_gpio;
-	int data_lines;
-
-	struct omap_video_timings timings;
+	struct gpio_desc *pd_gpio;
 };
 
 #define to_panel_data(x) container_of(x, struct panel_drv_data, dssdev)
 
-static int tfp410_connect(struct omap_dss_device *dssdev,
-		struct omap_dss_device *dst)
+static int tfp410_connect(struct omap_dss_device *src,
+			  struct omap_dss_device *dst)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-	int r;
-
-	if (omapdss_device_is_connected(dssdev))
-		return -EBUSY;
-
-	r = in->ops.dpi->connect(in, dssdev);
-	if (r)
-		return r;
-
-	dst->src = dssdev;
-	dssdev->dst = dst;
-
-	return 0;
+	return omapdss_device_connect(dst->dss, dst, dst->next);
 }
 
-static void tfp410_disconnect(struct omap_dss_device *dssdev,
-		struct omap_dss_device *dst)
+static void tfp410_disconnect(struct omap_dss_device *src,
+			      struct omap_dss_device *dst)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-
-	WARN_ON(!omapdss_device_is_connected(dssdev));
-	if (!omapdss_device_is_connected(dssdev))
-		return;
-
-	WARN_ON(dst != dssdev->dst);
-	if (dst != dssdev->dst)
-		return;
-
-	dst->src = NULL;
-	dssdev->dst = NULL;
-
-	in->ops.dpi->disconnect(in, &ddata->dssdev);
+	omapdss_device_disconnect(dst, dst->next);
 }
 
 static int tfp410_enable(struct omap_dss_device *dssdev)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct omap_dss_device *src = dssdev->src;
 	int r;
 
 	if (!omapdss_device_is_connected(dssdev))
@@ -82,16 +48,12 @@ static int tfp410_enable(struct omap_dss_device *dssdev)
 	if (omapdss_device_is_enabled(dssdev))
 		return 0;
 
-	in->ops.dpi->set_timings(in, &ddata->timings);
-	if (ddata->data_lines)
-		in->ops.dpi->set_data_lines(in, ddata->data_lines);
-
-	r = in->ops.dpi->enable(in);
+	r = src->ops->enable(src);
 	if (r)
 		return r;
 
-	if (gpio_is_valid(ddata->pd_gpio))
-		gpio_set_value_cansleep(ddata->pd_gpio, 1);
+	if (ddata->pd_gpio)
+		gpiod_set_value_cansleep(ddata->pd_gpio, 0);
 
 	dssdev->state = OMAP_DSS_DISPLAY_ACTIVE;
 
@@ -101,129 +63,31 @@ static int tfp410_enable(struct omap_dss_device *dssdev)
 static void tfp410_disable(struct omap_dss_device *dssdev)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct omap_dss_device *src = dssdev->src;
 
 	if (!omapdss_device_is_enabled(dssdev))
 		return;
 
-	if (gpio_is_valid(ddata->pd_gpio))
-		gpio_set_value_cansleep(ddata->pd_gpio, 0);
+	if (ddata->pd_gpio)
+		gpiod_set_value_cansleep(ddata->pd_gpio, 0);
 
-	in->ops.dpi->disable(in);
+	src->ops->disable(src);
 
 	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
 }
 
-static void tfp410_fix_timings(struct omap_video_timings *timings)
-{
-	timings->data_pclk_edge = OMAPDSS_DRIVE_SIG_RISING_EDGE;
-	timings->sync_pclk_edge = OMAPDSS_DRIVE_SIG_RISING_EDGE;
-	timings->de_level = OMAPDSS_SIG_ACTIVE_HIGH;
-}
-
-static void tfp410_set_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-
-	tfp410_fix_timings(timings);
-
-	ddata->timings = *timings;
-	dssdev->panel.timings = *timings;
-
-	in->ops.dpi->set_timings(in, timings);
-}
-
-static void tfp410_get_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-
-	*timings = ddata->timings;
-}
-
-static int tfp410_check_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-
-	tfp410_fix_timings(timings);
-
-	return in->ops.dpi->check_timings(in, timings);
-}
-
-static const struct omapdss_dvi_ops tfp410_dvi_ops = {
+static const struct omap_dss_device_ops tfp410_ops = {
 	.connect	= tfp410_connect,
 	.disconnect	= tfp410_disconnect,
-
 	.enable		= tfp410_enable,
 	.disable	= tfp410_disable,
-
-	.check_timings	= tfp410_check_timings,
-	.set_timings	= tfp410_set_timings,
-	.get_timings	= tfp410_get_timings,
 };
-
-static int tfp410_probe_pdata(struct platform_device *pdev)
-{
-	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
-	struct encoder_tfp410_platform_data *pdata;
-	struct omap_dss_device *dssdev, *in;
-
-	pdata = dev_get_platdata(&pdev->dev);
-
-	ddata->pd_gpio = pdata->power_down_gpio;
-
-	ddata->data_lines = pdata->data_lines;
-
-	in = omap_dss_find_output(pdata->source);
-	if (in == NULL) {
-		dev_err(&pdev->dev, "Failed to find video source\n");
-		return -ENODEV;
-	}
-
-	ddata->in = in;
-
-	dssdev = &ddata->dssdev;
-	dssdev->name = pdata->name;
-
-	return 0;
-}
-
-static int tfp410_probe_of(struct platform_device *pdev)
-{
-	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
-	struct device_node *node = pdev->dev.of_node;
-	struct omap_dss_device *in;
-	int gpio;
-
-	gpio = of_get_named_gpio(node, "powerdown-gpios", 0);
-
-	if (gpio_is_valid(gpio) || gpio == -ENOENT) {
-		ddata->pd_gpio = gpio;
-	} else {
-		dev_err(&pdev->dev, "failed to parse PD gpio\n");
-		return gpio;
-	}
-
-	in = omapdss_of_find_source_for_first_ep(node);
-	if (IS_ERR(in)) {
-		dev_err(&pdev->dev, "failed to find video source\n");
-		return PTR_ERR(in);
-	}
-
-	ddata->in = in;
-
-	return 0;
-}
 
 static int tfp410_probe(struct platform_device *pdev)
 {
 	struct panel_drv_data *ddata;
 	struct omap_dss_device *dssdev;
-	int r;
+	struct gpio_desc *gpio;
 
 	ddata = devm_kzalloc(&pdev->dev, sizeof(*ddata), GFP_KERNEL);
 	if (!ddata)
@@ -231,57 +95,45 @@ static int tfp410_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ddata);
 
-	if (dev_get_platdata(&pdev->dev)) {
-		r = tfp410_probe_pdata(pdev);
-		if (r)
-			return r;
-	} else if (pdev->dev.of_node) {
-		r = tfp410_probe_of(pdev);
-		if (r)
-			return r;
-	} else {
-		return -ENODEV;
+	/* Powerdown GPIO */
+	gpio = devm_gpiod_get_optional(&pdev->dev, "powerdown", GPIOD_OUT_HIGH);
+	if (IS_ERR(gpio)) {
+		dev_err(&pdev->dev, "failed to parse powerdown gpio\n");
+		return PTR_ERR(gpio);
 	}
 
-	if (gpio_is_valid(ddata->pd_gpio)) {
-		r = devm_gpio_request_one(&pdev->dev, ddata->pd_gpio,
-				GPIOF_OUT_INIT_LOW, "tfp410 PD");
-		if (r) {
-			dev_err(&pdev->dev, "Failed to request PD GPIO %d\n",
-					ddata->pd_gpio);
-			goto err_gpio;
-		}
-	}
+	ddata->pd_gpio = gpio;
 
 	dssdev = &ddata->dssdev;
-	dssdev->ops.dvi = &tfp410_dvi_ops;
+	dssdev->ops = &tfp410_ops;
 	dssdev->dev = &pdev->dev;
 	dssdev->type = OMAP_DISPLAY_TYPE_DPI;
 	dssdev->output_type = OMAP_DISPLAY_TYPE_DVI;
 	dssdev->owner = THIS_MODULE;
-	dssdev->phy.dpi.data_lines = ddata->data_lines;
-	dssdev->port_num = 1;
+	dssdev->of_ports = BIT(1) | BIT(0);
+	dssdev->bus_flags = DRM_BUS_FLAG_DE_HIGH | DRM_BUS_FLAG_SYNC_POSEDGE
+			  | DRM_BUS_FLAG_PIXDATA_POSEDGE;
 
-	r = omapdss_register_output(dssdev);
-	if (r) {
-		dev_err(&pdev->dev, "Failed to register output\n");
-		goto err_reg;
+	dssdev->next = omapdss_of_find_connected_device(pdev->dev.of_node, 1);
+	if (IS_ERR(dssdev->next)) {
+		if (PTR_ERR(dssdev->next) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "failed to find video sink\n");
+		return PTR_ERR(dssdev->next);
 	}
 
+	omapdss_device_register(dssdev);
+
 	return 0;
-err_reg:
-err_gpio:
-	omap_dss_put_device(ddata->in);
-	return r;
 }
 
 static int __exit tfp410_remove(struct platform_device *pdev)
 {
 	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
 	struct omap_dss_device *dssdev = &ddata->dssdev;
-	struct omap_dss_device *in = ddata->in;
 
-	omapdss_unregister_output(&ddata->dssdev);
+	if (dssdev->next)
+		omapdss_device_put(dssdev->next);
+	omapdss_device_unregister(&ddata->dssdev);
 
 	WARN_ON(omapdss_device_is_enabled(dssdev));
 	if (omapdss_device_is_enabled(dssdev))
@@ -289,9 +141,7 @@ static int __exit tfp410_remove(struct platform_device *pdev)
 
 	WARN_ON(omapdss_device_is_connected(dssdev));
 	if (omapdss_device_is_connected(dssdev))
-		tfp410_disconnect(dssdev, dssdev->dst);
-
-	omap_dss_put_device(in);
+		omapdss_device_disconnect(NULL, dssdev);
 
 	return 0;
 }

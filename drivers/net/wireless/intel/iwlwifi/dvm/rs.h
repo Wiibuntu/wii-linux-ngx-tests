@@ -11,10 +11,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
- *
  * The full GNU General Public License is included in this distribution in the
  * file called LICENSE.
  *
@@ -355,7 +351,7 @@ struct iwl_lq_sta {
 	u8 action_counter;	/* # mode-switch actions tried */
 	u8 is_green;
 	u8 is_dup;
-	enum ieee80211_band band;
+	enum nl80211_band band;
 
 	/* The following are bitmaps of rates; IWL_RATE_6M_MASK, etc. */
 	u32 supp_rates;

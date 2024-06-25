@@ -1,20 +1,10 @@
-/*
- * extcon-max14577.c - MAX14577/77836 extcon driver to support MUIC
- *
- * Copyright (C) 2013,2014 Samsung Electronics
- * Chanwoo Choi <cw00.choi@samsung.com>
- * Krzysztof Kozlowski <k.kozlowski@samsung.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0+
+//
+// extcon-max14577.c - MAX14577/77836 extcon driver to support MUIC
+//
+// Copyright (C) 2013,2014 Samsung Electronics
+// Chanwoo Choi <cw00.choi@samsung.com>
+// Krzysztof Kozlowski <krzk@kernel.org>
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -23,7 +13,7 @@
 #include <linux/platform_device.h>
 #include <linux/mfd/max14577.h>
 #include <linux/mfd/max14577-private.h>
-#include <linux/extcon.h>
+#include <linux/extcon-provider.h>
 
 #define	DELAY_MS_DEFAULT		17000		/* unit: millisecond */
 
@@ -150,6 +140,7 @@ enum max14577_muic_acc_type {
 
 static const unsigned int max14577_extcon_cable[] = {
 	EXTCON_USB,
+	EXTCON_CHG_USB_SDP,
 	EXTCON_CHG_USB_DCP,
 	EXTCON_CHG_USB_FAST,
 	EXTCON_CHG_USB_SLOW,
@@ -203,8 +194,8 @@ static int max14577_muic_set_debounce_time(struct max14577_muic_info *info,
 static int max14577_muic_set_path(struct max14577_muic_info *info,
 		u8 val, bool attached)
 {
-	int ret = 0;
 	u8 ctrl1, ctrl2 = 0;
+	int ret;
 
 	/* Set open state to path before changing hw path */
 	ret = max14577_update_reg(info->max14577->regmap,
@@ -356,7 +347,7 @@ static int max14577_muic_jig_handler(struct max14577_muic_info *info,
 	if (ret < 0)
 		return ret;
 
-	extcon_set_cable_state_(info->edev, EXTCON_JIG, attached);
+	extcon_set_state_sync(info->edev, EXTCON_JIG, attached);
 
 	return 0;
 }
@@ -453,22 +444,24 @@ static int max14577_muic_chg_handler(struct max14577_muic_info *info)
 		if (ret < 0)
 			return ret;
 
-		extcon_set_cable_state_(info->edev, EXTCON_USB, attached);
+		extcon_set_state_sync(info->edev, EXTCON_USB, attached);
+		extcon_set_state_sync(info->edev, EXTCON_CHG_USB_SDP,
+					attached);
 		break;
 	case MAX14577_CHARGER_TYPE_DEDICATED_CHG:
-		extcon_set_cable_state_(info->edev, EXTCON_CHG_USB_DCP,
+		extcon_set_state_sync(info->edev, EXTCON_CHG_USB_DCP,
 					attached);
 		break;
 	case MAX14577_CHARGER_TYPE_DOWNSTREAM_PORT:
-		extcon_set_cable_state_(info->edev, EXTCON_CHG_USB_CDP,
+		extcon_set_state_sync(info->edev, EXTCON_CHG_USB_CDP,
 					attached);
 		break;
 	case MAX14577_CHARGER_TYPE_SPECIAL_500MA:
-		extcon_set_cable_state_(info->edev, EXTCON_CHG_USB_SLOW,
+		extcon_set_state_sync(info->edev, EXTCON_CHG_USB_SLOW,
 					attached);
 		break;
 	case MAX14577_CHARGER_TYPE_SPECIAL_1A:
-		extcon_set_cable_state_(info->edev, EXTCON_CHG_USB_FAST,
+		extcon_set_state_sync(info->edev, EXTCON_CHG_USB_FAST,
 					attached);
 		break;
 	case MAX14577_CHARGER_TYPE_NONE:
@@ -528,8 +521,10 @@ static int max14577_parse_irq(struct max14577_muic_info *info, int irq_type)
 	case MAX14577_IRQ_INT1_ADC:
 	case MAX14577_IRQ_INT1_ADCLOW:
 	case MAX14577_IRQ_INT1_ADCERR:
-		/* Handle all of accessory except for
-		   type of charger accessory */
+		/*
+		 * Handle all of accessory except for
+		 * type of charger accessory.
+		 */
 		info->irq_adc = true;
 		return 1;
 	case MAX14577_IRQ_INT2_CHGTYP:
@@ -788,6 +783,6 @@ static struct platform_driver max14577_muic_driver = {
 module_platform_driver(max14577_muic_driver);
 
 MODULE_DESCRIPTION("Maxim 14577/77836 Extcon driver");
-MODULE_AUTHOR("Chanwoo Choi <cw00.choi@samsung.com>, Krzysztof Kozlowski <k.kozlowski@samsung.com>");
+MODULE_AUTHOR("Chanwoo Choi <cw00.choi@samsung.com>, Krzysztof Kozlowski <krzk@kernel.org>");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:extcon-max14577");

@@ -21,9 +21,29 @@ MODULE_DESCRIPTION("Broadcom 63xx internal PHY driver");
 MODULE_AUTHOR("Maxime Bizon <mbizon@freebox.fr>");
 MODULE_LICENSE("GPL");
 
+static int bcm63xx_config_intr(struct phy_device *phydev)
+{
+	int reg, err;
+
+	reg = phy_read(phydev, MII_BCM63XX_IR);
+	if (reg < 0)
+		return reg;
+
+	if (phydev->interrupts == PHY_INTERRUPT_ENABLED)
+		reg &= ~MII_BCM63XX_IR_GMASK;
+	else
+		reg |= MII_BCM63XX_IR_GMASK;
+
+	err = phy_write(phydev, MII_BCM63XX_IR, reg);
+	return err;
+}
+
 static int bcm63xx_config_init(struct phy_device *phydev)
 {
 	int reg, err;
+
+	/* ASYM_PAUSE bit is marked RO in datasheet, so don't cheat */
+	phydev->supported |= SUPPORTED_Pause;
 
 	reg = phy_read(phydev, MII_BCM63XX_IR);
 	if (reg < 0)
@@ -48,26 +68,20 @@ static struct phy_driver bcm63xx_driver[] = {
 	.phy_id		= 0x00406000,
 	.phy_id_mask	= 0xfffffc00,
 	.name		= "Broadcom BCM63XX (1)",
-	/* ASYM_PAUSE bit is marked RO in datasheet, so don't cheat */
-	.features	= (PHY_BASIC_FEATURES | SUPPORTED_Pause),
+	.features	= PHY_BASIC_FEATURES,
 	.flags		= PHY_HAS_INTERRUPT | PHY_IS_INTERNAL,
 	.config_init	= bcm63xx_config_init,
-	.config_aneg	= genphy_config_aneg,
-	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm_phy_ack_intr,
-	.config_intr	= bcm_phy_config_intr,
+	.config_intr	= bcm63xx_config_intr,
 }, {
 	/* same phy as above, with just a different OUI */
 	.phy_id		= 0x002bdc00,
 	.phy_id_mask	= 0xfffffc00,
-	.name		= "Broadcom BCM63XX (2)",
-	.features	= (PHY_BASIC_FEATURES | SUPPORTED_Pause),
+	.features	= PHY_BASIC_FEATURES,
 	.flags		= PHY_HAS_INTERRUPT | PHY_IS_INTERNAL,
 	.config_init	= bcm63xx_config_init,
-	.config_aneg	= genphy_config_aneg,
-	.read_status	= genphy_read_status,
 	.ack_interrupt	= bcm_phy_ack_intr,
-	.config_intr	= bcm_phy_config_intr,
+	.config_intr	= bcm63xx_config_intr,
 } };
 
 module_phy_driver(bcm63xx_driver);

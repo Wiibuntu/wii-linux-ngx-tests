@@ -159,7 +159,7 @@ static struct dentry *ntfs_lookup(struct inode *dir_ino, struct dentry *dent,
 					PTR_ERR(dent_inode));
 		kfree(name);
 		/* Return the error code. */
-		return (struct dentry *)dent_inode;
+		return ERR_CAST(dent_inode);
 	}
 	/* It is guaranteed that @name is no longer allocated at this point. */
 	if (MREF_ERR(mref) == -ENOENT) {
@@ -253,7 +253,7 @@ handle_name:
 		err = (signed)nls_name.len;
 		goto err_out;
 	}
-	nls_name.hash = full_name_hash(nls_name.name, nls_name.len);
+	nls_name.hash = full_name_hash(dent, nls_name.name, nls_name.len);
 
 	dent = d_add_ci(dent, dent_inode, &nls_name);
 	kfree(nls_name.name);
@@ -312,7 +312,7 @@ static struct dentry *ntfs_get_parent(struct dentry *child_dent)
 	/* Get the mft record of the inode belonging to the child dentry. */
 	mrec = map_mft_record(ni);
 	if (IS_ERR(mrec))
-		return (struct dentry *)mrec;
+		return ERR_CAST(mrec);
 	/* Find the first file name attribute in the mft record. */
 	ctx = ntfs_attr_get_search_ctx(ni, mrec);
 	if (unlikely(!ctx)) {

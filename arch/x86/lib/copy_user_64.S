@@ -10,54 +10,11 @@
 #include <asm/current.h>
 #include <asm/asm-offsets.h>
 #include <asm/thread_info.h>
-#include <asm/cpufeature.h>
+#include <asm/cpufeatures.h>
 #include <asm/alternative-asm.h>
 #include <asm/asm.h>
 #include <asm/smap.h>
-
-/* Standard copy_to_user with segment limit checking */
-ENTRY(_copy_to_user)
-	GET_THREAD_INFO(%rax)
-	movq %rdi,%rcx
-	addq %rdx,%rcx
-	jc bad_to_user
-	cmpq TI_addr_limit(%rax),%rcx
-	ja bad_to_user
-	ALTERNATIVE_2 "jmp copy_user_generic_unrolled",		\
-		      "jmp copy_user_generic_string",		\
-		      X86_FEATURE_REP_GOOD,			\
-		      "jmp copy_user_enhanced_fast_string",	\
-		      X86_FEATURE_ERMS
-ENDPROC(_copy_to_user)
-
-/* Standard copy_from_user with segment limit checking */
-ENTRY(_copy_from_user)
-	GET_THREAD_INFO(%rax)
-	movq %rsi,%rcx
-	addq %rdx,%rcx
-	jc bad_from_user
-	cmpq TI_addr_limit(%rax),%rcx
-	ja bad_from_user
-	ALTERNATIVE_2 "jmp copy_user_generic_unrolled",		\
-		      "jmp copy_user_generic_string",		\
-		      X86_FEATURE_REP_GOOD,			\
-		      "jmp copy_user_enhanced_fast_string",	\
-		      X86_FEATURE_ERMS
-ENDPROC(_copy_from_user)
-
-	.section .fixup,"ax"
-	/* must zero dest */
-ENTRY(bad_from_user)
-bad_from_user:
-	movl %edx,%ecx
-	xorl %eax,%eax
-	rep
-	stosb
-bad_to_user:
-	movl %edx,%eax
-	ret
-ENDPROC(bad_from_user)
-	.previous
+#include <asm/export.h>
 
 /*
  * copy_user_generic_unrolled - memory copy with exception handling.
@@ -80,7 +37,7 @@ ENTRY(copy_user_generic_unrolled)
 	movl %edx,%ecx
 	andl $63,%edx
 	shrl $6,%ecx
-	jz 17f
+	jz .L_copy_short_string
 1:	movq (%rsi),%r8
 2:	movq 1*8(%rsi),%r9
 3:	movq 2*8(%rsi),%r10
@@ -101,7 +58,8 @@ ENTRY(copy_user_generic_unrolled)
 	leaq 64(%rdi),%rdi
 	decl %ecx
 	jnz 1b
-17:	movl %edx,%ecx
+.L_copy_short_string:
+	movl %edx,%ecx
 	andl $7,%edx
 	shrl $3,%ecx
 	jz 20f
@@ -134,27 +92,28 @@ ENTRY(copy_user_generic_unrolled)
 60:	jmp copy_user_handle_tail /* ecx is zerorest also */
 	.previous
 
-	_ASM_EXTABLE(1b,30b)
-	_ASM_EXTABLE(2b,30b)
-	_ASM_EXTABLE(3b,30b)
-	_ASM_EXTABLE(4b,30b)
-	_ASM_EXTABLE(5b,30b)
-	_ASM_EXTABLE(6b,30b)
-	_ASM_EXTABLE(7b,30b)
-	_ASM_EXTABLE(8b,30b)
-	_ASM_EXTABLE(9b,30b)
-	_ASM_EXTABLE(10b,30b)
-	_ASM_EXTABLE(11b,30b)
-	_ASM_EXTABLE(12b,30b)
-	_ASM_EXTABLE(13b,30b)
-	_ASM_EXTABLE(14b,30b)
-	_ASM_EXTABLE(15b,30b)
-	_ASM_EXTABLE(16b,30b)
-	_ASM_EXTABLE(18b,40b)
-	_ASM_EXTABLE(19b,40b)
-	_ASM_EXTABLE(21b,50b)
-	_ASM_EXTABLE(22b,50b)
+	_ASM_EXTABLE_UA(1b, 30b)
+	_ASM_EXTABLE_UA(2b, 30b)
+	_ASM_EXTABLE_UA(3b, 30b)
+	_ASM_EXTABLE_UA(4b, 30b)
+	_ASM_EXTABLE_UA(5b, 30b)
+	_ASM_EXTABLE_UA(6b, 30b)
+	_ASM_EXTABLE_UA(7b, 30b)
+	_ASM_EXTABLE_UA(8b, 30b)
+	_ASM_EXTABLE_UA(9b, 30b)
+	_ASM_EXTABLE_UA(10b, 30b)
+	_ASM_EXTABLE_UA(11b, 30b)
+	_ASM_EXTABLE_UA(12b, 30b)
+	_ASM_EXTABLE_UA(13b, 30b)
+	_ASM_EXTABLE_UA(14b, 30b)
+	_ASM_EXTABLE_UA(15b, 30b)
+	_ASM_EXTABLE_UA(16b, 30b)
+	_ASM_EXTABLE_UA(18b, 40b)
+	_ASM_EXTABLE_UA(19b, 40b)
+	_ASM_EXTABLE_UA(21b, 50b)
+	_ASM_EXTABLE_UA(22b, 50b)
 ENDPROC(copy_user_generic_unrolled)
+EXPORT_SYMBOL(copy_user_generic_unrolled)
 
 /* Some CPUs run faster using the string copy instructions.
  * This is also a lot simpler. Use them when possible.
@@ -197,9 +156,10 @@ ENTRY(copy_user_generic_string)
 	jmp copy_user_handle_tail
 	.previous
 
-	_ASM_EXTABLE(1b,11b)
-	_ASM_EXTABLE(3b,12b)
+	_ASM_EXTABLE_UA(1b, 11b)
+	_ASM_EXTABLE_UA(3b, 12b)
 ENDPROC(copy_user_generic_string)
+EXPORT_SYMBOL(copy_user_generic_string)
 
 /*
  * Some CPUs are adding enhanced REP MOVSB/STOSB instructions.
@@ -215,6 +175,8 @@ ENDPROC(copy_user_generic_string)
  */
 ENTRY(copy_user_enhanced_fast_string)
 	ASM_STAC
+	cmpl $64,%edx
+	jb .L_copy_short_string	/* less then 64 bytes, avoid the costly 'rep' */
 	movl %edx,%ecx
 1:	rep
 	movsb
@@ -227,8 +189,9 @@ ENTRY(copy_user_enhanced_fast_string)
 	jmp copy_user_handle_tail
 	.previous
 
-	_ASM_EXTABLE(1b,12b)
+	_ASM_EXTABLE_UA(1b, 12b)
 ENDPROC(copy_user_enhanced_fast_string)
+EXPORT_SYMBOL(copy_user_enhanced_fast_string)
 
 /*
  * copy_user_nocache - Uncached memory copy with exception handling
@@ -356,26 +319,27 @@ ENTRY(__copy_user_nocache)
 	jmp copy_user_handle_tail
 	.previous
 
-	_ASM_EXTABLE(1b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(2b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(3b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(4b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(5b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(6b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(7b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(8b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(9b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(10b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(11b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(12b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(13b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(14b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(15b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(16b,.L_fixup_4x8b_copy)
-	_ASM_EXTABLE(20b,.L_fixup_8b_copy)
-	_ASM_EXTABLE(21b,.L_fixup_8b_copy)
-	_ASM_EXTABLE(30b,.L_fixup_4b_copy)
-	_ASM_EXTABLE(31b,.L_fixup_4b_copy)
-	_ASM_EXTABLE(40b,.L_fixup_1b_copy)
-	_ASM_EXTABLE(41b,.L_fixup_1b_copy)
+	_ASM_EXTABLE_UA(1b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(2b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(3b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(4b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(5b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(6b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(7b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(8b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(9b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(10b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(11b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(12b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(13b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(14b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(15b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(16b, .L_fixup_4x8b_copy)
+	_ASM_EXTABLE_UA(20b, .L_fixup_8b_copy)
+	_ASM_EXTABLE_UA(21b, .L_fixup_8b_copy)
+	_ASM_EXTABLE_UA(30b, .L_fixup_4b_copy)
+	_ASM_EXTABLE_UA(31b, .L_fixup_4b_copy)
+	_ASM_EXTABLE_UA(40b, .L_fixup_1b_copy)
+	_ASM_EXTABLE_UA(41b, .L_fixup_1b_copy)
 ENDPROC(__copy_user_nocache)
+EXPORT_SYMBOL(__copy_user_nocache)

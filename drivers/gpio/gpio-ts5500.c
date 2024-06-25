@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Digital I/O driver for Technologic Systems TS-5500
  *
@@ -16,17 +17,12 @@
  * TS-5600:
  *   Documentation: http://wiki.embeddedarm.com/wiki/TS-5600
  *   Blocks: LCD port (identical to TS-5500 LCD).
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/bitops.h>
-#include <linux/gpio.h>
+#include <linux/gpio/driver.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/platform_data/gpio-ts5500.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 
@@ -318,7 +314,6 @@ static void ts5500_disable_irq(struct ts5500_priv *priv)
 static int ts5500_dio_probe(struct platform_device *pdev)
 {
 	enum ts5500_blocks block = platform_get_device_id(pdev)->driver_data;
-	struct ts5500_dio_platform_data *pdata = dev_get_platdata(&pdev->dev);
 	struct device *dev = &pdev->dev;
 	const char *name = dev_name(dev);
 	struct ts5500_priv *priv;
@@ -349,10 +344,6 @@ static int ts5500_dio_probe(struct platform_device *pdev)
 	priv->gpio_chip.set = ts5500_gpio_set;
 	priv->gpio_chip.to_irq = ts5500_gpio_to_irq;
 	priv->gpio_chip.base = -1;
-	if (pdata) {
-		priv->gpio_chip.base = pdata->base;
-		priv->strap = pdata->strap;
-	}
 
 	switch (block) {
 	case TS5500_DIO1:
@@ -409,7 +400,7 @@ static int ts5500_dio_probe(struct platform_device *pdev)
 		break;
 	}
 
-	ret = gpiochip_add_data(&priv->gpio_chip, priv);
+	ret = devm_gpiochip_add_data(dev, &priv->gpio_chip, priv);
 	if (ret) {
 		dev_err(dev, "failed to register the gpio chip\n");
 		return ret;
@@ -418,13 +409,10 @@ static int ts5500_dio_probe(struct platform_device *pdev)
 	ret = ts5500_enable_irq(priv);
 	if (ret) {
 		dev_err(dev, "invalid interrupt %d\n", priv->hwirq);
-		goto cleanup;
+		return ret;
 	}
 
 	return 0;
-cleanup:
-	gpiochip_remove(&priv->gpio_chip);
-	return ret;
 }
 
 static int ts5500_dio_remove(struct platform_device *pdev)
@@ -432,7 +420,7 @@ static int ts5500_dio_remove(struct platform_device *pdev)
 	struct ts5500_priv *priv = platform_get_drvdata(pdev);
 
 	ts5500_disable_irq(priv);
-	gpiochip_remove(&priv->gpio_chip);
+
 	return 0;
 }
 

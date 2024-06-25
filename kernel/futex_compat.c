@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * linux/kernel/futex_compat.c
  *
@@ -13,7 +14,7 @@
 #include <linux/ptrace.h>
 #include <linux/syscalls.h>
 
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 
 /*
@@ -172,7 +173,7 @@ err_unlock:
 }
 
 COMPAT_SYSCALL_DEFINE6(futex, u32 __user *, uaddr, int, op, u32, val,
-		struct compat_timespec __user *, utime, u32 __user *, uaddr2,
+		struct old_timespec32 __user *, utime, u32 __user *, uaddr2,
 		u32, val3)
 {
 	struct timespec ts;

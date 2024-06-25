@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  cobalt V4L2 API
  *
@@ -5,19 +6,6 @@
  *
  *  Copyright 2012-2015 Cisco Systems, Inc. and/or its affiliates.
  *  All rights reserved.
- *
- *  This program is free software; you may redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; version 2 of the License.
- *
- *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- *  EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- *  MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- *  NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- *  BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- *  ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- *  CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- *  SOFTWARE.
  */
 
 #include <linux/dma-mapping.h>
@@ -45,7 +33,7 @@ static const struct v4l2_dv_timings cea1080p60 = V4L2_DV_BT_CEA_1920X1080P60;
 
 static int cobalt_queue_setup(struct vb2_queue *q,
 			unsigned int *num_buffers, unsigned int *num_planes,
-			unsigned int sizes[], void *alloc_ctxs[])
+			unsigned int sizes[], struct device *alloc_devs[])
 {
 	struct cobalt_stream *s = q->drv_priv;
 	unsigned size = s->stride * s->height;
@@ -54,7 +42,6 @@ static int cobalt_queue_setup(struct vb2_queue *q,
 		*num_buffers = 3;
 	if (*num_buffers > NR_BUFS)
 		*num_buffers = NR_BUFS;
-	alloc_ctxs[0] = s->cobalt->alloc_ctx;
 	if (*num_planes)
 		return sizes[0] < size ? -EINVAL : 0;
 	*num_planes = 1;
@@ -162,8 +149,11 @@ static void cobalt_enable_output(struct cobalt_stream *s)
 	struct v4l2_subdev_format sd_fmt = {
 		.which = V4L2_SUBDEV_FORMAT_ACTIVE,
 	};
+	u64 clk = bt->pixelclock;
 
-	if (!cobalt_cpld_set_freq(cobalt, bt->pixelclock)) {
+	if (bt->flags & V4L2_DV_FL_REDUCED_FPS)
+		clk = div_u64(clk * 1000ULL, 1001);
+	if (!cobalt_cpld_set_freq(cobalt, clk)) {
 		cobalt_err("pixelclock out of range\n");
 		return;
 	}
@@ -489,8 +479,8 @@ static int cobalt_querycap(struct file *file, void *priv_fh,
 	struct cobalt_stream *s = video_drvdata(file);
 	struct cobalt *cobalt = s->cobalt;
 
-	strlcpy(vcap->driver, "cobalt", sizeof(vcap->driver));
-	strlcpy(vcap->card, "cobalt", sizeof(vcap->card));
+	strscpy(vcap->driver, "cobalt", sizeof(vcap->driver));
+	strscpy(vcap->card, "cobalt", sizeof(vcap->card));
 	snprintf(vcap->bus_info, sizeof(vcap->bus_info),
 		 "PCIe:%s", pci_name(cobalt->pci_dev));
 	vcap->device_caps = V4L2_CAP_STREAMING | V4L2_CAP_READWRITE;
@@ -525,7 +515,7 @@ static void cobalt_video_input_status_show(struct cobalt_stream *s)
 	cvi_ctrl = ioread32(&cvi->control);
 	cvi_stat = ioread32(&cvi->status);
 	vmr_ctrl = ioread32(&vmr->control);
-	vmr_stat = ioread32(&vmr->control);
+	vmr_stat = ioread32(&vmr->status);
 	cobalt_info("rx%d: cvi resolution: %dx%d\n", rx,
 		    ioread32(&cvi->frame_width), ioread32(&cvi->frame_height));
 	cobalt_info("rx%d: cvi control: %s%s%s\n", rx,
@@ -645,7 +635,7 @@ static int cobalt_s_dv_timings(struct file *file, void *priv_fh,
 		return 0;
 	}
 
-	if (v4l2_match_dv_timings(timings, &s->timings, 0, false))
+	if (v4l2_match_dv_timings(timings, &s->timings, 0, true))
 		return 0;
 
 	if (vb2_is_busy(&s->q))
@@ -703,15 +693,15 @@ static int cobalt_enum_fmt_vid_cap(struct file *file, void *priv_fh,
 {
 	switch (f->index) {
 	case 0:
-		strlcpy(f->description, "YUV 4:2:2", sizeof(f->description));
+		strscpy(f->description, "YUV 4:2:2", sizeof(f->description));
 		f->pixelformat = V4L2_PIX_FMT_YUYV;
 		break;
 	case 1:
-		strlcpy(f->description, "RGB24", sizeof(f->description));
+		strscpy(f->description, "RGB24", sizeof(f->description));
 		f->pixelformat = V4L2_PIX_FMT_RGB24;
 		break;
 	case 2:
-		strlcpy(f->description, "RGB32", sizeof(f->description));
+		strscpy(f->description, "RGB32", sizeof(f->description));
 		f->pixelformat = V4L2_PIX_FMT_BGR32;
 		break;
 	default:
@@ -908,11 +898,11 @@ static int cobalt_enum_fmt_vid_out(struct file *file, void *priv_fh,
 {
 	switch (f->index) {
 	case 0:
-		strlcpy(f->description, "YUV 4:2:2", sizeof(f->description));
+		strscpy(f->description, "YUV 4:2:2", sizeof(f->description));
 		f->pixelformat = V4L2_PIX_FMT_YUYV;
 		break;
 	case 1:
-		strlcpy(f->description, "RGB32", sizeof(f->description));
+		strscpy(f->description, "RGB32", sizeof(f->description));
 		f->pixelformat = V4L2_PIX_FMT_BGR32;
 		break;
 	default:
@@ -1074,12 +1064,37 @@ static int cobalt_subscribe_event(struct v4l2_fh *fh,
 
 static int cobalt_g_parm(struct file *file, void *fh, struct v4l2_streamparm *a)
 {
+	struct cobalt_stream *s = video_drvdata(file);
+	struct v4l2_fract fps;
+
 	if (a->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
 		return -EINVAL;
-	a->parm.capture.timeperframe.numerator = 1;
-	a->parm.capture.timeperframe.denominator = 60;
+
+	fps = v4l2_calc_timeperframe(&s->timings);
+	a->parm.capture.timeperframe.numerator = fps.numerator;
+	a->parm.capture.timeperframe.denominator = fps.denominator;
 	a->parm.capture.readbuffers = 3;
 	return 0;
+}
+
+static int cobalt_cropcap(struct file *file, void *fh, struct v4l2_cropcap *cc)
+{
+	struct cobalt_stream *s = video_drvdata(file);
+	struct v4l2_dv_timings timings;
+	int err = 0;
+
+	if (cc->type != V4L2_BUF_TYPE_VIDEO_CAPTURE)
+		return -EINVAL;
+	if (s->input == 1)
+		timings = cea1080p60;
+	else
+		err = v4l2_subdev_call(s->sd, video, g_dv_timings, &timings);
+	if (!err) {
+		cc->bounds.width = cc->defrect.width = timings.bt.width;
+		cc->bounds.height = cc->defrect.height = timings.bt.height;
+		cc->pixelaspect = v4l2_dv_timings_aspect_ratio(&timings);
+	}
+	return err;
 }
 
 static const struct v4l2_ioctl_ops cobalt_ioctl_ops = {
@@ -1088,6 +1103,7 @@ static const struct v4l2_ioctl_ops cobalt_ioctl_ops = {
 	.vidioc_log_status		= cobalt_log_status,
 	.vidioc_streamon		= vb2_ioctl_streamon,
 	.vidioc_streamoff		= vb2_ioctl_streamoff,
+	.vidioc_cropcap			= cobalt_cropcap,
 	.vidioc_enum_input		= cobalt_enum_input,
 	.vidioc_g_input			= cobalt_g_input,
 	.vidioc_s_input			= cobalt_s_input,
@@ -1224,6 +1240,7 @@ static int cobalt_node_register(struct cobalt *cobalt, int node)
 	q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 	q->min_buffers_needed = 2;
 	q->lock = &s->lock;
+	q->dev = &cobalt->pci_dev->dev;
 	vdev->queue = q;
 
 	video_set_drvdata(vdev, s);

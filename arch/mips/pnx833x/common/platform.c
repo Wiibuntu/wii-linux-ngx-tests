@@ -30,8 +30,7 @@
 #include <linux/resource.h>
 #include <linux/serial.h>
 #include <linux/serial_pnx8xxx.h>
-#include <linux/mtd/nand.h>
-#include <linux/mtd/partitions.h>
+#include <linux/mtd/platnand.h>
 
 #include <irq.h>
 #include <irq-mapping.h>
@@ -178,10 +177,9 @@ static struct platform_device pnx833x_sata_device = {
 };
 
 static void
-pnx833x_flash_nand_cmd_ctrl(struct mtd_info *mtd, int cmd, unsigned int ctrl)
+pnx833x_flash_nand_cmd_ctrl(struct nand_chip *this, int cmd, unsigned int ctrl)
 {
-	struct nand_chip *this = mtd_to_nand(mtd);
-	unsigned long nandaddr = (unsigned long)this->IO_ADDR_W;
+	unsigned long nandaddr = (unsigned long)this->legacy.IO_ADDR_W;
 
 	if (cmd == NAND_CMD_NONE)
 		return;
@@ -232,12 +230,8 @@ static struct platform_device *pnx833x_platform_devices[] __initdata = {
 
 static int __init pnx833x_platform_init(void)
 {
-	int res;
-
-	res = platform_add_devices(pnx833x_platform_devices,
-				   ARRAY_SIZE(pnx833x_platform_devices));
-
-	return res;
+	return platform_add_devices(pnx833x_platform_devices,
+				    ARRAY_SIZE(pnx833x_platform_devices));
 }
 
 arch_initcall(pnx833x_platform_init);

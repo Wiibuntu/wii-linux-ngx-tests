@@ -1,7 +1,7 @@
 /*
  * TPD12S015 HDMI ESD protection & level shifter chip driver
  *
- * Copyright (C) 2013 Texas Instruments
+ * Copyright (C) 2013 Texas Instruments Incorporated - http://www.ti.com/
  * Author: Tomi Valkeinen <tomi.valkeinen@ti.com>
  *
  * This program is free software; you can redistribute it and/or modify it
@@ -13,78 +13,64 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/slab.h>
-#include <linux/gpio.h>
 #include <linux/platform_device.h>
-#include <linux/of_gpio.h>
+#include <linux/gpio/consumer.h>
+#include <linux/mutex.h>
 
-#include <video/omapdss.h>
-#include <video/omap-panel-data.h>
+#include "../dss/omapdss.h"
 
 struct panel_drv_data {
 	struct omap_dss_device dssdev;
-	struct omap_dss_device *in;
+	void (*hpd_cb)(void *cb_data, enum drm_connector_status status);
+	void *hpd_cb_data;
+	struct mutex hpd_lock;
 
-	int ct_cp_hpd_gpio;
-	int ls_oe_gpio;
-	int hpd_gpio;
-
-	struct omap_video_timings timings;
+	struct gpio_desc *ct_cp_hpd_gpio;
+	struct gpio_desc *ls_oe_gpio;
+	struct gpio_desc *hpd_gpio;
 };
 
 #define to_panel_data(x) container_of(x, struct panel_drv_data, dssdev)
 
-static int tpd_connect(struct omap_dss_device *dssdev,
-		struct omap_dss_device *dst)
+static int tpd_connect(struct omap_dss_device *src,
+		       struct omap_dss_device *dst)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct panel_drv_data *ddata = to_panel_data(dst);
 	int r;
 
-	r = in->ops.hdmi->connect(in, dssdev);
+	r = omapdss_device_connect(dst->dss, dst, dst->next);
 	if (r)
 		return r;
 
-	dst->src = dssdev;
-	dssdev->dst = dst;
+	gpiod_set_value_cansleep(ddata->ct_cp_hpd_gpio, 1);
+	gpiod_set_value_cansleep(ddata->ls_oe_gpio, 1);
 
-	gpio_set_value_cansleep(ddata->ct_cp_hpd_gpio, 1);
 	/* DC-DC converter needs at max 300us to get to 90% of 5V */
 	udelay(300);
 
 	return 0;
 }
 
-static void tpd_disconnect(struct omap_dss_device *dssdev,
-		struct omap_dss_device *dst)
+static void tpd_disconnect(struct omap_dss_device *src,
+			   struct omap_dss_device *dst)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct panel_drv_data *ddata = to_panel_data(dst);
 
-	WARN_ON(dst != dssdev->dst);
+	gpiod_set_value_cansleep(ddata->ct_cp_hpd_gpio, 0);
+	gpiod_set_value_cansleep(ddata->ls_oe_gpio, 0);
 
-	if (dst != dssdev->dst)
-		return;
-
-	gpio_set_value_cansleep(ddata->ct_cp_hpd_gpio, 0);
-
-	dst->src = NULL;
-	dssdev->dst = NULL;
-
-	in->ops.hdmi->disconnect(in, &ddata->dssdev);
+	omapdss_device_disconnect(dst, dst->next);
 }
 
 static int tpd_enable(struct omap_dss_device *dssdev)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct omap_dss_device *src = dssdev->src;
 	int r;
 
 	if (dssdev->state == OMAP_DSS_DISPLAY_ACTIVE)
 		return 0;
 
-	in->ops.hdmi->set_timings(in, &ddata->timings);
-
-	r = in->ops.hdmi->enable(in);
+	r = src->ops->enable(src);
 	if (r)
 		return r;
 
@@ -95,186 +81,82 @@ static int tpd_enable(struct omap_dss_device *dssdev)
 
 static void tpd_disable(struct omap_dss_device *dssdev)
 {
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
+	struct omap_dss_device *src = dssdev->src;
 
 	if (dssdev->state != OMAP_DSS_DISPLAY_ACTIVE)
 		return;
 
-	in->ops.hdmi->disable(in);
+	src->ops->disable(src);
 
 	dssdev->state = OMAP_DSS_DISPLAY_DISABLED;
-}
-
-static void tpd_set_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-
-	ddata->timings = *timings;
-	dssdev->panel.timings = *timings;
-
-	in->ops.hdmi->set_timings(in, timings);
-}
-
-static void tpd_get_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-
-	*timings = ddata->timings;
-}
-
-static int tpd_check_timings(struct omap_dss_device *dssdev,
-		struct omap_video_timings *timings)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-	int r;
-
-	r = in->ops.hdmi->check_timings(in, timings);
-
-	return r;
-}
-
-static int tpd_read_edid(struct omap_dss_device *dssdev,
-		u8 *edid, int len)
-{
-	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
-	int r;
-
-	if (!gpio_get_value_cansleep(ddata->hpd_gpio))
-		return -ENODEV;
-
-	if (gpio_is_valid(ddata->ls_oe_gpio))
-		gpio_set_value_cansleep(ddata->ls_oe_gpio, 1);
-
-	r = in->ops.hdmi->read_edid(in, edid, len);
-
-	if (gpio_is_valid(ddata->ls_oe_gpio))
-		gpio_set_value_cansleep(ddata->ls_oe_gpio, 0);
-
-	return r;
 }
 
 static bool tpd_detect(struct omap_dss_device *dssdev)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
 
-	return gpio_get_value_cansleep(ddata->hpd_gpio);
+	return gpiod_get_value_cansleep(ddata->hpd_gpio);
 }
 
-static int tpd_set_infoframe(struct omap_dss_device *dssdev,
-		const struct hdmi_avi_infoframe *avi)
+static void tpd_register_hpd_cb(struct omap_dss_device *dssdev,
+				void (*cb)(void *cb_data,
+					  enum drm_connector_status status),
+				void *cb_data)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
 
-	return in->ops.hdmi->set_infoframe(in, avi);
+	mutex_lock(&ddata->hpd_lock);
+	ddata->hpd_cb = cb;
+	ddata->hpd_cb_data = cb_data;
+	mutex_unlock(&ddata->hpd_lock);
 }
 
-static int tpd_set_hdmi_mode(struct omap_dss_device *dssdev,
-		bool hdmi_mode)
+static void tpd_unregister_hpd_cb(struct omap_dss_device *dssdev)
 {
 	struct panel_drv_data *ddata = to_panel_data(dssdev);
-	struct omap_dss_device *in = ddata->in;
 
-	return in->ops.hdmi->set_hdmi_mode(in, hdmi_mode);
+	mutex_lock(&ddata->hpd_lock);
+	ddata->hpd_cb = NULL;
+	ddata->hpd_cb_data = NULL;
+	mutex_unlock(&ddata->hpd_lock);
 }
 
-static const struct omapdss_hdmi_ops tpd_hdmi_ops = {
+static const struct omap_dss_device_ops tpd_ops = {
 	.connect		= tpd_connect,
 	.disconnect		= tpd_disconnect,
-
 	.enable			= tpd_enable,
 	.disable		= tpd_disable,
-
-	.check_timings		= tpd_check_timings,
-	.set_timings		= tpd_set_timings,
-	.get_timings		= tpd_get_timings,
-
-	.read_edid		= tpd_read_edid,
 	.detect			= tpd_detect,
-	.set_infoframe		= tpd_set_infoframe,
-	.set_hdmi_mode		= tpd_set_hdmi_mode,
+	.register_hpd_cb	= tpd_register_hpd_cb,
+	.unregister_hpd_cb	= tpd_unregister_hpd_cb,
 };
 
-static int tpd_probe_pdata(struct platform_device *pdev)
+static irqreturn_t tpd_hpd_isr(int irq, void *data)
 {
-	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
-	struct encoder_tpd12s015_platform_data *pdata;
-	struct omap_dss_device *dssdev, *in;
+	struct panel_drv_data *ddata = data;
 
-	pdata = dev_get_platdata(&pdev->dev);
+	mutex_lock(&ddata->hpd_lock);
+	if (ddata->hpd_cb) {
+		enum drm_connector_status status;
 
-	ddata->ct_cp_hpd_gpio = pdata->ct_cp_hpd_gpio;
-	ddata->ls_oe_gpio = pdata->ls_oe_gpio;
-	ddata->hpd_gpio = pdata->hpd_gpio;
+		if (tpd_detect(&ddata->dssdev))
+			status = connector_status_connected;
+		else
+			status = connector_status_disconnected;
 
-	in = omap_dss_find_output(pdata->source);
-	if (in == NULL) {
-		dev_err(&pdev->dev, "Failed to find video source\n");
-		return -ENODEV;
+		ddata->hpd_cb(ddata->hpd_cb_data, status);
 	}
+	mutex_unlock(&ddata->hpd_lock);
 
-	ddata->in = in;
-
-	dssdev = &ddata->dssdev;
-	dssdev->name = pdata->name;
-
-	return 0;
-}
-
-static int tpd_probe_of(struct platform_device *pdev)
-{
-	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
-	struct device_node *node = pdev->dev.of_node;
-	struct omap_dss_device *in;
-	int gpio;
-
-	/* CT CP HPD GPIO */
-	gpio = of_get_gpio(node, 0);
-	if (!gpio_is_valid(gpio)) {
-		dev_err(&pdev->dev, "failed to parse CT CP HPD gpio\n");
-		return gpio;
-	}
-	ddata->ct_cp_hpd_gpio = gpio;
-
-	/* LS OE GPIO */
-	gpio = of_get_gpio(node, 1);
-	if (gpio_is_valid(gpio) || gpio == -ENOENT) {
-		ddata->ls_oe_gpio = gpio;
-	} else {
-		dev_err(&pdev->dev, "failed to parse LS OE gpio\n");
-		return gpio;
-	}
-
-	/* HPD GPIO */
-	gpio = of_get_gpio(node, 2);
-	if (!gpio_is_valid(gpio)) {
-		dev_err(&pdev->dev, "failed to parse HPD gpio\n");
-		return gpio;
-	}
-	ddata->hpd_gpio = gpio;
-
-	in = omapdss_of_find_source_for_first_ep(node);
-	if (IS_ERR(in)) {
-		dev_err(&pdev->dev, "failed to find video source\n");
-		return PTR_ERR(in);
-	}
-
-	ddata->in = in;
-
-	return 0;
+	return IRQ_HANDLED;
 }
 
 static int tpd_probe(struct platform_device *pdev)
 {
-	struct omap_dss_device *in, *dssdev;
+	struct omap_dss_device *dssdev;
 	struct panel_drv_data *ddata;
 	int r;
+	struct gpio_desc *gpio;
 
 	ddata = devm_kzalloc(&pdev->dev, sizeof(*ddata), GFP_KERNEL);
 	if (!ddata)
@@ -282,65 +164,66 @@ static int tpd_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, ddata);
 
-	if (dev_get_platdata(&pdev->dev)) {
-		r = tpd_probe_pdata(pdev);
-		if (r)
-			return r;
-	} else if (pdev->dev.of_node) {
-		r = tpd_probe_of(pdev);
-		if (r)
-			return r;
-	} else {
-		return -ENODEV;
-	}
+	gpio = devm_gpiod_get_index_optional(&pdev->dev, NULL, 0,
+		 GPIOD_OUT_LOW);
+	if (IS_ERR(gpio))
+		return PTR_ERR(gpio);
 
-	r = devm_gpio_request_one(&pdev->dev, ddata->ct_cp_hpd_gpio,
-			GPIOF_OUT_INIT_LOW, "hdmi_ct_cp_hpd");
+	ddata->ct_cp_hpd_gpio = gpio;
+
+	gpio = devm_gpiod_get_index_optional(&pdev->dev, NULL, 1,
+		 GPIOD_OUT_LOW);
+	if (IS_ERR(gpio))
+		return PTR_ERR(gpio);
+
+	ddata->ls_oe_gpio = gpio;
+
+	gpio = devm_gpiod_get_index(&pdev->dev, NULL, 2,
+		GPIOD_IN);
+	if (IS_ERR(gpio))
+		return PTR_ERR(gpio);
+
+	ddata->hpd_gpio = gpio;
+
+	mutex_init(&ddata->hpd_lock);
+
+	r = devm_request_threaded_irq(&pdev->dev, gpiod_to_irq(ddata->hpd_gpio),
+		NULL, tpd_hpd_isr,
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+		"tpd12s015 hpd", ddata);
 	if (r)
-		goto err_gpio;
-
-	if (gpio_is_valid(ddata->ls_oe_gpio)) {
-		r = devm_gpio_request_one(&pdev->dev, ddata->ls_oe_gpio,
-				GPIOF_OUT_INIT_LOW, "hdmi_ls_oe");
-		if (r)
-			goto err_gpio;
-	}
-
-	r = devm_gpio_request_one(&pdev->dev, ddata->hpd_gpio,
-			GPIOF_DIR_IN, "hdmi_hpd");
-	if (r)
-		goto err_gpio;
+		return r;
 
 	dssdev = &ddata->dssdev;
-	dssdev->ops.hdmi = &tpd_hdmi_ops;
+	dssdev->ops = &tpd_ops;
 	dssdev->dev = &pdev->dev;
 	dssdev->type = OMAP_DISPLAY_TYPE_HDMI;
 	dssdev->output_type = OMAP_DISPLAY_TYPE_HDMI;
 	dssdev->owner = THIS_MODULE;
-	dssdev->port_num = 1;
+	dssdev->of_ports = BIT(1) | BIT(0);
+	dssdev->ops_flags = OMAP_DSS_DEVICE_OP_DETECT
+			  | OMAP_DSS_DEVICE_OP_HPD;
 
-	in = ddata->in;
-
-	r = omapdss_register_output(dssdev);
-	if (r) {
-		dev_err(&pdev->dev, "Failed to register output\n");
-		goto err_reg;
+	dssdev->next = omapdss_of_find_connected_device(pdev->dev.of_node, 1);
+	if (IS_ERR(dssdev->next)) {
+		if (PTR_ERR(dssdev->next) != -EPROBE_DEFER)
+			dev_err(&pdev->dev, "failed to find video sink\n");
+		return PTR_ERR(dssdev->next);
 	}
 
+	omapdss_device_register(dssdev);
+
 	return 0;
-err_reg:
-err_gpio:
-	omap_dss_put_device(ddata->in);
-	return r;
 }
 
 static int __exit tpd_remove(struct platform_device *pdev)
 {
 	struct panel_drv_data *ddata = platform_get_drvdata(pdev);
 	struct omap_dss_device *dssdev = &ddata->dssdev;
-	struct omap_dss_device *in = ddata->in;
 
-	omapdss_unregister_output(&ddata->dssdev);
+	if (dssdev->next)
+		omapdss_device_put(dssdev->next);
+	omapdss_device_unregister(&ddata->dssdev);
 
 	WARN_ON(omapdss_device_is_enabled(dssdev));
 	if (omapdss_device_is_enabled(dssdev))
@@ -348,9 +231,7 @@ static int __exit tpd_remove(struct platform_device *pdev)
 
 	WARN_ON(omapdss_device_is_connected(dssdev));
 	if (omapdss_device_is_connected(dssdev))
-		tpd_disconnect(dssdev, dssdev->dst);
-
-	omap_dss_put_device(in);
+		omapdss_device_disconnect(NULL, dssdev);
 
 	return 0;
 }

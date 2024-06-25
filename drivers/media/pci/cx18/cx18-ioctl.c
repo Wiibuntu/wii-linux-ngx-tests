@@ -15,11 +15,6 @@
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
- *  02111-1307  USA
  */
 
 #include "cx18-driver.h"
@@ -177,7 +172,7 @@ static int cx18_g_fmt_vbi_cap(struct file *file, void *fh,
 
 	vbifmt->sampling_rate = 27000000;
 	vbifmt->offset = 248; /* FIXME - slightly wrong for both 50 & 60 Hz */
-	vbifmt->samples_per_line = vbi_active_samples - 4;
+	vbifmt->samples_per_line = VBI_ACTIVE_SAMPLES - 4;
 	vbifmt->sample_format = V4L2_PIX_FMT_GREY;
 	vbifmt->start[0] = cx->vbi.start[0];
 	vbifmt->start[1] = cx->vbi.start[1];
@@ -402,8 +397,8 @@ static int cx18_querycap(struct file *file, void *fh,
 	struct cx18_stream *s = video_drvdata(file);
 	struct cx18 *cx = id->cx;
 
-	strlcpy(vcap->driver, CX18_DRIVER_NAME, sizeof(vcap->driver));
-	strlcpy(vcap->card, cx->card_name, sizeof(vcap->card));
+	strscpy(vcap->driver, CX18_DRIVER_NAME, sizeof(vcap->driver));
+	strscpy(vcap->card, cx->card_name, sizeof(vcap->card));
 	snprintf(vcap->bus_info, sizeof(vcap->bus_info),
 		 "PCI:%s", pci_name(cx->pci_dev));
 	vcap->capabilities = cx->v4l2_cap;	/* capabilities */
@@ -637,9 +632,9 @@ static int cx18_g_tuner(struct file *file, void *fh, struct v4l2_tuner *vt)
 	cx18_call_all(cx, tuner, g_tuner, vt);
 
 	if (vt->type == V4L2_TUNER_RADIO)
-		strlcpy(vt->name, "cx18 Radio Tuner", sizeof(vt->name));
+		strscpy(vt->name, "cx18 Radio Tuner", sizeof(vt->name));
 	else
-		strlcpy(vt->name, "cx18 TV Tuner", sizeof(vt->name));
+		strscpy(vt->name, "cx18 TV Tuner", sizeof(vt->name));
 	return 0;
 }
 
@@ -951,8 +946,7 @@ static int cx18_encoder_cmd(struct file *file, void *fh,
 			return 0;
 		h = cx18_find_handle(cx);
 		if (h == CX18_INVALID_TASK_HANDLE) {
-			CX18_ERR("Can't find valid task handle for "
-				 "V4L2_ENC_CMD_PAUSE\n");
+			CX18_ERR("Can't find valid task handle for V4L2_ENC_CMD_PAUSE\n");
 			return -EBADFD;
 		}
 		cx18_mute(cx);
@@ -968,8 +962,7 @@ static int cx18_encoder_cmd(struct file *file, void *fh,
 			return 0;
 		h = cx18_find_handle(cx);
 		if (h == CX18_INVALID_TASK_HANDLE) {
-			CX18_ERR("Can't find valid task handle for "
-				 "V4L2_ENC_CMD_RESUME\n");
+			CX18_ERR("Can't find valid task handle for V4L2_ENC_CMD_RESUME\n");
 			return -EBADFD;
 		}
 		cx18_vapi(cx, CX18_CPU_CAPTURE_RESUME, 1, h);

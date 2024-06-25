@@ -26,12 +26,14 @@ static bool early_efi_keep;
  */
 static __init int early_efi_map_fb(void)
 {
-	unsigned long base, size;
+	u64 base, size;
 
 	if (!early_efi_keep)
 		return 0;
 
 	base = boot_params.screen_info.lfb_base;
+	if (boot_params.screen_info.capabilities & VIDEO_CAPABILITY_64BIT_BASE)
+		base |= (u64)boot_params.screen_info.ext_lfb_base << 32;
 	size = boot_params.screen_info.lfb_size;
 	efi_fb = ioremap(base, size);
 
@@ -44,11 +46,13 @@ early_initcall(early_efi_map_fb);
  * In case earlyprintk=efi,keep we have the whole framebuffer mapped already
  * so just return the offset efi_fb + start.
  */
-static __init_refok void *early_efi_map(unsigned long start, unsigned long len)
+static __ref void *early_efi_map(unsigned long start, unsigned long len)
 {
-	unsigned long base;
+	u64 base;
 
 	base = boot_params.screen_info.lfb_base;
+	if (boot_params.screen_info.capabilities & VIDEO_CAPABILITY_64BIT_BASE)
+		base |= (u64)boot_params.screen_info.ext_lfb_base << 32;
 
 	if (efi_fb)
 		return (efi_fb + start);
@@ -56,7 +60,7 @@ static __init_refok void *early_efi_map(unsigned long start, unsigned long len)
 		return early_ioremap(base + start, len);
 }
 
-static __init_refok void early_efi_unmap(void *addr, unsigned long len)
+static __ref void early_efi_unmap(void *addr, unsigned long len)
 {
 	if (!efi_fb)
 		early_iounmap(addr, len);
@@ -179,7 +183,7 @@ early_efi_write(struct console *con, const char *str, unsigned int num)
 			num--;
 		}
 
-		if (efi_x >= si->lfb_width) {
+		if (efi_x + font->width > si->lfb_width) {
 			efi_x = 0;
 			efi_y += font->height;
 		}

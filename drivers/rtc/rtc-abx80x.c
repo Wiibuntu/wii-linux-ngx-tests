@@ -17,6 +17,7 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/rtc.h>
+#include <linux/watchdog.h>
 
 #define ABX8XX_REG_HTH		0x00
 #define ABX8XX_REG_SC		0x01
@@ -37,6 +38,7 @@
 
 #define ABX8XX_REG_STATUS	0x0f
 #define ABX8XX_STATUS_AF	BIT(2)
+#define ABX8XX_STATUS_WDT	BIT(6)
 
 #define ABX8XX_REG_CTRL1	0x10
 #define ABX8XX_CTRL_WRITE	BIT(0)
@@ -49,7 +51,28 @@
 
 #define ABX8XX_REG_CD_TIMER_CTL	0x18
 
+#define ABX8XX_REG_OSC		0x1c
+#define ABX8XX_OSC_FOS		BIT(3)
+#define ABX8XX_OSC_BOS		BIT(4)
+#define ABX8XX_OSC_ACAL_512	BIT(5)
+#define ABX8XX_OSC_ACAL_1024	BIT(6)
+
+#define ABX8XX_OSC_OSEL		BIT(7)
+
+#define ABX8XX_REG_OSS		0x1d
+#define ABX8XX_OSS_OF		BIT(1)
+#define ABX8XX_OSS_OMODE	BIT(4)
+
+#define ABX8XX_REG_WDT		0x1b
+#define ABX8XX_WDT_WDS		BIT(7)
+#define ABX8XX_WDT_BMB_MASK	0x7c
+#define ABX8XX_WDT_BMB_SHIFT	2
+#define ABX8XX_WDT_MAX_TIME	(ABX8XX_WDT_BMB_MASK >> ABX8XX_WDT_BMB_SHIFT)
+#define ABX8XX_WDT_WRB_MASK	0x03
+#define ABX8XX_WDT_WRB_1HZ	0x02
+
 #define ABX8XX_REG_CFG_KEY	0x1f
+#define ABX8XX_CFG_KEY_OSC	0xa1
 #define ABX8XX_CFG_KEY_MISC	0x9d
 
 #define ABX8XX_REG_ID0		0x28
@@ -67,19 +90,40 @@ enum abx80x_chip {AB0801, AB0803, AB0804, AB0805,
 struct abx80x_cap {
 	u16 pn;
 	bool has_tc;
+	bool has_wdog;
 };
 
 static struct abx80x_cap abx80x_caps[] = {
 	[AB0801] = {.pn = 0x0801},
 	[AB0803] = {.pn = 0x0803},
-	[AB0804] = {.pn = 0x0804, .has_tc = true},
-	[AB0805] = {.pn = 0x0805, .has_tc = true},
+	[AB0804] = {.pn = 0x0804, .has_tc = true, .has_wdog = true},
+	[AB0805] = {.pn = 0x0805, .has_tc = true, .has_wdog = true},
 	[AB1801] = {.pn = 0x1801},
 	[AB1803] = {.pn = 0x1803},
-	[AB1804] = {.pn = 0x1804, .has_tc = true},
-	[AB1805] = {.pn = 0x1805, .has_tc = true},
+	[AB1804] = {.pn = 0x1804, .has_tc = true, .has_wdog = true},
+	[AB1805] = {.pn = 0x1805, .has_tc = true, .has_wdog = true},
 	[ABX80X] = {.pn = 0}
 };
+
+struct abx80x_priv {
+	struct rtc_device *rtc;
+	struct i2c_client *client;
+	struct watchdog_device wdog;
+};
+
+static int abx80x_is_rc_mode(struct i2c_client *client)
+{
+	int flags = 0;
+
+	flags =  i2c_smbus_read_byte_data(client, ABX8XX_REG_OSS);
+	if (flags < 0) {
+		dev_err(&client->dev,
+			"Failed to read autocalibration attribute\n");
+		return flags;
+	}
+
+	return (flags & ABX8XX_OSS_OMODE) ? 1 : 0;
+}
 
 static int abx80x_enable_trickle_charger(struct i2c_client *client,
 					 u8 trickle_cfg)
@@ -112,7 +156,23 @@ static int abx80x_rtc_read_time(struct device *dev, struct rtc_time *tm)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	unsigned char buf[8];
-	int err;
+	int err, flags, rc_mode = 0;
+
+	/* Read the Oscillator Failure only in XT mode */
+	rc_mode = abx80x_is_rc_mode(client);
+	if (rc_mode < 0)
+		return rc_mode;
+
+	if (!rc_mode) {
+		flags = i2c_smbus_read_byte_data(client, ABX8XX_REG_OSS);
+		if (flags < 0)
+			return flags;
+
+		if (flags & ABX8XX_OSS_OF) {
+			dev_err(dev, "Oscillator failure, data is invalid.\n");
+			return -EINVAL;
+		}
+	}
 
 	err = i2c_smbus_read_i2c_block_data(client, ABX8XX_REG_HTH,
 					    sizeof(buf), buf);
@@ -129,18 +189,14 @@ static int abx80x_rtc_read_time(struct device *dev, struct rtc_time *tm)
 	tm->tm_mon = bcd2bin(buf[ABX8XX_REG_MO] & 0x1F) - 1;
 	tm->tm_year = bcd2bin(buf[ABX8XX_REG_YR]) + 100;
 
-	err = rtc_valid_tm(tm);
-	if (err < 0)
-		dev_err(&client->dev, "retrieved date/time is not valid.\n");
-
-	return err;
+	return 0;
 }
 
 static int abx80x_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	unsigned char buf[8];
-	int err;
+	int err, flags;
 
 	if (tm->tm_year < 100)
 		return -EINVAL;
@@ -161,13 +217,26 @@ static int abx80x_rtc_set_time(struct device *dev, struct rtc_time *tm)
 		return -EIO;
 	}
 
+	/* Clear the OF bit of Oscillator Status Register */
+	flags = i2c_smbus_read_byte_data(client, ABX8XX_REG_OSS);
+	if (flags < 0)
+		return flags;
+
+	err = i2c_smbus_write_byte_data(client, ABX8XX_REG_OSS,
+					flags & ~ABX8XX_OSS_OF);
+	if (err < 0) {
+		dev_err(&client->dev, "Unable to write oscillator status register\n");
+		return err;
+	}
+
 	return 0;
 }
 
 static irqreturn_t abx80x_handle_irq(int irq, void *dev_id)
 {
 	struct i2c_client *client = dev_id;
-	struct rtc_device *rtc = i2c_get_clientdata(client);
+	struct abx80x_priv *priv = i2c_get_clientdata(client);
+	struct rtc_device *rtc = priv->rtc;
 	int status;
 
 	status = i2c_smbus_read_byte_data(client, ABX8XX_REG_STATUS);
@@ -176,6 +245,13 @@ static irqreturn_t abx80x_handle_irq(int irq, void *dev_id)
 
 	if (status & ABX8XX_STATUS_AF)
 		rtc_update_irq(rtc, 1, RTC_AF | RTC_IRQF);
+
+	/*
+	 * It is unclear if we'll get an interrupt before the external
+	 * reset kicks in.
+	 */
+	if (status & ABX8XX_STATUS_WDT)
+		dev_alert(&client->dev, "watchdog timeout interrupt.\n");
 
 	i2c_smbus_write_byte_data(client, ABX8XX_REG_STATUS, 0);
 
@@ -248,6 +324,174 @@ static int abx80x_set_alarm(struct device *dev, struct rtc_wkalrm *t)
 	return 0;
 }
 
+static int abx80x_rtc_set_autocalibration(struct device *dev,
+					  int autocalibration)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int retval, flags = 0;
+
+	if ((autocalibration != 0) && (autocalibration != 1024) &&
+	    (autocalibration != 512)) {
+		dev_err(dev, "autocalibration value outside permitted range\n");
+		return -EINVAL;
+	}
+
+	flags = i2c_smbus_read_byte_data(client, ABX8XX_REG_OSC);
+	if (flags < 0)
+		return flags;
+
+	if (autocalibration == 0) {
+		flags &= ~(ABX8XX_OSC_ACAL_512 | ABX8XX_OSC_ACAL_1024);
+	} else if (autocalibration == 1024) {
+		/* 1024 autocalibration is 0x10 */
+		flags |= ABX8XX_OSC_ACAL_1024;
+		flags &= ~(ABX8XX_OSC_ACAL_512);
+	} else {
+		/* 512 autocalibration is 0x11 */
+		flags |= (ABX8XX_OSC_ACAL_1024 | ABX8XX_OSC_ACAL_512);
+	}
+
+	/* Unlock write access to Oscillator Control Register */
+	retval = i2c_smbus_write_byte_data(client, ABX8XX_REG_CFG_KEY,
+					   ABX8XX_CFG_KEY_OSC);
+	if (retval < 0) {
+		dev_err(dev, "Failed to write CONFIG_KEY register\n");
+		return retval;
+	}
+
+	retval = i2c_smbus_write_byte_data(client, ABX8XX_REG_OSC, flags);
+
+	return retval;
+}
+
+static int abx80x_rtc_get_autocalibration(struct device *dev)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int flags = 0, autocalibration;
+
+	flags =  i2c_smbus_read_byte_data(client, ABX8XX_REG_OSC);
+	if (flags < 0)
+		return flags;
+
+	if (flags & ABX8XX_OSC_ACAL_512)
+		autocalibration = 512;
+	else if (flags & ABX8XX_OSC_ACAL_1024)
+		autocalibration = 1024;
+	else
+		autocalibration = 0;
+
+	return autocalibration;
+}
+
+static ssize_t autocalibration_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int retval;
+	unsigned long autocalibration = 0;
+
+	retval = kstrtoul(buf, 10, &autocalibration);
+	if (retval < 0) {
+		dev_err(dev, "Failed to store RTC autocalibration attribute\n");
+		return -EINVAL;
+	}
+
+	retval = abx80x_rtc_set_autocalibration(dev, autocalibration);
+
+	return retval ? retval : count;
+}
+
+static ssize_t autocalibration_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	int autocalibration = 0;
+
+	autocalibration = abx80x_rtc_get_autocalibration(dev);
+	if (autocalibration < 0) {
+		dev_err(dev, "Failed to read RTC autocalibration\n");
+		sprintf(buf, "0\n");
+		return autocalibration;
+	}
+
+	return sprintf(buf, "%d\n", autocalibration);
+}
+
+static DEVICE_ATTR_RW(autocalibration);
+
+static ssize_t oscillator_store(struct device *dev,
+				struct device_attribute *attr,
+				const char *buf, size_t count)
+{
+	struct i2c_client *client = to_i2c_client(dev);
+	int retval, flags, rc_mode = 0;
+
+	if (strncmp(buf, "rc", 2) == 0) {
+		rc_mode = 1;
+	} else if (strncmp(buf, "xtal", 4) == 0) {
+		rc_mode = 0;
+	} else {
+		dev_err(dev, "Oscillator selection value outside permitted ones\n");
+		return -EINVAL;
+	}
+
+	flags =  i2c_smbus_read_byte_data(client, ABX8XX_REG_OSC);
+	if (flags < 0)
+		return flags;
+
+	if (rc_mode == 0)
+		flags &= ~(ABX8XX_OSC_OSEL);
+	else
+		flags |= (ABX8XX_OSC_OSEL);
+
+	/* Unlock write access on Oscillator Control register */
+	retval = i2c_smbus_write_byte_data(client, ABX8XX_REG_CFG_KEY,
+					   ABX8XX_CFG_KEY_OSC);
+	if (retval < 0) {
+		dev_err(dev, "Failed to write CONFIG_KEY register\n");
+		return retval;
+	}
+
+	retval = i2c_smbus_write_byte_data(client, ABX8XX_REG_OSC, flags);
+	if (retval < 0) {
+		dev_err(dev, "Failed to write Oscillator Control register\n");
+		return retval;
+	}
+
+	return retval ? retval : count;
+}
+
+static ssize_t oscillator_show(struct device *dev,
+			       struct device_attribute *attr, char *buf)
+{
+	int rc_mode = 0;
+	struct i2c_client *client = to_i2c_client(dev);
+
+	rc_mode = abx80x_is_rc_mode(client);
+
+	if (rc_mode < 0) {
+		dev_err(dev, "Failed to read RTC oscillator selection\n");
+		sprintf(buf, "\n");
+		return rc_mode;
+	}
+
+	if (rc_mode)
+		return sprintf(buf, "rc\n");
+	else
+		return sprintf(buf, "xtal\n");
+}
+
+static DEVICE_ATTR_RW(oscillator);
+
+static struct attribute *rtc_calib_attrs[] = {
+	&dev_attr_autocalibration.attr,
+	&dev_attr_oscillator.attr,
+	NULL,
+};
+
+static const struct attribute_group rtc_calib_attr_group = {
+	.attrs		= rtc_calib_attrs,
+};
+
 static int abx80x_alarm_irq_enable(struct device *dev, unsigned int enabled)
 {
 	struct i2c_client *client = to_i2c_client(dev);
@@ -303,11 +547,101 @@ static int abx80x_dt_trickle_cfg(struct device_node *np)
 	return (trickle_cfg | i);
 }
 
+static void rtc_calib_remove_sysfs_group(void *_dev)
+{
+	struct device *dev = _dev;
+
+	sysfs_remove_group(&dev->kobj, &rtc_calib_attr_group);
+}
+
+#ifdef CONFIG_WATCHDOG
+
+static inline u8 timeout_bits(unsigned int timeout)
+{
+	return ((timeout << ABX8XX_WDT_BMB_SHIFT) & ABX8XX_WDT_BMB_MASK) |
+		 ABX8XX_WDT_WRB_1HZ;
+}
+
+static int __abx80x_wdog_set_timeout(struct watchdog_device *wdog,
+				     unsigned int timeout)
+{
+	struct abx80x_priv *priv = watchdog_get_drvdata(wdog);
+	u8 val = ABX8XX_WDT_WDS | timeout_bits(timeout);
+
+	/*
+	 * Writing any timeout to the WDT register resets the watchdog timer.
+	 * Writing 0 disables it.
+	 */
+	return i2c_smbus_write_byte_data(priv->client, ABX8XX_REG_WDT, val);
+}
+
+static int abx80x_wdog_set_timeout(struct watchdog_device *wdog,
+				   unsigned int new_timeout)
+{
+	int err = 0;
+
+	if (watchdog_hw_running(wdog))
+		err = __abx80x_wdog_set_timeout(wdog, new_timeout);
+
+	if (err == 0)
+		wdog->timeout = new_timeout;
+
+	return err;
+}
+
+static int abx80x_wdog_ping(struct watchdog_device *wdog)
+{
+	return __abx80x_wdog_set_timeout(wdog, wdog->timeout);
+}
+
+static int abx80x_wdog_start(struct watchdog_device *wdog)
+{
+	return __abx80x_wdog_set_timeout(wdog, wdog->timeout);
+}
+
+static int abx80x_wdog_stop(struct watchdog_device *wdog)
+{
+	return __abx80x_wdog_set_timeout(wdog, 0);
+}
+
+static const struct watchdog_info abx80x_wdog_info = {
+	.identity = "abx80x watchdog",
+	.options = WDIOF_KEEPALIVEPING | WDIOF_SETTIMEOUT | WDIOF_MAGICCLOSE,
+};
+
+static const struct watchdog_ops abx80x_wdog_ops = {
+	.owner = THIS_MODULE,
+	.start = abx80x_wdog_start,
+	.stop = abx80x_wdog_stop,
+	.ping = abx80x_wdog_ping,
+	.set_timeout = abx80x_wdog_set_timeout,
+};
+
+static int abx80x_setup_watchdog(struct abx80x_priv *priv)
+{
+	priv->wdog.parent = &priv->client->dev;
+	priv->wdog.ops = &abx80x_wdog_ops;
+	priv->wdog.info = &abx80x_wdog_info;
+	priv->wdog.min_timeout = 1;
+	priv->wdog.max_timeout = ABX8XX_WDT_MAX_TIME;
+	priv->wdog.timeout = ABX8XX_WDT_MAX_TIME;
+
+	watchdog_set_drvdata(&priv->wdog, priv);
+
+	return devm_watchdog_register_device(&priv->client->dev, &priv->wdog);
+}
+#else
+static int abx80x_setup_watchdog(struct abx80x_priv *priv)
+{
+	return 0;
+}
+#endif
+
 static int abx80x_probe(struct i2c_client *client,
 			const struct i2c_device_id *id)
 {
 	struct device_node *np = client->dev.of_node;
-	struct rtc_device *rtc;
+	struct abx80x_priv *priv;
 	int i, data, err, trickle_cfg = -EINVAL;
 	char buf[7];
 	unsigned int part = id->driver_data;
@@ -384,13 +718,24 @@ static int abx80x_probe(struct i2c_client *client,
 	if (err)
 		return err;
 
-	rtc = devm_rtc_device_register(&client->dev, "abx8xx",
-				       &abx80x_rtc_ops, THIS_MODULE);
+	priv = devm_kzalloc(&client->dev, sizeof(*priv), GFP_KERNEL);
+	if (priv == NULL)
+		return -ENOMEM;
 
-	if (IS_ERR(rtc))
-		return PTR_ERR(rtc);
+	priv->rtc = devm_rtc_allocate_device(&client->dev);
+	if (IS_ERR(priv->rtc))
+		return PTR_ERR(priv->rtc);
 
-	i2c_set_clientdata(client, rtc);
+	priv->rtc->ops = &abx80x_rtc_ops;
+	priv->client = client;
+
+	i2c_set_clientdata(client, priv);
+
+	if (abx80x_caps[part].has_wdog) {
+		err = abx80x_setup_watchdog(priv);
+		if (err)
+			return err;
+	}
 
 	if (client->irq > 0) {
 		dev_info(&client->dev, "IRQ %d supplied\n", client->irq);
@@ -405,7 +750,27 @@ static int abx80x_probe(struct i2c_client *client,
 		}
 	}
 
-	return 0;
+	/* Export sysfs entries */
+	err = sysfs_create_group(&(&client->dev)->kobj, &rtc_calib_attr_group);
+	if (err) {
+		dev_err(&client->dev, "Failed to create sysfs group: %d\n",
+			err);
+		return err;
+	}
+
+	err = devm_add_action_or_reset(&client->dev,
+				       rtc_calib_remove_sysfs_group,
+				       &client->dev);
+	if (err) {
+		dev_err(&client->dev,
+			"Failed to add sysfs cleanup action: %d\n",
+			err);
+		return err;
+	}
+
+	err = rtc_register_device(priv->rtc);
+
+	return err;
 }
 
 static int abx80x_remove(struct i2c_client *client)

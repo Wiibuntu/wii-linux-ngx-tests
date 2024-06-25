@@ -20,7 +20,7 @@
 #include <linux/pinctrl/pinconf-generic.h>
 #include <linux/slab.h>
 #include <linux/regmap.h>
-#include <linux/gpio.h>
+#include <linux/gpio/driver.h>
 #include <linux/interrupt.h>
 #include <linux/of_device.h>
 #include <linux/of_irq.h>
@@ -200,7 +200,7 @@ static const struct pinctrl_ops pm8xxx_pinctrl_ops = {
 	.get_group_name		= pm8xxx_get_group_name,
 	.get_group_pins         = pm8xxx_get_group_pins,
 	.dt_node_to_map		= pinconf_generic_dt_node_to_map_group,
-	.dt_free_map		= pinctrl_utils_dt_free_map,
+	.dt_free_map		= pinctrl_utils_free_map,
 };
 
 static int pm8xxx_get_functions_count(struct pinctrl_dev *pctldev)
@@ -260,22 +260,32 @@ static int pm8xxx_pin_config_get(struct pinctrl_dev *pctldev,
 
 	switch (param) {
 	case PIN_CONFIG_BIAS_DISABLE:
-		arg = pin->bias == PM8XXX_GPIO_BIAS_NP;
+		if (pin->bias != PM8XXX_GPIO_BIAS_NP)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PIN_CONFIG_BIAS_PULL_DOWN:
-		arg = pin->bias == PM8XXX_GPIO_BIAS_PD;
+		if (pin->bias != PM8XXX_GPIO_BIAS_PD)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PIN_CONFIG_BIAS_PULL_UP:
-		arg = pin->bias <= PM8XXX_GPIO_BIAS_PU_1P5_30;
+		if (pin->bias > PM8XXX_GPIO_BIAS_PU_1P5_30)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PM8XXX_QCOM_PULL_UP_STRENGTH:
 		arg = pin->pull_up_strength;
 		break;
 	case PIN_CONFIG_BIAS_HIGH_IMPEDANCE:
-		arg = pin->disable;
+		if (!pin->disable)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PIN_CONFIG_INPUT_ENABLE:
-		arg = pin->mode == PM8XXX_GPIO_MODE_INPUT;
+		if (pin->mode != PM8XXX_GPIO_MODE_INPUT)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PIN_CONFIG_OUTPUT:
 		if (pin->mode & PM8XXX_GPIO_MODE_OUTPUT)
@@ -290,10 +300,14 @@ static int pm8xxx_pin_config_get(struct pinctrl_dev *pctldev,
 		arg = pin->output_strength;
 		break;
 	case PIN_CONFIG_DRIVE_PUSH_PULL:
-		arg = !pin->open_drain;
+		if (pin->open_drain)
+			return -EINVAL;
+		arg = 1;
 		break;
 	case PIN_CONFIG_DRIVE_OPEN_DRAIN:
-		arg = pin->open_drain;
+		if (!pin->open_drain)
+			return -EINVAL;
+		arg = 1;
 		break;
 	default:
 		return -EINVAL;
@@ -588,7 +602,7 @@ static void pm8xxx_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 #define pm8xxx_gpio_dbg_show NULL
 #endif
 
-static struct gpio_chip pm8xxx_gpio_template = {
+static const struct gpio_chip pm8xxx_gpio_template = {
 	.direction_input = pm8xxx_gpio_direction_input,
 	.direction_output = pm8xxx_gpio_direction_output,
 	.get = pm8xxx_gpio_get,
@@ -729,7 +743,7 @@ static int pm8xxx_gpio_probe(struct platform_device *pdev)
 	pctrl->desc.custom_conf_items = pm8xxx_conf_items;
 #endif
 
-	pctrl->pctrl = pinctrl_register(&pctrl->desc, &pdev->dev, pctrl);
+	pctrl->pctrl = devm_pinctrl_register(&pdev->dev, &pctrl->desc, pctrl);
 	if (IS_ERR(pctrl->pctrl)) {
 		dev_err(&pdev->dev, "couldn't register pm8xxx gpio driver\n");
 		return PTR_ERR(pctrl->pctrl);
@@ -745,7 +759,7 @@ static int pm8xxx_gpio_probe(struct platform_device *pdev)
 	ret = gpiochip_add_data(&pctrl->chip, pctrl);
 	if (ret) {
 		dev_err(&pdev->dev, "failed register gpiochip\n");
-		goto unregister_pinctrl;
+		return ret;
 	}
 
 	ret = gpiochip_add_pin_range(&pctrl->chip,
@@ -765,9 +779,6 @@ static int pm8xxx_gpio_probe(struct platform_device *pdev)
 unregister_gpiochip:
 	gpiochip_remove(&pctrl->chip);
 
-unregister_pinctrl:
-	pinctrl_unregister(pctrl->pctrl);
-
 	return ret;
 }
 
@@ -776,8 +787,6 @@ static int pm8xxx_gpio_remove(struct platform_device *pdev)
 	struct pm8xxx_gpio *pctrl = platform_get_drvdata(pdev);
 
 	gpiochip_remove(&pctrl->chip);
-
-	pinctrl_unregister(pctrl->pctrl);
 
 	return 0;
 }

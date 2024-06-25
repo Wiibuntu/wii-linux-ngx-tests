@@ -11,10 +11,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
- *
  * The full GNU General Public License is included in this distribution in the
  * file called LICENSE.
  *
@@ -152,11 +148,14 @@ static void iwl_led_brightness_set(struct led_classdev *led_cdev,
 {
 	struct iwl_priv *priv = container_of(led_cdev, struct iwl_priv, led);
 	unsigned long on = 0;
+	unsigned long off = 0;
 
 	if (brightness > 0)
 		on = IWL_LED_SOLID;
+	else
+		off = IWL_LED_SOLID;
 
-	iwl_led_cmd(priv, on, 0);
+	iwl_led_cmd(priv, on, off);
 }
 
 static int iwl_led_blink_set(struct led_classdev *led_cdev,

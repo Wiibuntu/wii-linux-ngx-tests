@@ -1,21 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * rtl8712_efuse.c
  *
  * Copyright(c) 2007 - 2010 Realtek Corporation. All rights reserved.
  * Linux device driver for RTL8192SU
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of version 2 of the GNU General Public License as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
  *
  * Modifications for inclusion into the Linux staging tree are
  * Copyright(c) 2010 Larry Finger. All rights reserved.
@@ -161,7 +149,7 @@ static u8 efuse_is_empty(struct _adapter *padapter, u8 *empty)
 
 	/* read one byte to check if E-Fuse is empty */
 	if (efuse_one_byte_rw(padapter, true, 0, &value)) {
-		if (0xFF == value)
+		if (value == 0xFF)
 			*empty = true;
 		else
 			*empty = false;
@@ -248,7 +236,7 @@ u8 r8712_efuse_pg_packet_read(struct _adapter *padapter, u8 offset, u8 *data)
 	u8 tmpdata[PGPKT_DATA_SIZE];
 	u8 ret = true;
 
-	if (data == NULL)
+	if (!data)
 		return false;
 	if (offset > 0x0f)
 		return false;
@@ -345,15 +333,15 @@ static u8 fix_header(struct _adapter *padapter, u8 header, u16 header_addr)
 				ret = false;
 			} else if (pkt.data[i * 2] != value) {
 				ret = false;
-				if (0xFF == value) /* write again */
+				if (value == 0xFF) /* write again */
 					efuse_one_byte_write(padapter, addr,
-							pkt.data[i * 2]);
+							     pkt.data[i * 2]);
 			}
 			if (!efuse_one_byte_read(padapter, addr + 1, &value)) {
 				ret = false;
 			} else if (pkt.data[i * 2 + 1] != value) {
 				ret = false;
-				if (0xFF == value) /* write again */
+				if (value == 0xFF) /* write again */
 					efuse_one_byte_write(padapter, addr + 1,
 							     pkt.data[i * 2 +
 								      1]);
@@ -420,7 +408,7 @@ u8 r8712_efuse_pg_packet_write(struct _adapter *padapter, const u8 offset,
 		}
 		/* write header fail */
 		bResult = false;
-		if (0xFF == efuse_data)
+		if (efuse_data == 0xFF)
 			return bResult; /* nothing damaged. */
 		/* call rescue procedure */
 		if (!fix_header(padapter, efuse_data, efuse_addr))

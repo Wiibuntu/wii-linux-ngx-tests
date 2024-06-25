@@ -11,10 +11,6 @@
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
  *
- * You should have received a copy of the GNU General Public License along with
- * this program; if not, write to the Free Software Foundation, Inc.,
- * 51 Franklin Street, Fifth Floor, Boston, MA 02110, USA
- *
  * The full GNU General Public License is included in this distribution in the
  * file called LICENSE.
  *
@@ -38,13 +34,13 @@
 #include <linux/slab.h>
 #include <linux/mutex.h>
 
-#include "iwl-fw.h"
+#include "fw/img.h"
 #include "iwl-eeprom-parse.h"
 #include "iwl-csr.h"
 #include "iwl-debug.h"
 #include "iwl-agn-hw.h"
 #include "iwl-op-mode.h"
-#include "iwl-notif-wait.h"
+#include "fw/notif-wait.h"
 #include "iwl-trans.h"
 
 #include "led.h"
@@ -677,7 +673,7 @@ struct iwl_priv {
 
 	struct iwl_hw_params hw_params;
 
-	enum ieee80211_band band;
+	enum nl80211_band band;
 	u8 valid_contexts;
 
 	void (*rx_handlers[REPLY_MAX])(struct iwl_priv *priv,
@@ -722,11 +718,11 @@ struct iwl_priv {
 	unsigned long scan_start;
 	unsigned long scan_start_tsf;
 	void *scan_cmd;
-	enum ieee80211_band scan_band;
+	enum nl80211_band scan_band;
 	struct cfg80211_scan_request *scan_request;
 	struct ieee80211_vif *scan_vif;
 	enum iwl_scan_type scan_type;
-	u8 scan_tx_ant[IEEE80211_NUM_BANDS];
+	u8 scan_tx_ant[NUM_NL80211_BANDS];
 	u8 mgmt_tx_ant;
 
 	/* max number of station keys */

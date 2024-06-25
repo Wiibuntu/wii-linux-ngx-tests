@@ -163,7 +163,8 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 			dev_err(&pdev->dev, "unable to kmalloc\n");
 			goto bad2;
 		}
-		uioinfo->name = pdev->dev.of_node->name;
+		uioinfo->name = devm_kasprintf(&pdev->dev, GFP_KERNEL, "%pOFn",
+					       pdev->dev.of_node);
 		uioinfo->version = "devicetree";
 
 		/* Multiple IRQs are not supported */
@@ -229,7 +230,7 @@ static int uio_dmem_genirq_probe(struct platform_device *pdev)
 		++uiomem;
 	}
 
-	priv->dmem_region_start = i;
+	priv->dmem_region_start = uiomem - &uioinfo->mem[0];
 	priv->num_dmem_regions = pdata->num_dynamic_regions;
 
 	for (i = 0; i < pdata->num_dynamic_regions; ++i) {

@@ -14,11 +14,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
- *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
  *
@@ -45,15 +40,6 @@
  * uCode download functions
  *
  ******************************************************************************/
-
-static inline const struct fw_img *
-iwl_get_ucode_image(struct iwl_priv *priv, enum iwl_ucode_type ucode_type)
-{
-	if (ucode_type >= IWL_UCODE_TYPE_MAX)
-		return NULL;
-
-	return &priv->fw->img[ucode_type];
-}
 
 /*
  *  Calibration
@@ -330,7 +316,7 @@ int iwl_load_ucode_wait_alive(struct iwl_priv *priv,
 	enum iwl_ucode_type old_type;
 	static const u16 alive_cmd[] = { REPLY_ALIVE };
 
-	fw = iwl_get_ucode_image(priv, ucode_type);
+	fw = iwl_get_ucode_image(priv->fw, ucode_type);
 	if (WARN_ON(!fw))
 		return -EINVAL;
 
@@ -416,7 +402,7 @@ int iwl_run_init_ucode(struct iwl_priv *priv)
 	lockdep_assert_held(&priv->mutex);
 
 	/* No init ucode required? Curious, but maybe ok */
-	if (!priv->fw->img[IWL_UCODE_INIT].sec[0].len)
+	if (!priv->fw->img[IWL_UCODE_INIT].num_sec)
 		return 0;
 
 	iwl_init_notification_wait(&priv->notif_wait, &calib_wait,

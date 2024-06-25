@@ -18,10 +18,6 @@
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *
  *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -143,12 +139,10 @@ int cx25821_video_irq(struct cx25821_dev *dev, int chan_num, u32 status)
 
 static int cx25821_queue_setup(struct vb2_queue *q,
 			   unsigned int *num_buffers, unsigned int *num_planes,
-			   unsigned int sizes[], void *alloc_ctxs[])
+			   unsigned int sizes[], struct device *alloc_devs[])
 {
 	struct cx25821_channel *chan = q->drv_priv;
 	unsigned size = (chan->fmt->depth * chan->width * chan->height) >> 3;
-
-	alloc_ctxs[0] = chan->dev->alloc_ctx;
 
 	if (*num_planes)
 		return sizes[0] < size ? -EINVAL : 0;
@@ -309,7 +303,7 @@ static void cx25821_stop_streaming(struct vb2_queue *q)
 	spin_unlock_irqrestore(&dev->slock, flags);
 }
 
-static struct vb2_ops cx25821_video_qops = {
+static const struct vb2_ops cx25821_video_qops = {
 	.queue_setup    = cx25821_queue_setup,
 	.buf_prepare  = cx25821_buffer_prepare,
 	.buf_finish = cx25821_buffer_finish,
@@ -328,7 +322,7 @@ static int cx25821_vidioc_enum_fmt_vid_cap(struct file *file, void *priv,
 	if (unlikely(f->index >= ARRAY_SIZE(formats)))
 		return -EINVAL;
 
-	strlcpy(f->description, formats[f->index].name, sizeof(f->description));
+	strscpy(f->description, formats[f->index].name, sizeof(f->description));
 	f->pixelformat = formats[f->index].fourcc;
 
 	return 0;
@@ -447,8 +441,8 @@ static int cx25821_vidioc_querycap(struct file *file, void *priv,
 			V4L2_CAP_READWRITE | V4L2_CAP_STREAMING;
 	const u32 cap_output = V4L2_CAP_VIDEO_OUTPUT | V4L2_CAP_READWRITE;
 
-	strcpy(cap->driver, "cx25821");
-	strlcpy(cap->card, cx25821_boards[dev->board].name, sizeof(cap->card));
+	strscpy(cap->driver, "cx25821", sizeof(cap->driver));
+	strscpy(cap->card, cx25821_boards[dev->board].name, sizeof(cap->card));
 	sprintf(cap->bus_info, "PCIe:%s", pci_name(dev->pci));
 	if (chan->id >= VID_CHANNEL_NUM)
 		cap->device_caps = cap_output;
@@ -492,7 +486,7 @@ static int cx25821_vidioc_enum_input(struct file *file, void *priv,
 
 	i->type = V4L2_INPUT_TYPE_CAMERA;
 	i->std = CX25821_NORMS;
-	strcpy(i->name, "Composite");
+	strscpy(i->name, "Composite", sizeof(i->name));
 	return 0;
 }
 
@@ -540,7 +534,7 @@ static int cx25821_vidioc_enum_output(struct file *file, void *priv,
 
 	o->type = V4L2_INPUT_TYPE_CAMERA;
 	o->std = CX25821_NORMS;
-	strcpy(o->name, "Composite");
+	strscpy(o->name, "Composite", sizeof(o->name));
 	return 0;
 }
 
@@ -759,6 +753,7 @@ int cx25821_video_register(struct cx25821_dev *dev)
 		q->mem_ops = &vb2_dma_sg_memops;
 		q->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_MONOTONIC;
 		q->lock = &dev->lock;
+		q->dev = &dev->pci->dev;
 
 		if (!is_output) {
 			err = vb2_queue_init(q);

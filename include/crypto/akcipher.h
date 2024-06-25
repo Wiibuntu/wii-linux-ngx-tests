@@ -98,7 +98,7 @@ struct akcipher_alg {
 			   unsigned int keylen);
 	int (*set_priv_key)(struct crypto_akcipher *tfm, const void *key,
 			    unsigned int keylen);
-	int (*max_size)(struct crypto_akcipher *tfm);
+	unsigned int (*max_size)(struct crypto_akcipher *tfm);
 	int (*init)(struct crypto_akcipher *tfm);
 	void (*exit)(struct crypto_akcipher *tfm);
 
@@ -114,7 +114,7 @@ struct akcipher_alg {
  */
 
 /**
- * crypto_alloc_akcipher() -- allocate AKCIPHER tfm handle
+ * crypto_alloc_akcipher() - allocate AKCIPHER tfm handle
  * @alg_name: is the cra_name / name or cra_driver_name / driver name of the
  *	      public key algorithm e.g. "rsa"
  * @type: specifies the type of the algorithm
@@ -171,7 +171,7 @@ static inline struct crypto_akcipher *crypto_akcipher_reqtfm(
 }
 
 /**
- * crypto_free_akcipher() -- free AKCIPHER tfm handle
+ * crypto_free_akcipher() - free AKCIPHER tfm handle
  *
  * @tfm: AKCIPHER tfm handle allocated with crypto_alloc_akcipher()
  */
@@ -181,7 +181,7 @@ static inline void crypto_free_akcipher(struct crypto_akcipher *tfm)
 }
 
 /**
- * akcipher_request_alloc() -- allocates public key request
+ * akcipher_request_alloc() - allocates public key request
  *
  * @tfm:	AKCIPHER tfm handle allocated with crypto_alloc_akcipher()
  * @gfp:	allocation flags
@@ -201,7 +201,7 @@ static inline struct akcipher_request *akcipher_request_alloc(
 }
 
 /**
- * akcipher_request_free() -- zeroize and free public key request
+ * akcipher_request_free() - zeroize and free public key request
  *
  * @req:	request to free
  */
@@ -211,14 +211,14 @@ static inline void akcipher_request_free(struct akcipher_request *req)
 }
 
 /**
- * akcipher_request_set_callback() -- Sets an asynchronous callback.
+ * akcipher_request_set_callback() - Sets an asynchronous callback.
  *
  * Callback will be called when an asynchronous operation on a given
  * request is finished.
  *
  * @req:	request that the callback will be set for
  * @flgs:	specify for instance if the operation may backlog
- * @cmlp:	callback which will be called
+ * @cmpl:	callback which will be called
  * @data:	private data used by the caller
  */
 static inline void akcipher_request_set_callback(struct akcipher_request *req,
@@ -232,7 +232,7 @@ static inline void akcipher_request_set_callback(struct akcipher_request *req,
 }
 
 /**
- * akcipher_request_set_crypt() -- Sets request parameters
+ * akcipher_request_set_crypt() - Sets request parameters
  *
  * Sets parameters required by crypto operation
  *
@@ -255,23 +255,80 @@ static inline void akcipher_request_set_crypt(struct akcipher_request *req,
 }
 
 /**
- * crypto_akcipher_maxsize() -- Get len for output buffer
+ * crypto_akcipher_maxsize() - Get len for output buffer
  *
- * Function returns the dest buffer size required for a given key
+ * Function returns the dest buffer size required for a given key.
+ * Function assumes that the key is already set in the transformation. If this
+ * function is called without a setkey or with a failed setkey, you will end up
+ * in a NULL dereference.
  *
  * @tfm:	AKCIPHER tfm handle allocated with crypto_alloc_akcipher()
- *
- * Return: minimum len for output buffer or error code in key hasn't been set
  */
-static inline int crypto_akcipher_maxsize(struct crypto_akcipher *tfm)
+static inline unsigned int crypto_akcipher_maxsize(struct crypto_akcipher *tfm)
 {
 	struct akcipher_alg *alg = crypto_akcipher_alg(tfm);
 
 	return alg->max_size(tfm);
 }
 
+static inline void crypto_stat_akcipher_encrypt(struct akcipher_request *req,
+						int ret)
+{
+#ifdef CONFIG_CRYPTO_STATS
+	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
+
+	if (ret && ret != -EINPROGRESS && ret != -EBUSY) {
+		atomic_inc(&tfm->base.__crt_alg->akcipher_err_cnt);
+	} else {
+		atomic_inc(&tfm->base.__crt_alg->encrypt_cnt);
+		atomic64_add(req->src_len, &tfm->base.__crt_alg->encrypt_tlen);
+	}
+#endif
+}
+
+static inline void crypto_stat_akcipher_decrypt(struct akcipher_request *req,
+						int ret)
+{
+#ifdef CONFIG_CRYPTO_STATS
+	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
+
+	if (ret && ret != -EINPROGRESS && ret != -EBUSY) {
+		atomic_inc(&tfm->base.__crt_alg->akcipher_err_cnt);
+	} else {
+		atomic_inc(&tfm->base.__crt_alg->decrypt_cnt);
+		atomic64_add(req->src_len, &tfm->base.__crt_alg->decrypt_tlen);
+	}
+#endif
+}
+
+static inline void crypto_stat_akcipher_sign(struct akcipher_request *req,
+					     int ret)
+{
+#ifdef CONFIG_CRYPTO_STATS
+	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
+
+	if (ret && ret != -EINPROGRESS && ret != -EBUSY)
+		atomic_inc(&tfm->base.__crt_alg->akcipher_err_cnt);
+	else
+		atomic_inc(&tfm->base.__crt_alg->sign_cnt);
+#endif
+}
+
+static inline void crypto_stat_akcipher_verify(struct akcipher_request *req,
+					       int ret)
+{
+#ifdef CONFIG_CRYPTO_STATS
+	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
+
+	if (ret && ret != -EINPROGRESS && ret != -EBUSY)
+		atomic_inc(&tfm->base.__crt_alg->akcipher_err_cnt);
+	else
+		atomic_inc(&tfm->base.__crt_alg->verify_cnt);
+#endif
+}
+
 /**
- * crypto_akcipher_encrypt() -- Invoke public key encrypt operation
+ * crypto_akcipher_encrypt() - Invoke public key encrypt operation
  *
  * Function invokes the specific public key encrypt operation for a given
  * public key algorithm
@@ -284,12 +341,15 @@ static inline int crypto_akcipher_encrypt(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct akcipher_alg *alg = crypto_akcipher_alg(tfm);
+	int ret;
 
-	return alg->encrypt(req);
+	ret = alg->encrypt(req);
+	crypto_stat_akcipher_encrypt(req, ret);
+	return ret;
 }
 
 /**
- * crypto_akcipher_decrypt() -- Invoke public key decrypt operation
+ * crypto_akcipher_decrypt() - Invoke public key decrypt operation
  *
  * Function invokes the specific public key decrypt operation for a given
  * public key algorithm
@@ -302,12 +362,15 @@ static inline int crypto_akcipher_decrypt(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct akcipher_alg *alg = crypto_akcipher_alg(tfm);
+	int ret;
 
-	return alg->decrypt(req);
+	ret = alg->decrypt(req);
+	crypto_stat_akcipher_decrypt(req, ret);
+	return ret;
 }
 
 /**
- * crypto_akcipher_sign() -- Invoke public key sign operation
+ * crypto_akcipher_sign() - Invoke public key sign operation
  *
  * Function invokes the specific public key sign operation for a given
  * public key algorithm
@@ -320,12 +383,15 @@ static inline int crypto_akcipher_sign(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct akcipher_alg *alg = crypto_akcipher_alg(tfm);
+	int ret;
 
-	return alg->sign(req);
+	ret = alg->sign(req);
+	crypto_stat_akcipher_sign(req, ret);
+	return ret;
 }
 
 /**
- * crypto_akcipher_verify() -- Invoke public key verify operation
+ * crypto_akcipher_verify() - Invoke public key verify operation
  *
  * Function invokes the specific public key verify operation for a given
  * public key algorithm
@@ -338,12 +404,15 @@ static inline int crypto_akcipher_verify(struct akcipher_request *req)
 {
 	struct crypto_akcipher *tfm = crypto_akcipher_reqtfm(req);
 	struct akcipher_alg *alg = crypto_akcipher_alg(tfm);
+	int ret;
 
-	return alg->verify(req);
+	ret = alg->verify(req);
+	crypto_stat_akcipher_verify(req, ret);
+	return ret;
 }
 
 /**
- * crypto_akcipher_set_pub_key() -- Invoke set public key operation
+ * crypto_akcipher_set_pub_key() - Invoke set public key operation
  *
  * Function invokes the algorithm specific set key function, which knows
  * how to decode and interpret the encoded key
@@ -364,7 +433,7 @@ static inline int crypto_akcipher_set_pub_key(struct crypto_akcipher *tfm,
 }
 
 /**
- * crypto_akcipher_set_priv_key() -- Invoke set private key operation
+ * crypto_akcipher_set_priv_key() - Invoke set private key operation
  *
  * Function invokes the algorithm specific set key function, which knows
  * how to decode and interpret the encoded key

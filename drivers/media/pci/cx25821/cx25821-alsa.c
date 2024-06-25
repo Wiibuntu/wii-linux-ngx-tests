@@ -14,10 +14,6 @@
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *   GNU General Public License for more details.
  *
- *   You should have received a copy of the GNU General Public License
- *   along with this program; if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307 USA
- *
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -156,14 +152,14 @@ static int cx25821_alsa_dma_init(struct cx25821_audio_dev *chip, int nr_pages)
 		return -ENOMEM;
 	}
 
-	dprintk(1, "vmalloc is at addr 0x%08lx, size=%d\n",
-				(unsigned long)buf->vaddr,
+	dprintk(1, "vmalloc is at addr 0x%p, size=%d\n",
+				buf->vaddr,
 				nr_pages << PAGE_SHIFT);
 
 	memset(buf->vaddr, 0, nr_pages << PAGE_SHIFT);
 	buf->nr_pages = nr_pages;
 
-	buf->sglist = vzalloc(buf->nr_pages * sizeof(*buf->sglist));
+	buf->sglist = vzalloc(array_size(sizeof(*buf->sglist), buf->nr_pages));
 	if (NULL == buf->sglist)
 		goto vzalloc_err;
 
@@ -432,7 +428,7 @@ static int dsp_buffer_free(struct cx25821_audio_dev *chip)
  * Digital hardware definition
  */
 #define DEFAULT_FIFO_SIZE	384
-static struct snd_pcm_hardware snd_cx25821_digital_hw = {
+static const struct snd_pcm_hardware snd_cx25821_digital_hw = {
 	.info = SNDRV_PCM_INFO_MMAP | SNDRV_PCM_INFO_INTERLEAVED |
 		SNDRV_PCM_INFO_BLOCK_TRANSFER | SNDRV_PCM_INFO_MMAP_VALID,
 	.formats = SNDRV_PCM_FMTBIT_S16_LE,
@@ -649,7 +645,7 @@ static struct page *snd_cx25821_page(struct snd_pcm_substream *substream,
 /*
  * operators
  */
-static struct snd_pcm_ops snd_cx25821_pcm_ops = {
+static const struct snd_pcm_ops snd_cx25821_pcm_ops = {
 	.open = snd_cx25821_pcm_open,
 	.close = snd_cx25821_close,
 	.ioctl = snd_pcm_lib_ioctl,
@@ -678,7 +674,7 @@ static int snd_cx25821_pcm(struct cx25821_audio_dev *chip, int device,
 	}
 	pcm->private_data = chip;
 	pcm->info_flags = 0;
-	strcpy(pcm->name, name);
+	strscpy(pcm->name, name, sizeof(pcm->name));
 	snd_pcm_set_ops(pcm, SNDRV_PCM_STREAM_CAPTURE, &snd_cx25821_pcm_ops);
 
 	return 0;
@@ -693,7 +689,7 @@ static int snd_cx25821_pcm(struct cx25821_audio_dev *chip, int device,
  * Only boards with eeprom and byte 1 at eeprom=1 have it
  */
 
-static const struct pci_device_id cx25821_audio_pci_tbl[] = {
+static const struct pci_device_id __maybe_unused cx25821_audio_pci_tbl[] = {
 	{0x14f1, 0x0920, PCI_ANY_ID, PCI_ANY_ID, 0, 0, 0},
 	{0,}
 };
@@ -729,7 +725,7 @@ static int cx25821_audio_initdev(struct cx25821_dev *dev)
 		return err;
 	}
 
-	strcpy(card->driver, "cx25821");
+	strscpy(card->driver, "cx25821", sizeof(card->driver));
 
 	/* Card "creation" */
 	chip = card->private_data;
@@ -758,10 +754,10 @@ static int cx25821_audio_initdev(struct cx25821_dev *dev)
 		goto error;
 	}
 
-	strcpy(card->shortname, "cx25821");
+	strscpy(card->shortname, "cx25821", sizeof(card->shortname));
 	sprintf(card->longname, "%s at 0x%lx irq %d", chip->dev->name,
 		chip->iobase, chip->irq);
-	strcpy(card->mixername, "CX25821");
+	strscpy(card->mixername, "CX25821", sizeof(card->mixername));
 
 	pr_info("%s/%i: ALSA support for cx25821 boards\n", card->driver,
 		devno);

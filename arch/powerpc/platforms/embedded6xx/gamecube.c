@@ -29,14 +29,14 @@
 #include "usbgecko_udbg.h"
 
 
-static void gamecube_spin(void)
+static void __noreturn gamecube_spin(void)
 {
 	/* spin until power button pressed */
 	for (;;)
 		cpu_relax();
 }
 
-static void gamecube_restart(char *cmd)
+static void __noreturn gamecube_restart(char *cmd)
 {
 	local_irq_disable();
 	flipper_platform_reset();
@@ -49,7 +49,7 @@ static void gamecube_power_off(void)
 	gamecube_spin();
 }
 
-static void gamecube_halt(void)
+static void __noreturn gamecube_halt(void)
 {
 	gamecube_restart(NULL);
 }
@@ -71,13 +71,12 @@ static void __init gamecube_init_early(void)
 
 static int __init gamecube_probe(void)
 {
-	unsigned long dt_root;
-
-	dt_root = of_get_flat_dt_root();
-	if (!of_flat_dt_is_compatible(dt_root, "nintendo,gamecube"))
+	if (!of_machine_is_compatible("nintendo,gamecube"))
 		return 0;
 
 	pm_power_off = gamecube_power_off;
+
+	ug_udbg_init();
 
 	return 1;
 }

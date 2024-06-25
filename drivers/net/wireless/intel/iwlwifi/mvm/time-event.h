@@ -17,11 +17,6 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
  * General Public License for more details.
  *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110,
- * USA
- *
  * The full GNU General Public License is included in this distribution
  * in the file called COPYING.
  *
@@ -115,7 +110,7 @@
  * needed by the driver.
  */
 
-#define IWL_MVM_TE_SESSION_PROTECTION_MAX_TIME_MS 500
+#define IWL_MVM_TE_SESSION_PROTECTION_MAX_TIME_MS 600
 #define IWL_MVM_TE_SESSION_PROTECTION_MIN_TIME_MS 400
 
 /**
