@@ -34,6 +34,7 @@
 #include <linux/io.h>
 #ifdef CONFIG_WII_AVE_RVL
 #include <linux/i2c.h>
+#include "../../i2c/busses/i2c-gpio-common.h"
 #endif
 #include <linux/videodev2.h>
 
@@ -66,8 +67,12 @@
  *          - tons of general cleanup and modernization
  *
  * 2.3t - Techflash (6/3/2024) - Corrected nostalgic mode height from 480 to 448, added this changelog
+ *
+ * 2.4t - Techflash (6/24/2024) - Horrific fixes for kernel 6.6
  */
 char vifb_driver_version[] = "2.3t";
+
+#define DELAY 2000
 
 #define drv_printk(level, format, arg...) \
 	 printk(level DRV_MODULE_NAME ": " format , ## arg)
@@ -596,6 +601,7 @@ unsigned int gx_fb_size;
 int vfb_format;
 #define	vfb_diff	0
 
+bool tvSetup = false;
 /*
  *
  *
@@ -1188,6 +1194,7 @@ void vi_setup_tv_mode(struct vi_ctl *ctl)
 	int has_component_cable;
 	u16 std, ppl;
 
+	printk("vi_setup_tv_mode() - go\n");
 	/* we need to re-detect the tv mode if the cable type changes */
 	has_component_cable = vi_has_component_cable(ctl);
 	if ((ctl->has_component_cable && !has_component_cable) ||
@@ -1269,8 +1276,13 @@ void vi_setup_tv_mode(struct vi_ctl *ctl)
 	out_be32(io_base + VI_UNK3, 0x00ff00ff);
 
 #ifdef CONFIG_WII_AVE_RVL
+	printk("vi_setup_tv_mode() - about to setup AVE\n");
 	if (ctl->i2c_client)
 		vi_ave_setup(ctl);
+	else {
+		printk("vi_setup_tv_mode() - not setting up AVE\n");
+		dump_stack();
+	}
 #endif
 }
 
@@ -1554,7 +1566,6 @@ irqreturn_t vi_irq_handler(int irq, void *dev)
 int vi_ave_outs(struct i2c_client *client, u8 reg,
 		       void *data, size_t len)
 {
-	printk("vi_ave_outs()\n");
 	struct i2c_adapter *adap = client->adapter;
 	struct i2c_msg msg[1];
 	u8 buf[34];
@@ -1573,7 +1584,6 @@ int vi_ave_outs(struct i2c_client *client, u8 reg,
 	msg[0].buf = buf;
 
 	result = i2c_transfer(adap, msg, 1);
-	printk("vi_ave_outs result=%d\n", result);
 	if (result < 0)
 		error = result;
 	else if (result == 1)
@@ -1696,8 +1706,8 @@ void vi_ave_setup(struct vi_ctl *ctl)
 	 */
 
 	printk("vi_ave_setup() - go\n");
-	vi_ave_out8(client, 0x6a, 1);
-	vi_ave_out8(client, 0x65, 1);
+	vi_ave_out8(client, 0x6a, 1); msleep(DELAY);
+	vi_ave_out8(client, 0x65, 1); msleep(DELAY);
 
 	/*
 	 * NOTE
@@ -1709,32 +1719,32 @@ void vi_ave_setup(struct vi_ctl *ctl)
 	if ((ctl->mode->flags & VI_VMF_PAL_COLOR) != 0)
 		format = 2;	/* PAL */
 	component = (ctl->has_component_cable) ? 1<<5 : 0;
-	vi_ave_out8(client, 0x01, component | format);
+	vi_ave_out8(client, 0x01, component | format); msleep(DELAY);
 
-	vi_ave_out8(client, 0x00, 0);
-	vi_ave_out16(client, 0x71, 0x8e8e);
-	vi_ave_out8(client, 0x02, 7);
-	vi_ave_out16(client, 0x05, 0x0000);
-	vi_ave_out16(client, 0x08, 0x0000);
-	vi_ave_out32(client, 0x7a, 0x00000000);
-	vi_ave_outs(client, 0x40, macrovision, sizeof(macrovision));
-	vi_ave_out8(client, 0x0a, 0);
-	vi_ave_out8(client, 0x03, 1);
-	vi_ave_outs(client, 0x10, vi_ave_gamma, sizeof(vi_ave_gamma));
-	vi_ave_out8(client, 0x04, 1);
+	vi_ave_out8(client, 0x00, 0); msleep(DELAY);
+	vi_ave_out16(client, 0x71, 0x8e8e); msleep(DELAY);
+	vi_ave_out8(client, 0x02, 7); msleep(DELAY);
+	vi_ave_out16(client, 0x05, 0x0000); msleep(DELAY);
+	vi_ave_out16(client, 0x08, 0x0000); msleep(DELAY);
+	vi_ave_out32(client, 0x7a, 0x00000000); msleep(DELAY);
+	vi_ave_outs(client, 0x40, macrovision, sizeof(macrovision)); msleep(DELAY);
+	vi_ave_out8(client, 0x0a, 0); msleep(DELAY);
+	vi_ave_out8(client, 0x03, 1); msleep(DELAY);
+	vi_ave_outs(client, 0x10, vi_ave_gamma, sizeof(vi_ave_gamma)); msleep(DELAY);
+	vi_ave_out8(client, 0x04, 1); msleep(DELAY);
 
-	vi_ave_out32(client, 0x7a, 0x00000000);
-	vi_ave_out16(client, 0x08, 0x0000);
+	vi_ave_out32(client, 0x7a, 0x00000000); msleep(DELAY);
+	vi_ave_out16(client, 0x08, 0x0000); msleep(DELAY);
 
-	vi_ave_out8(client, 0x03, 1);
+	vi_ave_out8(client, 0x03, 1); msleep(DELAY);
 
 	/* clear bit 1 otherwise red and blue get swapped  */
 	if (ctl->has_component_cable)
-		vi_ave_out8(client, 0x62, 0);
+		vi_ave_out8(client, 0x62, 0); msleep(DELAY);
 
 	/* PAL 480i/60 supposedly needs a "filter" */
 	pal60 = !!(format == 2 && ctl->mode->lines == 525);
-	vi_ave_out8(client, 0x6e, pal60);
+	vi_ave_out8(client, 0x6e, pal60); msleep(DELAY);
 	printk("vi_ave_setup() - done\n");
 }
 
@@ -1745,20 +1755,16 @@ int vi_attach_ave(struct vi_ctl *ctl, struct i2c_client *client)
 {
 	printk("vi_attach_ave() - go\n");
 	if (!ctl) {
-
-		drv_printk(KERN_CRIT, "vi_attach_ave: !ctl\n");
-		BUG();
-		return -ENODEV;
-	}
-	if (!client) {
-		drv_printk(KERN_CRIT, "vi_attach_ave: !client\n");
-		BUG();
 		return -EINVAL;
 	}
-
 	spin_lock(&ctl->lock);
 	if (!ctl->i2c_client) {
 		ctl->i2c_client = i2c_use_client(client);
+		if (!tvSetup) {
+			vi_setup_tv_mode(ctl);
+			tvSetup = true;
+		}
+
 		spin_unlock(&ctl->lock);
 		drv_printk(KERN_INFO, "AVE-RVL support loaded\n");
 		return 0;
@@ -1800,6 +1806,9 @@ int vi_ave_probe(struct i2c_client *client)
 	if (!first_vi_ave) {
 		first_vi_ave = client;
 		error = vi_attach_ave(first_vi_ctl, client);
+		if (error == -EPROBE_DEFER) {
+			return -EPROBE_DEFER;
+		}
 		if (!error) {
 			/* setup again the video mode using the a/v encoder */
 			vi_detect_tv_mode(first_vi_ctl);
@@ -1817,9 +1826,11 @@ void vi_ave_remove(struct i2c_client *client)
 }
 
 const struct i2c_device_id vi_ave_id[] = {
+	{ "nintendo,wii-ave-rvl", 0 },
 	{ "wii-ave-rvl", 0 },
 	{ }
 };
+MODULE_DEVICE_TABLE(i2c, vi_ave_id);
 
 struct i2c_driver vi_ave_driver = {
 	.driver = {
@@ -2272,9 +2283,17 @@ int vifb_do_probe(struct device *dev,
 	unsigned long adr, size;
 	uint32_t *j;
 
+	printk("vifb_do_probe() - go\n");
+	// don't even bother if first_vi_ave isn't set yet
+	if (!first_vi_ave) {
+		printk("vifb_do_probe() - !first_vi_ave, defer\n");
+		return -EPROBE_DEFER;
+	}
 	info = framebuffer_alloc(sizeof(struct vi_ctl), dev);
-	if (!info)
-		return -EINVAL;;
+	if (!info) {
+		printk(KERN_CRIT "vifb_do_probe() - !info\n");
+		return -EINVAL;
+	}
 
 	info->fbops = &vifb_ops;
 	info->var = vifb_var;
@@ -2383,6 +2402,7 @@ int vifb_do_probe(struct device *dev,
 	video_cmap_len = 16;
 	info->pseudo_palette = pseudo_palette;
 	if (fb_alloc_cmap(&info->cmap, video_cmap_len, 0)) {
+		printk(KERN_CRIT "vifb_do_probe() - fb_alloc_cmap() failed\n");
 		error = -ENOMEM;
 		goto err_alloc_cmap;
 	}
@@ -2406,14 +2426,18 @@ int vifb_do_probe(struct device *dev,
 
 	/* now register us */
 	if (register_framebuffer(info) < 0) {
+		printk(KERN_CRIT "vifb_do_probe() - register_framebuffer() failed\n");
 		error = -EINVAL;
 		goto err_register_framebuffer;
 	}
 
 #ifdef CONFIG_WII_AVE_RVL
+	printk(KERN_CRIT "==== WE ARE ABOUT TO REGISTER TO WII AVE-RVL ====\n");
 	if (!first_vi_ctl)
+		printk(KERN_CRIT "vifb_do_probe() - !first_vi_ctl   ctl=%lX\n", ctl);
 		first_vi_ctl = ctl;
 
+	printk(KERN_CRIT "vifb_do_probe() - calling vi_attach_ave() with params ctl=%lX client=%lX\n", ctl, first_vi_ave);
 	/* try to attach the a/v encoder now */
 	vi_attach_ave(ctl, first_vi_ave);
 #endif
@@ -2653,9 +2677,15 @@ void __exit vifb_exit_module(void)
 #endif
 }
 
+subsys_initcall(vifb_init_module);
 module_init(vifb_init_module);
 module_exit(vifb_exit_module);
 
 MODULE_DESCRIPTION(DRV_DESCRIPTION);
 MODULE_AUTHOR(DRV_AUTHOR);
 MODULE_LICENSE("GPL");
+
+#ifdef CONFIG_WII_AVE_RVL
+MODULE_SOFTDEP("post: i2c-gpio");
+MODULE_SOFTDEP("post: i2c-gpio-common");
+#endif

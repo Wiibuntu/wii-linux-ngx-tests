@@ -71,6 +71,16 @@ static int i2c_gpio_getscl(void *data)
 	return gpiod_get_value_cansleep(priv->scl);
 }
 
+
+
+int i2c_gpio_dummy(int dummy) {
+	printk("i2c-gpio: hello from i2c_gpio_dummy!  we have been called with parameter %d\n");
+	printk("i2c-gpio: this is a very important function.  Please do not optimize this away to make\n");
+	printk("i2c-gpio: this driver not be necessary to be loaded before gcnfb....\n");
+	return 69;
+}
+EXPORT_SYMBOL_GPL(i2c_gpio_dummy);
+
 #ifdef CONFIG_I2C_GPIO_FAULT_INJECTOR
 static struct dentry *i2c_gpio_debug_dir;
 
@@ -305,6 +315,7 @@ static void i2c_gpio_get_properties(struct device *dev,
 				    struct i2c_gpio_platform_data *pdata)
 {
 	u32 reg;
+	printk("i2c_gpio_get_properties() - go\n");
 
 	device_property_read_u32(dev, "i2c-gpio,delay-us", &pdata->udelay);
 
@@ -323,6 +334,8 @@ static void i2c_gpio_get_properties(struct device *dev,
 		device_property_read_bool(dev, "i2c-gpio,sda-has-no-pullup");
 	pdata->scl_has_no_pullup =
 		device_property_read_bool(dev, "i2c-gpio,scl-has-no-pullup");
+
+	printk("i2c_gpio_get_properties() - exit\n");
 }
 
 static struct gpio_desc *i2c_gpio_get_desc(struct device *dev,
@@ -333,27 +346,40 @@ static struct gpio_desc *i2c_gpio_get_desc(struct device *dev,
 	struct gpio_desc *retdesc;
 	int ret;
 
+	printk("i2c_gpio_get_desc() - go\n");
+
 	retdesc = devm_gpiod_get(dev, con_id, gflags);
 	if (!IS_ERR(retdesc)) {
-		dev_dbg(dev, "got GPIO from name %s\n", con_id);
+		dev_info(dev, "got GPIO from name %s\n", con_id);
 		return retdesc;
 	}
 
+	char *name = con_id;
+	if (con_id == NULL) {
+		name = "";
+	}
+	printk("i2c_gpio_get_desc() - failed to get GPIO from name (%s)\n", name);
 	retdesc = devm_gpiod_get_index(dev, NULL, index, gflags);
 	if (!IS_ERR(retdesc)) {
-		dev_dbg(dev, "got GPIO from index %u\n", index);
+		dev_info(dev, "got GPIO from index %u\n", index);
 		return retdesc;
 	}
+	printk("i2c_gpio_get_desc() - failed to get GPIO from index (%u)\n", index);
+
 
 	ret = PTR_ERR(retdesc);
 
 	/* FIXME: hack in the old code, is this really necessary? */
-	if (ret == -EINVAL)
+	if (ret == -EINVAL) {
+		printk("i2c-gpio: defer1\n");
 		retdesc = ERR_PTR(-EPROBE_DEFER);
+	}
 
 	/* This happens if the GPIO driver is not yet probed, let's defer */
-	if (ret == -ENOENT)
+	if (ret == -ENOENT) {
+		printk("i2c-gpio: defer2\n");
 		retdesc = ERR_PTR(-EPROBE_DEFER);
+	}
 
 	if (PTR_ERR(retdesc) != -EPROBE_DEFER)
 		dev_err(dev, "error trying to get descriptor: %d\n", ret);
@@ -372,9 +398,13 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 	enum gpiod_flags gflags;
 	int ret;
 
+	printk("i2c_gpio_probe() - go\n");
+
 	priv = devm_kzalloc(dev, sizeof(*priv), GFP_KERNEL);
-	if (!priv)
+	if (!priv) {
+		printk("i2c_gpio_probe() - err1\n");
 		return -ENOMEM;
+	}
 
 	adap = &priv->adap;
 	bit_data = &priv->bit_data;
@@ -404,16 +434,20 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 	else
 		gflags = GPIOD_OUT_HIGH_OPEN_DRAIN;
 	priv->sda = i2c_gpio_get_desc(dev, "sda", 0, gflags);
-	if (IS_ERR(priv->sda))
+	if (IS_ERR(priv->sda)) {
+		printk("i2c_gpio_probe() - err2\n");
 		return PTR_ERR(priv->sda);
+	}
 
 	if (pdata->scl_is_open_drain || pdata->scl_has_no_pullup)
 		gflags = GPIOD_OUT_HIGH;
 	else
 		gflags = GPIOD_OUT_HIGH_OPEN_DRAIN;
 	priv->scl = i2c_gpio_get_desc(dev, "scl", 1, gflags);
-	if (IS_ERR(priv->scl))
+	if (IS_ERR(priv->scl)) {
+		printk("i2c_gpio_probe() - err3\n");
 		return PTR_ERR(priv->scl);
+	}
 
 	if (gpiod_cansleep(priv->sda) || gpiod_cansleep(priv->scl))
 		dev_warn(dev, "Slow GPIO pins might wreak havoc into I2C/SMBus bus timing");
@@ -455,8 +489,10 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 
 	adap->nr = pdev->id;
 	ret = i2c_bit_add_numbered_bus(adap);
-	if (ret)
+	if (ret) {
+		printk("i2c_gpio_probe() - err4 (%d)\n", ret);
 		return ret;
+	}
 
 	platform_set_drvdata(pdev, priv);
 
@@ -472,6 +508,7 @@ static int i2c_gpio_probe(struct platform_device *pdev)
 
 	i2c_gpio_fault_injector_init(pdev);
 
+	printk("i2c_gpio_probe() - success\n");
 	return 0;
 }
 
@@ -479,6 +516,7 @@ static void i2c_gpio_remove(struct platform_device *pdev)
 {
 	struct i2c_gpio_private_data *priv;
 	struct i2c_adapter *adap;
+	printk("i2c_gpio_remove() - go\n");
 
 	i2c_gpio_fault_injector_exit(pdev);
 
@@ -486,6 +524,7 @@ static void i2c_gpio_remove(struct platform_device *pdev)
 	adap = &priv->adap;
 
 	i2c_del_adapter(adap);
+	printk("i2c_gpio_remove() - exit\n");
 }
 
 static const struct of_device_id i2c_gpio_dt_ids[] = {
@@ -515,13 +554,15 @@ static int __init i2c_gpio_init(void)
 {
 	int ret;
 
+	printk(KERN_INFO "i2c_gpio_init: go\n");
 	ret = platform_driver_register(&i2c_gpio_driver);
+	printk(KERN_INFO "i2c_gpio_init: registered with ret: %d\n", ret);
 	if (ret)
 		printk(KERN_ERR "i2c-gpio: probe failed: %d\n", ret);
 
 	return ret;
 }
-subsys_initcall(i2c_gpio_init);
+module_init(i2c_gpio_init);
 
 static void __exit i2c_gpio_exit(void)
 {

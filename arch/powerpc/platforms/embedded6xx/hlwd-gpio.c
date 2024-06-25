@@ -17,6 +17,7 @@
 #include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
+#include <linux/gpio/legacy-of-mm-gpiochip.h>
 #include <linux/slab.h>
 
 #define DRV_MODULE_NAME "hlwd-gpio"
@@ -125,7 +126,7 @@ int hlwd_gpio_add32(struct device_node *gpio_np)
 	gc->get = hlwd_gpio_get;
 	gc->set = hlwd_gpio_set;
 
-	error = of_mm_gpiochip_add(gpio_np, mm_gc);
+	error = of_mm_gpiochip_add_data(gpio_np, mm_gc, NULL);
 	if (!error)
 		drv_printk(KERN_INFO, "%s: added %u gpios at %p\n",
 			   gpio_np->name, gc->ngpio, mm_gc->regs);

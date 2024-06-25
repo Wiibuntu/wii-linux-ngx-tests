@@ -1436,23 +1436,27 @@ config CARMINE_DRAM_CUSTOM
 endchoice
 
 config FB_GAMECUBE
-	bool "Nintendo GameCube/Wii frame buffer"
+	tristate "Nintendo GameCube/Wii frame buffer"
 	depends on FB && GAMECUBE_COMMON
 	select FB_CFB_FILLRECT
 	select FB_CFB_COPYAREA
 	select FB_CFB_IMAGEBLIT
 	help
-	  This is the frame buffer device driver for the Nintendo GameCube.
+	  This is the framebuffer device driver for the Nintendo GameCube.
+	  If you choose to compile this driver as a module, it will be
+	  called gcnfb.
 
 config WII_AVE_RVL
-	bool "Nintendo Wii audio/video encoder support"
+	tristate "Nintendo Wii audio/video encoder support"
 	depends on FB_GAMECUBE && WII
 	select I2C_GPIO
 	select I2C
 	default y
 	help
 	  Say Y here to support the audio/video encoder found in the
-	  Nintendo Wii video game console.
+	  Nintendo Wii video game console.  If you choose to compile
+	  this driver as a mdoule, it will be called ave_rvl.
+
 
 config FB_AU1100
 	bool "Au1100 LCD Driver"

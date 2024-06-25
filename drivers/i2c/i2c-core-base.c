@@ -1975,7 +1975,7 @@ int i2c_register_driver(struct module *owner, struct i2c_driver *driver)
 	if (res)
 		return res;
 
-	pr_debug("driver [%s] registered\n", driver->driver.name);
+	pr_info("driver [%s] registered\n", driver->driver.name);
 
 	/* Walk the adapters that are already present */
 	i2c_for_each_dev(driver, __process_new_driver);
@@ -2071,6 +2071,7 @@ EXPORT_SYMBOL(i2c_clients_command);
 
 static int __init i2c_init(void)
 {
+	pr_err("starting up\n");
 	int retval;
 
 	retval = of_alias_get_highest_id("i2c");
@@ -2081,27 +2082,33 @@ static int __init i2c_init(void)
 	up_write(&__i2c_board_lock);
 
 	retval = bus_register(&i2c_bus_type);
-	if (retval)
+	if (retval) {
+		pr_err("err1: %d\n", retval);
 		return retval;
+	}
 
 	is_registered = true;
 
 #ifdef CONFIG_I2C_COMPAT
 	i2c_adapter_compat_class = class_compat_register("i2c-adapter");
 	if (!i2c_adapter_compat_class) {
+		pr_err("err2: %d\n", retval);
 		retval = -ENOMEM;
 		goto bus_err;
 	}
 #endif
 	retval = i2c_add_driver(&dummy_driver);
-	if (retval)
+	if (retval) {
+		pr_err("err3: %d\n", retval);
 		goto class_err;
+	}
 
 	if (IS_ENABLED(CONFIG_OF_DYNAMIC))
 		WARN_ON(of_reconfig_notifier_register(&i2c_of_notifier));
 	if (IS_ENABLED(CONFIG_ACPI))
 		WARN_ON(acpi_reconfig_notifier_register(&i2c_acpi_notifier));
 
+	pr_err("exiting with success\n");
 	return 0;
 
 class_err:
@@ -2111,6 +2118,7 @@ bus_err:
 #endif
 	is_registered = false;
 	bus_unregister(&i2c_bus_type);
+	pr_err("exiting with failure: %d\n", retval);
 	return retval;
 }
 

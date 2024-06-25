@@ -309,20 +309,23 @@
 			i2c-video {
 				#address-cells = <1>;
 				#size-cells = <0>;
-				compatible = "virtual,i2c-gpio";
+				compatible = "virtual,i2c-gpio",
+					     "i2c-gpio";
 
-				gpios = <&GPIO 16 0		/* 31-15 */
-					 &GPIO 17 0>;		/* 31-14 */
-				scl-is-open-drain = <1>;
-			        sda-is-open-drain = <1>;
-			        sda-enforce-dir = <1>;
-				scl-is-output-only = <1>;
-				udelay = <2>;
+				gpios = <&GPIO 16 0 /* SDA */
+					 &GPIO 17 0 /* SCL */>;
 
-			        AVE: audio-video-encoder@70 {
+				// Use boolean properties for open-drain and output-only configurations
+				i2c-gpio,scl-open-drain;
+				i2c-gpio,sda-open-drain;
+				i2c-gpio,sda-enforce-dir;
+				i2c-gpio,scl-output-only;
+				i2c-gpio,delay-us = <2>; // Adjusted to match kernel documentation
+				AVE: audio-video-encoder@70 {
 					compatible = "nintendo,wii-ave-rvl";
 					reg = <0x70>;
 				};
+
 			};
 		};
 
