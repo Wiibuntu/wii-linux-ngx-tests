@@ -808,6 +808,8 @@ static irqreturn_t ehci_irq (struct usb_hcd *hcd)
 	}
 
 	/* PCI errors [4.15.2.4] */
+	/* FIXME: why does ehci-hlwd die in the first place? */
+#if !defined(CONFIG_EHCI_HCD_HLWD) && !defined(CONFIG_EHCI_HCD_HLWD_MODULE)
 	if (unlikely ((status & STS_FATAL) != 0)) {
 		ehci_err(ehci, "fatal error\n");
 		dbg_cmd(ehci, "fatal", cmd);
@@ -826,6 +828,7 @@ dead:
 		/* Handle completions when the controller stops */
 		bh = 0;
 	}
+#endif
 
 	if (bh)
 		ehci_work (ehci);

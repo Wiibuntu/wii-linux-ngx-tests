@@ -27,6 +27,7 @@
 #include <linux/of_platform.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
+#include <linux/sched/signal.h>
 #include <linux/string.h>
 #include <linux/tty.h>
 #include <linux/vmalloc.h>
@@ -2301,19 +2302,21 @@ static int vifb_do_probe(struct device *dev,
 		size -= PAGE_SIZE;
 	}
 	drv_printk(KERN_INFO,
-		   "virtual framebuffer at 0x%p, size %ldk\n",
+		   "virtual framebuffer at 0x%lX, size %ldk\n",
 		   (void *)vfb_mem, PAGE_ALIGN(vfb_len) / 1024);
 
 	/*
 	 * Map the video card's memory (this is the physical framebuffer)
 	 * into kernel's virtual memory space
 	 */
+#if 0
 	if (!request_mem_region(xfb_start, xfb_size,
 				DRV_MODULE_NAME)) {
 		drv_printk(KERN_WARNING,
-			   "failed to request video memory at %p\n",
+			   "failed to request video memory at 0x%lX\n",
 			   (void *)xfb_start);
 	}
+#endif
 
 	/* store global variables for the physical framebuffer */
 	gx_fb_start = xfb_start;
@@ -2322,14 +2325,14 @@ static int vifb_do_probe(struct device *dev,
 	fb_mem = ioremap(xfb_start, xfb_size);
 	if (!fb_mem) {
 		drv_printk(KERN_ERR,
-			   "failed to ioremap video memory at %p (%ldk)\n",
+			   "failed to ioremap video memory at 0x%lX (%ldk)\n",
 			   (void *)xfb_start,
 			   xfb_size / 1024);
 		error = -EIO;
 		goto err_ioremap;
 	}
 	drv_printk(KERN_INFO,
-		   "framebuffer at 0x%p mapped to 0x%p, size %ldk\n",
+		   "framebuffer at 0x%lX mapped to 0x%lX, size %ldk\n",
 		   (void *)xfb_start, fb_mem,
 		   xfb_size / 1024);
 

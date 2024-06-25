@@ -11,7 +11,7 @@
 #define __I2C_GPIO_COMMON_H
 
 #include <linux/i2c.h>
-#include <linux/i2c-gpio.h>
+#include <linux/platform_data/i2c-gpio.h>
 #include <linux/module.h>
 #include <linux/device.h>
 
@@ -21,5 +21,12 @@ int i2c_gpio_adapter_probe(struct i2c_adapter *adap,
 			   struct module *owner);
 int i2c_gpio_adapter_remove(struct i2c_adapter *adap,
 			    struct i2c_gpio_platform_data *pdata);
+
+/* dummy value that drivers can set to forcibly depend
+ * on this driver, even if they otherwise wouldn't.
+ * 
+ * This is necessary for the Wii's AVE_RVL.
+ */
+int i2c_gpio_dummy(int dummy);
 
 #endif /* __I2C_GPIO_COMMON_H */

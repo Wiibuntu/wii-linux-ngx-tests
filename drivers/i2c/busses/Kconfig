@@ -587,13 +587,13 @@ config I2C_EXYNOS5
 
 config I2C_GPIO_COMMON
 	tristate
-	depends on GPIOLIB
+	select GPIOLIB
 	select I2C_ALGOBIT
 	default n
 
 config I2C_GPIO
 	tristate "GPIO-based bitbanging I2C"
-	depends on GPIOLIB || COMPILE_TEST
+	select GPIOLIB
 	select I2C_ALGOBIT
 	select I2C_GPIO_COMMON
 	default n

@@ -117,12 +117,16 @@ int dma_declare_coherent_memory(struct device *dev, phys_addr_t phys_addr,
 	int ret;
 
 	ret = dma_init_coherent_memory(phys_addr, device_addr, size, flags, &mem);
-	if (ret)
+	if (ret) {
+		printk(KERN_ERR "dma_declare_coherent_memory() - fail at step 1\n");
 		return ret;
+	}
 
 	ret = dma_assign_coherent_memory(dev, mem);
-	if (ret)
+	if (ret) {
+		printk(KERN_ERR "dma_declare_coherent_memory() - fail at step 2\n");
 		dma_release_coherent_memory(mem);
+	}
 	return ret;
 }
 EXPORT_SYMBOL(dma_declare_coherent_memory);

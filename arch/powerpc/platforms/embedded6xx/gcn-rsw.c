@@ -82,7 +82,7 @@ static int rsw_is_button_pressed(void __iomem *io_base)
 /*
  * Invokes a normal system restart.
  */
-static void rsw_normal_restart(unsigned long dummy)
+static void rsw_normal_restart(struct timer_list *dummy)
 {
 	ctrl_alt_del();
 }
@@ -126,10 +126,10 @@ static irqreturn_t rsw_handler(int irq, void *data)
 		       "Push the Reset button again to cancel reboot!\n");
 
 		/* schedule a reboot in a few seconds */
-		init_timer(&drvdata->timer);
+		init_timer_key(&drvdata->timer, rsw_normal_restart, 0, "gcn-rsw", NULL);
 		drvdata->timer.expires = jiffies + drvdata->timeout * HZ;
-		drvdata->timer.function =
-		    (void (*)(unsigned long))rsw_normal_restart;
+		/*drvdata->timer.function =
+		    (void (*)(struct timer_list *))rsw_normal_restart;*/
 		add_timer(&drvdata->timer);
 		drvdata->jiffies = jiffies;
 		break;
