@@ -13,7 +13,7 @@
 
 /memreserve/ 0x10000000 0x0004000;	/* DSP RAM */
 /memreserve/ 0x01694000 0x0004000;	/* lowmem stub save area */
-/memreserve/ 0x01698000 0x0168000;	/* framebuffer, see video@c002000 */
+/memreserve/ 0x0174C000 0x00B4000;	/* framebuffer, see video@c002000 */
 /memreserve/ 0x01800000 0xe800000;	/* memory hole */
 /memreserve/ 0x0c000000 0x0008003;	/* broadway hw regs */
 /memreserve/ 0x0d000000 0x0008000;	/* hollywood hw regs */
@@ -40,12 +40,12 @@
 
 	lowmem-stub {
 		reg = <0x00000000 0x4000>;
-		save-area = <0x01694000>;	/* must be memreserve'd */
+		save-area = <0x0174C000>;	/* must be memreserve'd */
 	};
 
 	memory {
 		device_type = "memory";
-		reg = <0x00000000 0x01698000	/* MEM1 24MB 1T-SRAM */
+		reg = <0x00000000 0x0174C000	/* MEM1 24MB 1T-SRAM */
 		       0x10000000 0x04000000>;	/* MEM2 64MB GDDR3 */
 	};
 
