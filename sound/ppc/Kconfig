@@ -65,6 +65,9 @@ config SND_GAMECUBE_MIC
 	  If you say yes to this option, support will be included for the
 	  Nintendo GameCube Microphone (DOL-022).
 
+	  To compile this driver as a module, choose M here: the module
+	  will be called gcn-mic.
+
 	  If in doubt, say N here.
 
 endif	# SND_PPC
