@@ -405,7 +405,7 @@ int si_setup_pad(struct input_dev *idev)
 	struct ff_device *ff;
 	int retval;
 
-	printk(KERN_CRIT "in si_setup_pad(): idev=%lX\n", idev);
+	printk(KERN_INFO "gcn-si: in si_setup_pad(): idev=%lX\n", idev);
 
 	set_bit(EV_KEY, idev->evbit);
 	set_bit(EV_ABS, idev->evbit);
@@ -427,7 +427,7 @@ int si_setup_pad(struct input_dev *idev)
 	set_bit(ABS_X, idev->absbit);
 
 	input_alloc_absinfo(idev);
-	printk(KERN_CRIT "hello?  absinfo=0x%lX\n", idev->absinfo);
+	printk(KERN_INFO "gcn-si: absinfo=0x%lX\n", idev->absinfo);
 	idev->absinfo[ABS_X].minimum = 0;
 	idev->absinfo[ABS_X].maximum = 255;
 	idev->absinfo[ABS_X].fuzz = 8;
