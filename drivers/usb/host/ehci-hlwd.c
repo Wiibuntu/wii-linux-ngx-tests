@@ -49,11 +49,7 @@ static int ehci_hlwd_reset(struct usb_hcd *hcd)
 	dbg_hcs_params(ehci, "reset");
 	dbg_hcc_params(ehci, "reset");
 
-	error = ehci_halt(ehci);
-	if (error)
-		goto out;
-
-	error = ehci_init(hcd);
+	error = ehci_setup(hcd);
 	if (error)
 		goto out;
 
