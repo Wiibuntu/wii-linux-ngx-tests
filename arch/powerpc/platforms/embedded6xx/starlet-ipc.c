@@ -533,7 +533,7 @@ static int _starlet_open(const char *pathname, int flags,
 			}
 		}
 
-		strncpy(local_pathname, pathname, len-1);
+		strncpy(local_pathname, pathname, len);
 		local_pathname[len-1] = 0;
 		dma_addr = dma_map_single(ipc_dev->dev, local_pathname, len,
 					  DMA_TO_DEVICE);
@@ -631,7 +631,7 @@ int starlet_ioctl_dma_prepare(struct starlet_ipc_request *req,
 	struct starlet_ipc_device *ipc_dev = starlet_ipc_get_device();
 
 	if (!ipc_dev) {
-		DBG("%s: returning -ENODEV\n");
+		DBG("%s: returning -ENODEV\n", __func__);
 		return -ENODEV;
 	}
 
