@@ -166,7 +166,7 @@ config GAMECUBE
 
 config WII
 	bool "Nintendo-Wii"
-	depends on EMBEDDED6xx && USB_ARCH_HAS_HCD
+	depends on EMBEDDED6xx
 	select GAMECUBE_COMMON
 	select HAVE_GENERIC_DMA_COHERENT
 	help

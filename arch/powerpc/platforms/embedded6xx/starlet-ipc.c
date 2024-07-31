@@ -21,6 +21,8 @@
 #include <linux/module.h>
 #include <linux/init.h>
 #include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/of_irq.h>
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/jiffies.h>
@@ -208,6 +210,7 @@ void starlet_ipc_free_request(struct starlet_ipc_request *req)
 {
 	dma_pool_free(req->ipc_dev->dma_pool, req, req->dma_addr);
 }
+EXPORT_SYMBOL_GPL(starlet_ipc_free_request);
 
 static void starlet_ipc_start_request(struct starlet_ipc_request *req)
 {

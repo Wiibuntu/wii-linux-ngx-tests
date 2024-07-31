@@ -257,6 +257,8 @@ static int __init wii_probe(void)
 	if (!of_flat_dt_is_compatible(dt_root, "nintendo,wii"))
 		return 0;
 
+	pm_power_off = wii_power_off;
+
 	return 1;
 }
 
@@ -280,7 +282,6 @@ int starlet_discover_ipc_flavour(void)
 	}
 
 	ppc_md.restart = wii_restart;
-	ppc_md.power_off = wii_power_off;
 
 	return 0;
 }
@@ -289,6 +290,7 @@ enum starlet_ipc_flavour starlet_get_ipc_flavour(void)
 {
 	return starlet_ipc_flavour;
 }
+EXPORT_SYMBOL_GPL(starlet_get_ipc_flavour);
 
 #ifdef CONFIG_KEXEC
 
@@ -328,7 +330,7 @@ static int restore_lowmem_stub(struct kimage *image)
 		" (%u bytes)\n", src, dst, size);
 
 	/* schedule a copy of the lowmem stub to its original location */
-	error = kimage_add_preserved_region(image, dst, src, PAGE_ALIGN(size));
+	//error = kimage_add_preserved_region(image, dst, src, PAGE_ALIGN(size));
 
 out_put:
 	of_node_put(node);
@@ -380,7 +382,6 @@ define_machine(wii) {
 	.init_early		= wii_init_early,
 	.setup_arch		= wii_setup_arch,
 	.restart		= wii_restart,
-	.power_off		= wii_power_off,
 	.show_cpuinfo		= wii_show_cpuinfo,
 	.halt			= wii_halt,
 	.init_IRQ		= wii_pic_probe,
@@ -394,7 +395,7 @@ define_machine(wii) {
 #endif
 };
 
-static struct of_device_id wii_of_bus[] = {
+static const struct of_device_id wii_of_bus[] = {
 	{ .compatible = "nintendo,hollywood", },
 #ifdef CONFIG_STARLET_IOS
 	{ .compatible = "nintendo,starlet-ios-ipc", },

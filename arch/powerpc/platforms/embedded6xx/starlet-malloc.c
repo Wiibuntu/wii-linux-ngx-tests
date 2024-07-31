@@ -114,6 +114,7 @@ void *starlet_kzalloc(size_t size, gfp_t flags)
 {
 	return kzalloc_aligned(size, flags, STARLET_IPC_DMA_ALIGN+1);
 }
+EXPORT_SYMBOL_GPL(starlet_kzalloc);
 
 /**
  *
@@ -122,6 +123,7 @@ void starlet_kfree(void *ptr)
 {
 	kfree_aligned(ptr);
 }
+EXPORT_SYMBOL_GPL(starlet_kfree);
 
 
 
@@ -227,6 +229,7 @@ unsigned long starlet_ioh_virt_to_phys(void *ptr)
 	offset = ptr - ioh->base;
 	return ioh->base_phys + offset;
 }
+EXPORT_SYMBOL_GPL(starlet_ioh_virt_to_phys);
 
 /**
  *
@@ -261,6 +264,7 @@ void *starlet_ioh_kzalloc(size_t size)
 {
 	return starlet_ioh_kzalloc_aligned(size, STARLET_IOH_ALIGN+1);
 }
+EXPORT_SYMBOL_GPL(starlet_ioh_kzalloc);
 
 /**
  *
@@ -280,6 +284,7 @@ void starlet_ioh_kfree(void *ptr)
 	rh_free(ioh->rheap, offset);
 	spin_unlock_irqrestore(&ioh->lock, flags);
 }
+EXPORT_SYMBOL_GPL(starlet_ioh_kfree);
 
 int starlet_ioh_dma_map_sg(struct device *dev, struct starlet_ioh_sg *sgl,
 			   int nents, enum dma_data_direction direction)
@@ -307,6 +312,7 @@ void starlet_ioh_sg_init_table(struct starlet_ioh_sg *sgl, unsigned int nents)
 {
 	memset(sgl, 0, nents * sizeof(*sgl));
 }
+EXPORT_SYMBOL_GPL(starlet_ioh_sg_init_table);
 
 /**
  *
@@ -330,6 +336,7 @@ void starlet_ioh_sg_set_buf(struct starlet_ioh_sg *sg, void *buf, size_t len)
 		sg->dma_addr = 0;
 	}
 }
+EXPORT_SYMBOL_GPL(starlet_ioh_sg_set_buf);
 
 
 /**
@@ -362,5 +369,3 @@ int starlet_malloc_lib_bootstrap(struct resource *mem)
 
 	return error;
 }
-
-
