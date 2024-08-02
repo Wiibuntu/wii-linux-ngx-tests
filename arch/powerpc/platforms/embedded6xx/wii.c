@@ -389,6 +389,7 @@ define_machine(wii) {
 	.calibrate_decr		= generic_calibrate_decr,
 	.progress		= udbg_progress,
 	.machine_shutdown	= wii_shutdown,
+	.power_off		= wii_power_off,
 #ifdef CONFIG_KEXEC	/* REMOVE THIS (as of 2.6.39)? */
 	.machine_kexec_prepare	= wii_machine_kexec_prepare,
 	.machine_kexec		= wii_machine_kexec,
