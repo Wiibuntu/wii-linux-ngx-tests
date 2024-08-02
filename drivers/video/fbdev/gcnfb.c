@@ -473,14 +473,14 @@ static struct vi_tv_mode vi_tv_modes[] = {
 	[VI_VM_NTSC_480i] = {
 		.name = "NTSC 480i",
 		.width = 640,
-		.height = 480,
+		.height = 448,
 		.lines = 525,
 	},
 	[VI_VM_NTSC_480p] = {
 		.name = "NTSC 480p",
 		.flags = VI_VMF_PROGRESSIVE,
 		.width = 640,
-		.height = 480,
+		.height = 448,
 		.lines = 525,
 	},
 	[VI_VM_PAL_576i50] = {
@@ -494,14 +494,14 @@ static struct vi_tv_mode vi_tv_modes[] = {
 		.name = "PAL 480i 60Hz",
 		.flags = VI_VMF_PAL_COLOR,
 		.width = 640,
-		.height = 480,
+		.height = 448,
 		.lines = 525,
 	},
 	[VI_VM_PAL_480p] = {
 		.name = "PAL 480p",
 		.flags = VI_VMF_PROGRESSIVE|VI_VMF_PAL_COLOR,
 		.width = 640,
-		.height = 480,
+		.height = 448,
 		.lines = 525,
 	},
 };
