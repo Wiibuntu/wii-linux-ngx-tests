@@ -495,14 +495,16 @@ struct vi_ctl {
 static struct vi_tv_mode vi_tv_modes[] = {
 	[VI_VM_NTSC_480i] = {
 		.name = "NTSC 480i",
-		.width = 640,
+
+		// XXX: HACK HACK HACK - must be aligned to 32, the real xres will never be this high!
+		.width = 672,
 		.height = 448,
 		.lines = 525,
 	},
 	[VI_VM_NTSC_480p] = {
 		.name = "NTSC 480p",
 		.flags = VI_VMF_PROGRESSIVE,
-		.width = 640,
+		.width = 660,
 		.height = 448,
 		.lines = 525,
 	},
@@ -516,14 +518,14 @@ static struct vi_tv_mode vi_tv_modes[] = {
 	[VI_VM_PAL_480i60] = {
 		.name = "PAL 480i 60Hz",
 		.flags = VI_VMF_PAL_COLOR,
-		.width = 640,
+		.width = 660,
 		.height = 480,
 		.lines = 525,
 	},
 	[VI_VM_PAL_480p] = {
 		.name = "PAL 480p",
 		.flags = VI_VMF_PROGRESSIVE|VI_VMF_PAL_COLOR,
-		.width = 640,
+		.width = 660,
 		.height = 480,
 		.lines = 525,
 	},
@@ -551,8 +553,8 @@ static struct fb_fix_screeninfo vifb_fix = {
 
 static struct fb_var_screeninfo vifb_var = {
 	.activate = FB_ACTIVATE_NOW,
-	.width = 640,
-	.height = 480,
+	.width = 660,
+	.height = 444,
 	/* change to 32 to start with RGB888 mode by default */
 	.bits_per_pixel = 16,
 	.vmode = FB_VMODE_INTERLACED,
@@ -1989,7 +1991,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 	if (xres & VI_HORZ_ALIGN)
 		xres = _ALIGN_UP(xres, VI_HORZ_ALIGN+1);
 	if (xres > mode->width) {
-		drv_printk(KERN_ERR, "xres %u out of bounds\n", var->xres);
+		drv_printk(KERN_ERR, "xres %u (%u) out of bounds (max %u)\n", var->xres, xres, mode->width);
 		return -EINVAL;
 	}
 	if (!xres)
