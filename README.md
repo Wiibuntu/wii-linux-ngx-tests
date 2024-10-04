@@ -43,6 +43,7 @@ See also:
 * [Gumboot](https://neagix.github.io/wii-linux-ngx/gumboot), by [neagix](https://github.com/neagix)
 * [customized MINI](https://github.com/neagix/mini), by [neagix](https://github.com/neagix)
 * [Void PPC](https://github.com/Void-PPC), by [Foxlet](https://github.com/foxlet)
+* [ArchPOWER](https://github.com/kth5/archpower), by [kth5](https://github.com/kth5)
 
 ### GameCube
 
@@ -66,7 +67,8 @@ Chronological history of Linux for Wii/GameCube:
 * [gc-linux (v2.6-based) MIKEp5](http://www.gc-linux.org/wiki/MINI:KernelPreviewFive) - this is the original project and corresponds to the bulk work done to bring Linux to the Wii
 * [DeltaResero's fork (unofficial MIKEp7)](https://github.com/DeltaResero/GC-Wii-Linux-Kernels) - considerable work done by DeltaResero to bring up the GC/Wii patches into a v3.x kernel
 * [neagix's wii-linux-ngx](https://github.com/neagix/wii-linux-ngx) - continuation of the previous work, distribution packaging and maintenance
-* [This project, fork of wii-linux-ngx](https://github.com/Wii-Linux/wii-linux-ngx) - fixups of the experimental-4.4 branch of neagix's kernel, CIP Patches, USB Gecko
+* [This project, fork of wii-linux-ngx](https://github.com/Wii-Linux/wii-linux-ngx) 4.4 branch - fixups of the experimental-4.4 branch of neagix's kernel, CIP Patches, USB Gecko
+* [This project, fork of wii-linux-ngx](https://github.com/Wii-Linux/wii-linux-ngx) 4.5 branch - clean set of 4.4 patches applied to 4.5, ported several improvments back, such as the RGBA framebuffer, and contains several new fixes, such as for audio and gcn-si.
 
 The original (2.6.32 and prior) gcLinux work can be found at: http://sourceforge.net/projects/gc-linux/; at the time of writing project has not seen activity since 2013.
 
@@ -96,7 +98,7 @@ See [open issues](https://github.com/Wii-Linux/wii-linux-ngx/issues) and the [pr
 
 Issues that persist from neagix's original repo:
 
-Boot from MINI is well tested, but not boot from IOS. Xorg framebuffer driver is also not tested.
+Boot from MINI is well tested, but booting from IOS is broken.  It seems that the IOS issues are very deeply rooted and stretch back very far.  TODO: Did it **ever** work properly?
 
 Bugs probably introduced in the port of MIKEp5 from v2.6 to v3.x tree:
 
