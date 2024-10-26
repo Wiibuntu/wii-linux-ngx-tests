@@ -172,7 +172,7 @@ static void __init wii_setup_arch(void)
 }
 
 #ifdef CONFIG_STARLET_IOS
-static void wii_restart(char *cmd)
+static void __noreturn wii_restart(char *cmd)
 {
 	local_irq_disable();
 
@@ -188,7 +188,7 @@ static void wii_restart(char *cmd)
 		cpu_relax();
  }
 
-static void wii_power_off(void)
+static void __noreturn wii_power_off(void)
 {
 	local_irq_disable();
 
@@ -201,7 +201,7 @@ static void wii_power_off(void)
 }
 
 #elif defined CONFIG_STARLET_MINI /* end of CONFIG_STARLET_IOS */
-static void wii_restart(char *cmd)
+static void __noreturn wii_restart(char *cmd)
 {
 	local_irq_disable();
 
@@ -212,7 +212,7 @@ static void wii_restart(char *cmd)
 	wii_spin();
 }
 
-static void wii_power_off(void)
+static void __noreturn wii_power_off(void)
 {
 	local_irq_disable();
 
