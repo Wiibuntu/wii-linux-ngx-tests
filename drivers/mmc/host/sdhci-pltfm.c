@@ -156,6 +156,33 @@ struct sdhci_host *sdhci_pltfm_init(struct platform_device *pdev,
 		host->quirks2 = pdata->quirks2;
 	}
 
+	host->irq = platform_get_irq(pdev, 0);
+
+// XXX: for some unknown reason it just doesn't work
+// figure out why later
+#if !defined(CONFIG_MMC_SDHCI_OF_HLWD) && !defined(CONFIG_MMC_SDHCI_OF_HLWD_MODULE)
+	if (!request_mem_region(iomem->start, resource_size(iomem),
+		mmc_hostname(host->mmc))) {
+		dev_err(&pdev->dev, "cannot request region\n");
+		ret = -EBUSY;
+		goto err_request;
+	}
+#endif
+
+	host->ioaddr = ioremap(iomem->start, resource_size(iomem));
+	if (!host->ioaddr) {
+		dev_err(&pdev->dev, "failed to remap registers\n");
+		ret = -ENOMEM;
+		goto err_remap;
+	}
+
+	/*
+	 * Some platforms need to probe the controller to be able to
+	 * determine which caps should be used.
+	 */
+	if (host->ops && host->ops->platform_init)
+		host->ops->platform_init(host);
+
 	platform_set_drvdata(pdev, host);
 
 	return host;

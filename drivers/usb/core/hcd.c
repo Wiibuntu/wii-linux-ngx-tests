@@ -1428,6 +1428,13 @@ static void hcd_free_coherent(struct usb_bus *bus, dma_addr_t *dma_handle,
 	*dma_handle = 0;
 }
 
+static int urb_needs_setup_dma_unmap(struct usb_hcd *hcd, struct urb *urb)
+{
+	return !(urb->transfer_flags) ||
+	       ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+		urb->setup_dma && urb->setup_dma != ~(dma_addr_t)0);
+}
+
 void usb_hcd_unmap_urb_setup_for_dma(struct usb_hcd *hcd, struct urb *urb)
 {
 	if (IS_ENABLED(CONFIG_HAS_DMA) &&
@@ -1436,6 +1443,9 @@ void usb_hcd_unmap_urb_setup_for_dma(struct usb_hcd *hcd, struct urb *urb)
 				urb->setup_dma,
 				sizeof(struct usb_ctrlrequest),
 				DMA_TO_DEVICE);
+			if ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+			      urb->transfer_flags)
+				urb->setup_dma = ~(dma_addr_t)0;}
 	else if (urb->transfer_flags & URB_SETUP_MAP_LOCAL)
 		hcd_free_coherent(urb->dev->bus,
 				&urb->setup_dma,
@@ -1447,6 +1457,20 @@ void usb_hcd_unmap_urb_setup_for_dma(struct usb_hcd *hcd, struct urb *urb)
 	urb->transfer_flags &= ~(URB_SETUP_MAP_SINGLE | URB_SETUP_MAP_LOCAL);
 }
 EXPORT_SYMBOL_GPL(usb_hcd_unmap_urb_setup_for_dma);
+
+static int urb_needs_transfer_dma_map(struct usb_hcd *hcd, struct urb *urb)
+{
+	return !(urb->transfer_flags & URB_NO_TRANSFER_DMA_MAP) ||
+	       ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+		urb->transfer_dma == ~(dma_addr_t)0);
+}
+
+static int urb_needs_transfer_dma_unmap(struct usb_hcd *hcd, struct urb *urb)
+{
+	return !(urb->transfer_flags & URB_NO_TRANSFER_DMA_MAP) ||
+	       ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+		urb->transfer_dma && urb->transfer_dma != ~(dma_addr_t)0);
+}
 
 static void unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 {
