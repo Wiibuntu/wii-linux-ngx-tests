@@ -2112,7 +2112,7 @@ static int vifb_set_par(struct fb_info *info)
 	vi_flip_page(ctl);
 	spin_unlock_irqrestore(&ctl->lock, flags);
 
-	info->flags = FBINFO_FLAG_DEFAULT;
+	info->flags = FB_MODE_IS_UNKNOWN;
 	if (want_ypan) {
 		info->fix.xpanstep = 2;
 		info->fix.ypanstep = 1;
@@ -2160,7 +2160,7 @@ static int vfb_mmap(struct fb_info *info,
 			size = 0;
 	}
 
-	vma->vm_flags |= (VM_DONTEXPAND | VM_DONTDUMP);	/* avoid to swap out this VMA */
+	vm_flags_set(vma, VM_DONTEXPAND | VM_DONTDUMP);	/* avoid to swap out this VMA */
 	return 0;
 
 }
@@ -2293,7 +2293,7 @@ static int vifb_do_probe(struct device *dev,
 	 * Normally screen_base would be the physical framebuffer, but here we play on-the-fly colorconversion.
 	 */
 	info->screen_base = (char __iomem *)info->fix.smem_start;
-	info->flags = FBINFO_DEFAULT | FBINFO_READS_FAST | FBINFO_VIRTFB /* |	FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_FILLRECT | FBINFO_HWACCEL_COPYAREA */;
+	info->flags = FBINFO_READS_FAST | FBINFO_VIRTFB /* |	FBINFO_HWACCEL_IMAGEBLIT | FBINFO_HWACCEL_FILLRECT | FBINFO_HWACCEL_COPYAREA */;
 
 	adr = info->fix.smem_start;
 	while (size > 0) {
