@@ -26,7 +26,7 @@
 	#size-cells = <1>;
 
 	chosen {
-		bootargs = "root=/dev/mmcblk0p7 rootwait keep_bootcon";
+		bootargs = "root=/dev/mmcblk1p7 rootwait keep_bootcon";
 	};
 
 	memory {
