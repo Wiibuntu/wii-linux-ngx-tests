@@ -2302,7 +2302,7 @@ static int vifb_do_probe(struct device *dev,
 		size -= PAGE_SIZE;
 	}
 	drv_printk(KERN_INFO,
-		   "virtual framebuffer at 0x%p, size %ldk\n",
+		   "virtual framebuffer at 0x%px, size %ldk\n",
 		   (void *)vfb_mem, PAGE_ALIGN(vfb_len) / 1024);
 
 	/*
@@ -2312,7 +2312,7 @@ static int vifb_do_probe(struct device *dev,
 	if (!request_mem_region(xfb_start, xfb_size,
 				DRV_MODULE_NAME)) {
 		drv_printk(KERN_WARNING,
-			   "failed to request video memory at %p\n",
+			   "failed to request video memory at %px\n",
 			   (void *)xfb_start);
 	}
 
@@ -2320,17 +2320,17 @@ static int vifb_do_probe(struct device *dev,
 	gx_fb_start = xfb_start;
 	gx_fb_size = xfb_size;
 	
-	fb_mem = ioremap(xfb_start, xfb_size);
+	fb_mem = devm_ioremap_wc(dev, xfb_start, xfb_size);
 	if (!fb_mem) {
 		drv_printk(KERN_ERR,
-			   "failed to ioremap video memory at %p (%ldk)\n",
+			   "failed to ioremap video memory at %px (%ldk)\n",
 			   (void *)xfb_start,
 			   xfb_size / 1024);
 		error = -EIO;
 		goto err_ioremap;
 	}
 	drv_printk(KERN_INFO,
-		   "framebuffer at 0x%p mapped to 0x%p, size %ldk\n",
+		   "framebuffer at 0x%px mapped to 0x%px, size %ldk\n",
 		   (void *)xfb_start, fb_mem,
 		   xfb_size / 1024);
 
