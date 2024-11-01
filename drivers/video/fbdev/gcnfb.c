@@ -32,7 +32,6 @@
 #include <linux/vmalloc.h>
 #include <linux/wait.h>
 #include <linux/io.h>
-#include <boot/page.h>
 #ifdef CONFIG_WII_AVE_RVL
 #include <linux/i2c.h>
 #endif
@@ -1777,8 +1776,7 @@ static void vi_dettach_ave(struct vi_ctl *ctl)
 	spin_unlock(&ctl->lock);
 }
 
-static int vi_ave_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int vi_ave_probe(struct i2c_client *client)
 {
 	int error = 0;
 
@@ -1795,11 +1793,11 @@ static int vi_ave_probe(struct i2c_client *client,
 	return error;
 }
 
-static int vi_ave_remove(struct i2c_client *client)
+static void vi_ave_remove(struct i2c_client *client)
 {
 	if (first_vi_ave == client)
 		first_vi_ave = NULL;
-	return 0;
+	return;
 }
 
 static const struct i2c_device_id vi_ave_id[] = {
@@ -1968,7 +1966,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	yres = var->yres;
 	if (yres & VI_VERT_ALIGN)
-		yres = _ALIGN_UP(yres, VI_VERT_ALIGN+1);
+		yres = ALIGN(yres, VI_VERT_ALIGN+1);
 	if (yres > mode->height) {
 		if (!nostalgic) {
 			drv_printk(KERN_ERR, "yres %u out of bounds\n", yres);
@@ -1990,7 +1988,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	xres = var->xres;
 	if (xres & VI_HORZ_ALIGN)
-		xres = _ALIGN_UP(xres, VI_HORZ_ALIGN+1);
+		xres = ALIGN(xres, VI_HORZ_ALIGN+1);
 	if (xres > mode->width) {
 		drv_printk(KERN_ERR, "xres %u (%u) out of bounds (max %u)\n", var->xres, xres, mode->width);
 		return -EINVAL;
@@ -2000,7 +1998,7 @@ static int vifb_check_var(struct fb_var_screeninfo *var, struct fb_info *info)
 
 	xres_virtual = var->xres_virtual;
 	if (xres_virtual & VI_HORZ_ALIGN)
-		xres_virtual = _ALIGN_UP(xres_virtual, VI_HORZ_ALIGN+1);
+		xres_virtual = ALIGN(xres_virtual, VI_HORZ_ALIGN+1);
 	if (!xres_virtual || xres_virtual < xres)
 		xres_virtual = xres;
 
