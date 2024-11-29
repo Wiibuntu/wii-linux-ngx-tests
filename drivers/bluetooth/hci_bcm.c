@@ -307,6 +307,9 @@ static int bcm_open(struct hci_uart *hu)
 
 	bt_dev_dbg(hu->hdev, "hu %p", hu);
 
+	if (!hci_uart_has_flow_control(hu))
+		return -EOPNOTSUPP;
+
 	bcm = kzalloc(sizeof(*bcm), GFP_KERNEL);
 	if (!bcm)
 		return -ENOMEM;
@@ -314,6 +317,9 @@ static int bcm_open(struct hci_uart *hu)
 	skb_queue_head_init(&bcm->txq);
 
 	hu->priv = bcm;
+
+	if (!hu->tty->dev)
+		goto out;
 
 	mutex_lock(&bcm_device_lock);
 
@@ -640,7 +646,7 @@ static int bcm_suspend(struct device *dev)
 
 unlock:
 	mutex_unlock(&bcm_device_lock);
-
+out:
 	return 0;
 }
 

@@ -127,6 +127,7 @@ config DMARD09
 config DMARD10
 	tristate "Domintech DMARD10 3-axis Accelerometer Driver"
 	depends on I2C
+	depends on IIO_TRIGGER
 	help
 	  Say yes here to get support for the Domintech DMARD10 3-axis
 	  accelerometer.

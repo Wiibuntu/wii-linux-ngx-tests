@@ -1,0 +1,21 @@
+--- include/linux/writeback.h
++++ include/linux/writeback.h
+@@ -198,6 +198,7 @@ void wbc_attach_and_unlock_inode(struct writeback_control *wbc,
+ void wbc_detach_inode(struct writeback_control *wbc);
+ void wbc_account_io(struct writeback_control *wbc, struct page *page,
+ 		    size_t bytes);
++void cgroup_writeback_umount(void);
+ 
+ /**
+  * inode_attach_wb - associate an inode with its wb
+@@ -301,6 +302,10 @@ static inline void wbc_account_io(struct writeback_control *wbc,
+ {
+ }
+ 
++static inline void cgroup_writeback_umount(void)
++{
++}
++
+ #endif	/* CONFIG_CGROUP_WRITEBACK */
+ 
+ /*

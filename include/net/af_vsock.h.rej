@@ -1,0 +1,12 @@
+--- include/net/af_vsock.h
++++ include/net/af_vsock.h
+@@ -62,7 +62,8 @@ struct vsock_sock {
+ 	struct list_head pending_links;
+ 	struct list_head accept_queue;
+ 	bool rejected;
+-	struct delayed_work dwork;
++	struct delayed_work connect_work;
++	struct delayed_work pending_work;
+ 	u32 peer_shutdown;
+ 	bool sent_request;
+ 	bool ignore_connecting_rst;

@@ -1,0 +1,46 @@
+--- drivers/net/can/xilinx_can.c
++++ drivers/net/can/xilinx_can.c
+@@ -826,26 +944,20 @@ static int xcan_rx_poll(struct napi_struct *napi, int quota)
+ 
+ 	isr = priv->read_reg(priv, XCAN_ISR_OFFSET);
+ 	while ((isr & XCAN_IXR_RXNEMP_MASK) && (work_done < quota)) {
+-		if (isr & XCAN_IXR_RXOK_MASK) {
+-			priv->write_reg(priv, XCAN_ICR_OFFSET,
+-				XCAN_IXR_RXOK_MASK);
+-			work_done += xcan_rx(ndev);
+-		} else {
+-			priv->write_reg(priv, XCAN_ICR_OFFSET,
+-				XCAN_IXR_RXNEMP_MASK);
+-			break;
+-		}
++		work_done += xcan_rx(ndev);
+ 		priv->write_reg(priv, XCAN_ICR_OFFSET, XCAN_IXR_RXNEMP_MASK);
+ 		isr = priv->read_reg(priv, XCAN_ISR_OFFSET);
+ 	}
+ 
+-	if (work_done)
++	if (work_done) {
+ 		can_led_event(ndev, CAN_LED_EVENT_RX);
++		xcan_update_error_state_after_rxtx(ndev);
++	}
+ 
+ 	if (work_done < quota) {
+ 		napi_complete(napi);
+ 		ier = priv->read_reg(priv, XCAN_IER_OFFSET);
+-		ier |= (XCAN_IXR_RXOK_MASK | XCAN_IXR_RXNEMP_MASK);
++		ier |= XCAN_IXR_RXNEMP_MASK;
+ 		priv->write_reg(priv, XCAN_IER_OFFSET, ier);
+ 	}
+ 	return work_done;
+@@ -1360,9 +1570,9 @@ static int xcan_probe(struct platform_device *pdev)
+ 	devm_can_led_init(ndev);
+ 	clk_disable_unprepare(priv->bus_clk);
+ 	clk_disable_unprepare(priv->can_clk);
+-	netdev_dbg(ndev, "reg_base=0x%p irq=%d clock=%d, tx fifo depth:%d\n",
++	netdev_dbg(ndev, "reg_base=0x%p irq=%d clock=%d, tx fifo depth: actual %d, using %d\n",
+ 			priv->reg_base, ndev->irq, priv->can.clock.freq,
+-			priv->tx_max);
++			tx_fifo_depth, priv->tx_max);
+ 
+ 	return 0;
+ 

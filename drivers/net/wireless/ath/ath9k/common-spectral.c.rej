@@ -1,0 +1,21 @@
+--- drivers/net/wireless/ath/ath9k/common-spectral.c
++++ drivers/net/wireless/ath/ath9k/common-spectral.c
+@@ -1075,7 +1078,7 @@ static struct rchan_callbacks rfs_spec_scan_cb = {
+ 
+ void ath9k_cmn_spectral_deinit_debug(struct ath_spec_scan_priv *spec_priv)
+ {
+-	if (config_enabled(CONFIG_ATH9K_DEBUGFS)) {
++	if (config_enabled(CONFIG_ATH9K_DEBUGFS) && spec_priv->rfs_chan_spec_scan) {
+ 		relay_close(spec_priv->rfs_chan_spec_scan);
+ 		spec_priv->rfs_chan_spec_scan = NULL;
+ 	}
+@@ -1089,6 +1092,9 @@ void ath9k_cmn_spectral_init_debug(struct ath_spec_scan_priv *spec_priv,
+ 					    debugfs_phy,
+ 					    1024, 256, &rfs_spec_scan_cb,
+ 					    NULL);
++	if (!spec_priv->rfs_chan_spec_scan)
++		return;
++
+ 	debugfs_create_file("spectral_scan_ctl",
+ 			    S_IRUSR | S_IWUSR,
+ 			    debugfs_phy, spec_priv,

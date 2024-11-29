@@ -1,0 +1,285 @@
+--- net/mac80211/rx.c
++++ net/mac80211/rx.c
+@@ -1455,12 +1455,16 @@ ieee80211_rx_h_sta_process(struct ieee80211_rx_data *rx)
+ 	 */
+ 	if (!ieee80211_hw_check(&sta->local->hw, AP_LINK_PS) &&
+ 	    !ieee80211_has_morefrags(hdr->frame_control) &&
++	    !ieee80211_is_back_req(hdr->frame_control) &&
+ 	    !(status->rx_flags & IEEE80211_RX_DEFERRED_RELEASE) &&
+ 	    (rx->sdata->vif.type == NL80211_IFTYPE_AP ||
+ 	     rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN) &&
+-	    /* PM bit is only checked in frames where it isn't reserved,
++	    /*
++	     * PM bit is only checked in frames where it isn't reserved,
+ 	     * in AP mode it's reserved in non-bufferable management frames
+ 	     * (cf. IEEE 802.11-2012 8.2.4.1.7 Power Management field)
++	     * BAR frames should be ignored as specified in
++	     * IEEE 802.11-2012 10.2.1.2.
+ 	     */
+ 	    (!ieee80211_is_mgmt(hdr->frame_control) ||
+ 	     ieee80211_is_bufferable_mmpdu(hdr->frame_control))) {
+@@ -1768,21 +1786,21 @@ ieee80211_reassemble_add(struct ieee80211_sub_if_data *sdata,
+ 	entry->seq = seq;
+ 	entry->rx_queue = rx_queue;
+ 	entry->last_frag = frag;
+-	entry->ccmp = 0;
++	entry->check_sequential_pn = false;
+ 	entry->extra_len = 0;
+ 
+ 	return entry;
+ }
+ 
+ static inline struct ieee80211_fragment_entry *
+-ieee80211_reassemble_find(struct ieee80211_sub_if_data *sdata,
++ieee80211_reassemble_find(struct ieee80211_fragment_cache *cache,
+ 			  unsigned int frag, unsigned int seq,
+ 			  int rx_queue, struct ieee80211_hdr *hdr)
+ {
+ 	struct ieee80211_fragment_entry *entry;
+ 	int i, idx;
+ 
+-	idx = sdata->fragment_next;
++	idx = cache->next;
+ 	for (i = 0; i < IEEE80211_FRAGMENT_MAX; i++) {
+ 		struct ieee80211_hdr *f_hdr;
+ 
+@@ -1817,16 +1835,27 @@ ieee80211_reassemble_find(struct ieee80211_sub_if_data *sdata,
+ 	return NULL;
+ }
+ 
++static bool requires_sequential_pn(struct ieee80211_rx_data *rx, __le16 fc)
++{
++	return rx->key &&
++		(rx->key->conf.cipher == WLAN_CIPHER_SUITE_CCMP ||
++		 rx->key->conf.cipher == WLAN_CIPHER_SUITE_CCMP_256 ||
++		 rx->key->conf.cipher == WLAN_CIPHER_SUITE_GCMP ||
++		 rx->key->conf.cipher == WLAN_CIPHER_SUITE_GCMP_256) &&
++		ieee80211_has_protected(fc);
++}
++
+ static ieee80211_rx_result debug_noinline
+ ieee80211_rx_h_defragment(struct ieee80211_rx_data *rx)
+ {
++	struct ieee80211_fragment_cache *cache = &rx->sdata->frags;
+ 	struct ieee80211_hdr *hdr;
+ 	u16 sc;
+ 	__le16 fc;
+ 	unsigned int frag, seq;
+ 	struct ieee80211_fragment_entry *entry;
+ 	struct sk_buff *skb;
+-	struct ieee80211_rx_status *status;
++	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(rx->skb);
+ 
+ 	hdr = (struct ieee80211_hdr *)rx->skb->data;
+ 	fc = hdr->frame_control;
+@@ -1861,19 +1891,33 @@ ieee80211_rx_h_defragment(struct ieee80211_rx_data *rx)
+ 
+ 	if (frag == 0) {
+ 		/* This is the first fragment of a new frame. */
+-		entry = ieee80211_reassemble_add(rx->sdata, frag, seq,
++		entry = ieee80211_reassemble_add(cache, frag, seq,
+ 						 rx->seqno_idx, &(rx->skb));
+-		if (rx->key &&
+-		    (rx->key->conf.cipher == WLAN_CIPHER_SUITE_CCMP ||
+-		     rx->key->conf.cipher == WLAN_CIPHER_SUITE_CCMP_256) &&
+-		    ieee80211_has_protected(fc)) {
++		if (requires_sequential_pn(rx, fc)) {
+ 			int queue = rx->security_idx;
+-			/* Store CCMP PN so that we can verify that the next
+-			 * fragment has a sequential PN value. */
+-			entry->ccmp = 1;
++
++			/* Store CCMP/GCMP PN so that we can verify that the
++			 * next fragment has a sequential PN value.
++			 */
++			entry->check_sequential_pn = true;
++			entry->is_protected = true;
++			entry->key_color = rx->key->color;
+ 			memcpy(entry->last_pn,
+ 			       rx->key->u.ccmp.rx_pn[queue],
+ 			       IEEE80211_CCMP_PN_LEN);
++			BUILD_BUG_ON(offsetof(struct ieee80211_key,
++					      u.ccmp.rx_pn) !=
++				     offsetof(struct ieee80211_key,
++					      u.gcmp.rx_pn));
++			BUILD_BUG_ON(sizeof(rx->key->u.ccmp.rx_pn[queue]) !=
++				     sizeof(rx->key->u.gcmp.rx_pn[queue]));
++			BUILD_BUG_ON(IEEE80211_CCMP_PN_LEN !=
++				     IEEE80211_GCMP_PN_LEN);
++		} else if (rx->key &&
++			   (ieee80211_has_protected(fc) ||
++			    (status->flag & RX_FLAG_DECRYPTED))) {
++			entry->is_protected = true;
++			entry->key_color = rx->key->color;
+ 		}
+ 		return RX_QUEUED;
+ 	}
+@@ -1881,34 +1925,54 @@ ieee80211_rx_h_defragment(struct ieee80211_rx_data *rx)
+ 	/* This is a fragment for a frame that should already be pending in
+ 	 * fragment cache. Add this fragment to the end of the pending entry.
+ 	 */
+-	entry = ieee80211_reassemble_find(rx->sdata, frag, seq,
++	entry = ieee80211_reassemble_find(cache, frag, seq,
+ 					  rx->seqno_idx, hdr);
+ 	if (!entry) {
+ 		I802_DEBUG_INC(rx->local->rx_handlers_drop_defrag);
+ 		return RX_DROP_MONITOR;
+ 	}
+ 
+-	/* Verify that MPDUs within one MSDU have sequential PN values.
+-	 * (IEEE 802.11i, 8.3.3.4.5) */
+-	if (entry->ccmp) {
++	/* "The receiver shall discard MSDUs and MMPDUs whose constituent
++	 *  MPDU PN values are not incrementing in steps of 1."
++	 * see IEEE P802.11-REVmc/D5.0, 12.5.3.4.4, item d (for CCMP)
++	 * and IEEE P802.11-REVmc/D5.0, 12.5.5.4.4, item d (for GCMP)
++	 */
++	if (entry->check_sequential_pn) {
+ 		int i;
+ 		u8 pn[IEEE80211_CCMP_PN_LEN], *rpn;
+-		int queue;
+-		if (!rx->key ||
+-		    (rx->key->conf.cipher != WLAN_CIPHER_SUITE_CCMP &&
+-		     rx->key->conf.cipher != WLAN_CIPHER_SUITE_CCMP_256))
++
++		if (!requires_sequential_pn(rx, fc))
++			return RX_DROP_UNUSABLE;
++
++		/* Prevent mixed key and fragment cache attacks */
++		if (entry->key_color != rx->key->color)
+ 			return RX_DROP_UNUSABLE;
++
+ 		memcpy(pn, entry->last_pn, IEEE80211_CCMP_PN_LEN);
+ 		for (i = IEEE80211_CCMP_PN_LEN - 1; i >= 0; i--) {
+ 			pn[i]++;
+ 			if (pn[i])
+ 				break;
+ 		}
+-		queue = rx->security_idx;
+-		rpn = rx->key->u.ccmp.rx_pn[queue];
++
++		rpn = rx->ccm_gcm.pn;
+ 		if (memcmp(pn, rpn, IEEE80211_CCMP_PN_LEN))
+ 			return RX_DROP_UNUSABLE;
+ 		memcpy(entry->last_pn, pn, IEEE80211_CCMP_PN_LEN);
++	} else if (entry->is_protected &&
++		   (!rx->key ||
++		    (!ieee80211_has_protected(fc) &&
++		     !(status->flag & RX_FLAG_DECRYPTED)) ||
++		    rx->key->color != entry->key_color)) {
++		/* Drop this as a mixed key or fragment cache attack, even
++		 * if for TKIP Michael MIC should protect us, and WEP is a
++		 * lost cause anyway.
++		 */
++		return RX_DROP_UNUSABLE;
++	} else if (entry->is_protected && rx->key &&
++		   entry->key_color != rx->key->color &&
++		   (status->flag & RX_FLAG_DECRYPTED)) {
++		return RX_DROP_UNUSABLE;
+ 	}
+ 
+ 	skb_pull(rx->skb, ieee80211_hdrlen(fc));
+@@ -2247,16 +2358,22 @@ ieee80211_rx_h_amsdu(struct ieee80211_rx_data *rx)
+ 	if (!(status->rx_flags & IEEE80211_RX_AMSDU))
+ 		return RX_CONTINUE;
+ 
+-	if (ieee80211_has_a4(hdr->frame_control) &&
+-	    rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
+-	    !rx->sdata->u.vlan.sta)
+-		return RX_DROP_UNUSABLE;
++	if (unlikely(ieee80211_has_a4(hdr->frame_control))) {
++		switch (rx->sdata->vif.type) {
++		case NL80211_IFTYPE_AP_VLAN:
++			if (!rx->sdata->u.vlan.sta)
++				return RX_DROP_UNUSABLE;
++			break;
++		case NL80211_IFTYPE_STATION:
++			if (!rx->sdata->u.mgd.use_4addr)
++				return RX_DROP_UNUSABLE;
++			break;
++		default:
++			return RX_DROP_UNUSABLE;
++		}
++	}
+ 
+-	if (is_multicast_ether_addr(hdr->addr1) &&
+-	    ((rx->sdata->vif.type == NL80211_IFTYPE_AP_VLAN &&
+-	      rx->sdata->u.vlan.sta) ||
+-	     (rx->sdata->vif.type == NL80211_IFTYPE_STATION &&
+-	      rx->sdata->u.mgd.use_4addr)))
++	if (is_multicast_ether_addr(hdr->addr1))
+ 		return RX_DROP_UNUSABLE;
+ 
+ 	skb->dev = dev;
+@@ -2311,7 +2445,7 @@ ieee80211_rx_h_mesh_fwding(struct ieee80211_rx_data *rx)
+ 	struct ieee80211_local *local = rx->local;
+ 	struct ieee80211_sub_if_data *sdata = rx->sdata;
+ 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
+-	u16 q, hdrlen;
++	u16 ac, q, hdrlen;
+ 
+ 	hdr = (struct ieee80211_hdr *) skb->data;
+ 	hdrlen = ieee80211_hdrlen(hdr->frame_control);
+@@ -2380,15 +2514,18 @@ ieee80211_rx_h_mesh_fwding(struct ieee80211_rx_data *rx)
+ 	    ether_addr_equal(sdata->vif.addr, hdr->addr3))
+ 		return RX_CONTINUE;
+ 
+-	q = ieee80211_select_queue_80211(sdata, skb, hdr);
++	ac = ieee802_1d_to_ac[skb->priority];
++	q = sdata->vif.hw_queue[ac];
+ 	if (ieee80211_queue_stopped(&local->hw, q)) {
+ 		IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, dropped_frames_congestion);
+ 		return RX_DROP_MONITOR;
+ 	}
+-	skb_set_queue_mapping(skb, q);
++	skb_set_queue_mapping(skb, ac);
+ 
+ 	if (!--mesh_hdr->ttl) {
+-		IEEE80211_IFSTA_MESH_CTR_INC(ifmsh, dropped_frames_ttl);
++		if (!is_multicast_ether_addr(hdr->addr1))
++			IEEE80211_IFSTA_MESH_CTR_INC(ifmsh,
++						     dropped_frames_ttl);
+ 		goto out;
+ 	}
+ 
+@@ -3429,6 +3578,8 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
+ 		}
+ 		return true;
+ 	case NL80211_IFTYPE_MESH_POINT:
++		if (ether_addr_equal(sdata->vif.addr, hdr->addr2))
++			return false;
+ 		if (multicast)
+ 			return true;
+ 		return ether_addr_equal(sdata->vif.addr, hdr->addr1);
+@@ -3458,9 +3609,31 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
+ 				return false;
+ 			/* ignore action frames to TDLS-peers */
+ 			if (ieee80211_is_action(hdr->frame_control) &&
++			    !is_broadcast_ether_addr(bssid) &&
+ 			    !ether_addr_equal(bssid, hdr->addr1))
+ 				return false;
+ 		}
++
++		/*
++		 * 802.11-2016 Table 9-26 says that for data frames, A1 must be
++		 * the BSSID - we've checked that already but may have accepted
++		 * the wildcard (ff:ff:ff:ff:ff:ff).
++		 *
++		 * It also says:
++		 *	The BSSID of the Data frame is determined as follows:
++		 *	a) If the STA is contained within an AP or is associated
++		 *	   with an AP, the BSSID is the address currently in use
++		 *	   by the STA contained in the AP.
++		 *
++		 * So we should not accept data frames with an address that's
++		 * multicast.
++		 *
++		 * Accepting it also opens a security problem because stations
++		 * could encrypt it with the GTK and inject traffic that way.
++		 */
++		if (ieee80211_is_data(hdr->frame_control) && multicast)
++			return false;
++
+ 		return true;
+ 	case NL80211_IFTYPE_WDS:
+ 		if (bssid || !ieee80211_is_data(hdr->frame_control))

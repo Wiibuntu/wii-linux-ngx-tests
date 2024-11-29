@@ -1,0 +1,21 @@
+--- drivers/video/fbdev/intelfb/intelfbdrv.c
++++ drivers/video/fbdev/intelfb/intelfbdrv.c
+@@ -302,7 +302,7 @@ static __inline__ int get_opt_int(const char *this_opt, const char *name,
+ }
+ 
+ static __inline__ int get_opt_bool(const char *this_opt, const char *name,
+-				   int *ret)
++				   bool *ret)
+ {
+ 	if (!ret)
+ 		return 0;
+@@ -1215,6 +1215,9 @@ static int intelfb_check_var(struct fb_var_screeninfo *var,
+ 
+ 	dinfo = GET_DINFO(info);
+ 
++	if (!var->pixclock)
++		return -EINVAL;
++
+ 	/* update the pitch */
+ 	if (intelfbhw_validate_mode(dinfo, var) != 0)
+ 		return -EINVAL;

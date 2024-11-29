@@ -1,0 +1,36 @@
+--- drivers/spi/spi-tegra114.c
++++ drivers/spi/spi-tegra114.c
+@@ -1098,28 +1130,24 @@ static int tegra_spi_probe(struct platform_device *pdev)
+ 	tspi->phys = r->start;
+ 
+ 	spi_irq = platform_get_irq(pdev, 0);
+-	tspi->irq = spi_irq;
+-	ret = request_threaded_irq(tspi->irq, tegra_spi_isr,
+-			tegra_spi_isr_thread, IRQF_ONESHOT,
+-			dev_name(&pdev->dev), tspi);
+-	if (ret < 0) {
+-		dev_err(&pdev->dev, "Failed to register ISR for IRQ %d\n",
+-					tspi->irq);
++	if (spi_irq < 0) {
++		ret = spi_irq;
+ 		goto exit_free_master;
+ 	}
++	tspi->irq = spi_irq;
+ 
+ 	tspi->clk = devm_clk_get(&pdev->dev, "spi");
+ 	if (IS_ERR(tspi->clk)) {
+ 		dev_err(&pdev->dev, "can not get clock\n");
+ 		ret = PTR_ERR(tspi->clk);
+-		goto exit_free_irq;
++		goto exit_free_master;
+ 	}
+ 
+ 	tspi->rst = devm_reset_control_get(&pdev->dev, "spi");
+ 	if (IS_ERR(tspi->rst)) {
+ 		dev_err(&pdev->dev, "can not get reset\n");
+ 		ret = PTR_ERR(tspi->rst);
+-		goto exit_free_irq;
++		goto exit_free_master;
+ 	}
+ 
+ 	tspi->max_buf_size = SPI_FIFO_DEPTH << 2;

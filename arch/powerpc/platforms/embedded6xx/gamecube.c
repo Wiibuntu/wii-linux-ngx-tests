@@ -81,6 +81,10 @@ define_machine(gamecube) {
 	.calibrate_decr		= generic_calibrate_decr,
 	.progress		= udbg_progress,
 	.machine_shutdown	= gamecube_shutdown,
+#ifdef CONFIG_KEXEC
+	.machine_kexec_prepare	= gamecube_kexec_prepare,
+	.machine_kexec		= default_machine_kexec,
+#endif
 };
 
 

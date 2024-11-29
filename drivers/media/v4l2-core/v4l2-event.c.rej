@@ -1,0 +1,43 @@
+--- drivers/media/v4l2-core/v4l2-event.c
++++ drivers/media/v4l2-core/v4l2-event.c
+@@ -249,23 +261,21 @@ int v4l2_event_subscribe(struct v4l2_fh *fh,
+ 	spin_unlock_irqrestore(&fh->vdev->fh_lock, flags);
+ 
+ 	if (found_ev) {
++		/* Already listening */
+ 		kfree(sev);
+-		return 0; /* Already listening */
+-	}
+-
+-	if (sev->ops && sev->ops->add) {
+-		int ret = sev->ops->add(sev, elems);
++	} else if (sev->ops && sev->ops->add) {
++		ret = sev->ops->add(sev, elems);
+ 		if (ret) {
+-			sev->ops = NULL;
+-			v4l2_event_unsubscribe(fh, sub);
+-			return ret;
++			spin_lock_irqsave(&fh->vdev->fh_lock, flags);
++			__v4l2_event_unsubscribe(sev);
++			spin_unlock_irqrestore(&fh->vdev->fh_lock, flags);
++			kfree(sev);
+ 		}
+ 	}
+ 
+-	/* Mark as ready for use */
+-	sev->elems = elems;
++	mutex_unlock(&fh->subscribe_lock);
+ 
+-	return 0;
++	return ret;
+ }
+ EXPORT_SYMBOL_GPL(v4l2_event_subscribe);
+ 
+@@ -317,6 +322,7 @@ int v4l2_event_unsubscribe(struct v4l2_fh *fh,
+ 		sev->ops->del(sev);
+ 
+ 	kfree(sev);
++	mutex_unlock(&fh->subscribe_lock);
+ 
+ 	return 0;
+ }

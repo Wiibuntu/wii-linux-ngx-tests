@@ -751,7 +751,7 @@ int drm_mode_hsync(const struct drm_display_mode *mode)
 	if (mode->hsync)
 		return mode->hsync;
 
-	if (mode->htotal < 0)
+	if (mode->htotal <= 0)
 		return 0;
 
 	calc_val = (mode->clock * 1000) / mode->htotal; /* hsync in Hz */
@@ -1597,6 +1597,8 @@ int drm_mode_convert_umode(struct drm_display_mode *out,
 	out->status = drm_mode_validate_basic(out);
 	if (out->status != MODE_OK)
 		goto out;
+
+	drm_mode_set_crtcinfo(out, CRTC_INTERLACE_HALVE_V);
 
 	drm_mode_set_crtcinfo(out, CRTC_INTERLACE_HALVE_V);
 

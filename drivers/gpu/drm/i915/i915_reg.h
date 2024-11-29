@@ -2378,6 +2378,12 @@ enum i915_power_well_id {
 #define   GAMT_CHKN_DISABLE_DYNAMIC_CREDIT_SHARING	(1<<28)
 #define   GAMT_CHKN_DISABLE_I2M_CYCLE_ON_WR_PORT	(1<<24)
 
+#define GEN8_RTCR	0x4260
+#define GEN8_M1TCR	0x4264
+#define GEN8_M2TCR	0x4268
+#define GEN8_BTCR	0x426c
+#define GEN8_VTCR	0x4270
+
 #if 0
 #define PRB0_TAIL	_MMIO(0x2030)
 #define PRB0_HEAD	_MMIO(0x2034)
@@ -6734,6 +6740,10 @@ enum {
 #define SKL_CSR_DC3_DC5_COUNT	_MMIO(0x80030)
 #define SKL_CSR_DC5_DC6_COUNT	_MMIO(0x8002C)
 #define BXT_CSR_DC3_DC5_COUNT	_MMIO(0x80038)
+
+/* Display Internal Timeout Register */
+#define RM_TIMEOUT		0x42060
+#define  MMIO_TIMEOUT_US(us)	((us) << 0)
 
 /* interrupts */
 #define DE_MASTER_IRQ_CONTROL   (1 << 31)

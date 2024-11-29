@@ -1,0 +1,28 @@
+--- kernel/trace/trace_stack.c
++++ kernel/trace/trace_stack.c
+@@ -125,6 +125,13 @@ check_stack(unsigned long ip, unsigned long *stack)
+ 			break;
+ 	}
+ 
++	/*
++	 * Some archs may not have the passed in ip in the dump.
++	 * If that happens, we need to show everything.
++	 */
++	if (i == stack_trace_max.nr_entries)
++		i = 0;
++
+ 	/*
+ 	 * Now find where in the stack these are.
+ 	 */
+@@ -190,6 +197,11 @@ check_stack(unsigned long ip, unsigned long *stack)
+ 	local_irq_restore(flags);
+ }
+ 
++/* Some archs may not define MCOUNT_INSN_SIZE */
++#ifndef MCOUNT_INSN_SIZE
++# define MCOUNT_INSN_SIZE 0
++#endif
++
+ static void
+ stack_trace_call(unsigned long ip, unsigned long parent_ip,
+ 		 struct ftrace_ops *op, struct pt_regs *pt_regs)

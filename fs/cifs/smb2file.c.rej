@@ -1,0 +1,17 @@
+--- fs/cifs/smb2file.c
++++ fs/cifs/smb2file.c
+@@ -262,11 +264,13 @@ smb2_push_mandatory_locks(struct cifsFileInfo *cfile)
+ 	 * and check it for zero before using.
+ 	 */
+ 	max_buf = tlink_tcon(cfile->tlink)->ses->server->maxBuf;
+-	if (!max_buf) {
++	if (max_buf < sizeof(struct smb2_lock_element)) {
+ 		free_xid(xid);
+ 		return -EINVAL;
+ 	}
+ 
++	BUILD_BUG_ON(sizeof(struct smb2_lock_element) > PAGE_SIZE);
++	max_buf = min_t(unsigned int, max_buf, PAGE_SIZE);
+ 	max_num = max_buf / sizeof(struct smb2_lock_element);
+ 	buf = kcalloc(max_num, sizeof(struct smb2_lock_element), GFP_KERNEL);
+ 	if (!buf) {

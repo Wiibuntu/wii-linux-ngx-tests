@@ -1,0 +1,10 @@
+--- mm/kasan/report.c
++++ mm/kasan/report.c
+@@ -13,6 +13,7 @@
+  *
+  */
+ 
++#include <linux/ftrace.h>
+ #include <linux/kernel.h>
+ #include <linux/mm.h>
+ #include <linux/printk.h>

@@ -144,7 +144,7 @@ void drm_atomic_state_default_clear(struct drm_atomic_state *state)
 	for (i = 0; i < state->num_connector; i++) {
 		struct drm_connector *connector = state->connectors[i].ptr;
 
-		if (!connector)
+		if (!connector || !connector->funcs)
 			continue;
 
 		connector->funcs->atomic_destroy_state(connector,
@@ -381,6 +381,8 @@ int drm_atomic_set_mode_prop_for_crtc(struct drm_crtc_state *state,
 
 	drm_property_blob_put(state->mode_blob);
 	state->mode_blob = NULL;
+
+	memset(&state->mode, 0, sizeof(state->mode));
 
 	memset(&state->mode, 0, sizeof(state->mode));
 
@@ -1341,7 +1343,9 @@ drm_atomic_set_crtc_for_plane(struct drm_plane_state *plane_state,
 {
 	struct drm_plane *plane = plane_state->plane;
 	struct drm_crtc_state *crtc_state;
-
+	/* Nothing to do for same crtc*/
+	if (plane_state->crtc == crtc)
+		return 0;
 	if (plane_state->crtc) {
 		crtc_state = drm_atomic_get_crtc_state(plane_state->state,
 						       plane_state->crtc);
@@ -1624,6 +1628,9 @@ int drm_atomic_check_only(struct drm_atomic_state *state)
 
 	if (config->funcs->atomic_check)
 		ret = config->funcs->atomic_check(state->dev, state);
+
+	if (ret)
+		return ret;
 
 	if (ret)
 		return ret;
@@ -2355,5 +2362,5 @@ out:
 	drm_modeset_drop_locks(&ctx);
 	drm_modeset_acquire_fini(&ctx);
 
-	return ret;
+	return 0;
 }

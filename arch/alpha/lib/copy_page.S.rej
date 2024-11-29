@@ -1,0 +1,16 @@
+--- arch/alpha/lib/copy_page.S
++++ arch/alpha/lib/copy_page.S
+@@ -3,7 +3,7 @@
+  *
+  * Copy an entire page.
+  */
+-
++#include <asm/export.h>
+ 	.text
+ 	.align 4
+ 	.global copy_page
+@@ -47,3 +47,4 @@ copy_page:
+ 	nop
+ 
+ 	.end copy_page
++	EXPORT_SYMBOL(copy_page)

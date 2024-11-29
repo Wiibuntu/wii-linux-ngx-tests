@@ -2168,6 +2168,9 @@ int scsi_error_handler(void *data)
 		/* All scmds have been handled */
 		shost->host_failed = 0;
 
+		/* All scmds have been handled */
+		shost->host_failed = 0;
+
 		/*
 		 * Note - if the above fails completely, the action is to take
 		 * individual devices offline and flush the queue of any

@@ -1,0 +1,301 @@
+--- drivers/md/dm-cache-metadata.c
++++ drivers/md/dm-cache-metadata.c
+@@ -874,18 +881,55 @@ static int blocks_are_unmapped_or_clean(struct dm_cache_metadata *cmd,
+ 	return 0;
+ }
+ 
+-#define WRITE_LOCK(cmd) \
+-	if (cmd->fail_io || dm_bm_is_read_only(cmd->bm)) \
+-		return -EINVAL; \
+-	down_write(&cmd->root_lock)
++static bool cmd_write_lock(struct dm_cache_metadata *cmd)
++{
++	down_write(&cmd->root_lock);
++	if (cmd->fail_io || dm_bm_is_read_only(cmd->bm)) {
++		up_write(&cmd->root_lock);
++		return false;
++	}
++	return true;
++}
+ 
+-#define WRITE_LOCK_VOID(cmd) \
+-	if (cmd->fail_io || dm_bm_is_read_only(cmd->bm)) \
+-		return; \
+-	down_write(&cmd->root_lock)
++#define WRITE_LOCK(cmd)				\
++	do {					\
++		if (!cmd_write_lock((cmd)))	\
++			return -EINVAL;		\
++	} while(0)
++
++#define WRITE_LOCK_VOID(cmd)			\
++	do {					\
++		if (!cmd_write_lock((cmd)))	\
++			return;			\
++	} while(0)
+ 
+ #define WRITE_UNLOCK(cmd) \
+-	up_write(&cmd->root_lock)
++	up_write(&(cmd)->root_lock)
++
++static bool cmd_read_lock(struct dm_cache_metadata *cmd)
++{
++	down_read(&cmd->root_lock);
++	if (cmd->fail_io) {
++		up_read(&cmd->root_lock);
++		return false;
++	}
++	return true;
++}
++
++#define READ_LOCK(cmd)				\
++	do {					\
++		if (!cmd_read_lock((cmd)))	\
++			return -EINVAL;		\
++	} while(0)
++
++#define READ_LOCK_VOID(cmd)			\
++	do {					\
++		if (!cmd_read_lock((cmd)))	\
++			return;			\
++	} while(0)
++
++#define READ_UNLOCK(cmd) \
++	up_read(&(cmd)->root_lock)
+ 
+ int dm_cache_resize(struct dm_cache_metadata *cmd, dm_cblock_t new_cache_size)
+ {
+@@ -1022,22 +1066,20 @@ int dm_cache_load_discards(struct dm_cache_metadata *cmd,
+ {
+ 	int r;
+ 
+-	down_read(&cmd->root_lock);
++	READ_LOCK(cmd);
+ 	r = __load_discards(cmd, fn, context);
+-	up_read(&cmd->root_lock);
++	READ_UNLOCK(cmd);
+ 
+ 	return r;
+ }
+ 
+-dm_cblock_t dm_cache_size(struct dm_cache_metadata *cmd)
++int dm_cache_size(struct dm_cache_metadata *cmd, dm_cblock_t *result)
+ {
+-	dm_cblock_t r;
+-
+-	down_read(&cmd->root_lock);
+-	r = cmd->cache_blocks;
+-	up_read(&cmd->root_lock);
++	READ_LOCK(cmd);
++	*result = cmd->cache_blocks;
++	READ_UNLOCK(cmd);
+ 
+-	return r;
++	return 0;
+ }
+ 
+ static int __remove(struct dm_cache_metadata *cmd, dm_cblock_t cblock)
+@@ -1195,9 +1237,9 @@ int dm_cache_load_mappings(struct dm_cache_metadata *cmd,
+ {
+ 	int r;
+ 
+-	down_read(&cmd->root_lock);
++	READ_LOCK(cmd);
+ 	r = __load_mappings(cmd, policy, fn, context);
+-	up_read(&cmd->root_lock);
++	READ_UNLOCK(cmd);
+ 
+ 	return r;
+ }
+@@ -1222,18 +1264,18 @@ static int __dump_mappings(struct dm_cache_metadata *cmd)
+ 
+ void dm_cache_dump(struct dm_cache_metadata *cmd)
+ {
+-	down_read(&cmd->root_lock);
++	READ_LOCK_VOID(cmd);
+ 	__dump_mappings(cmd);
+-	up_read(&cmd->root_lock);
++	READ_UNLOCK(cmd);
+ }
+ 
+ int dm_cache_changed_this_transaction(struct dm_cache_metadata *cmd)
+ {
+ 	int r;
+ 
+-	down_read(&cmd->root_lock);
++	READ_LOCK(cmd);
+ 	r = cmd->changed;
+-	up_read(&cmd->root_lock);
++	READ_UNLOCK(cmd);
+ 
+ 	return r;
+ }
+@@ -1283,9 +1325,9 @@ int dm_cache_set_dirty(struct dm_cache_metadata *cmd,
+ void dm_cache_metadata_get_stats(struct dm_cache_metadata *cmd,
+ 				 struct dm_cache_statistics *stats)
+ {
+-	down_read(&cmd->root_lock);
++	READ_LOCK_VOID(cmd);
+ 	*stats = cmd->stats;
+-	up_read(&cmd->root_lock);
++	READ_UNLOCK(cmd);
+ }
+ 
+ void dm_cache_metadata_set_stats(struct dm_cache_metadata *cmd,
+@@ -1298,17 +1340,19 @@ void dm_cache_metadata_set_stats(struct dm_cache_metadata *cmd,
+ 
+ int dm_cache_commit(struct dm_cache_metadata *cmd, bool clean_shutdown)
+ {
+-	int r;
++	int r = -EINVAL;
+ 	flags_mutator mutator = (clean_shutdown ? set_clean_shutdown :
+ 				 clear_clean_shutdown);
+ 
+ 	WRITE_LOCK(cmd);
++	if (cmd->fail_io)
++		goto out;
++
+ 	r = __commit_transaction(cmd, mutator);
+ 	if (r)
+ 		goto out;
+ 
+ 	r = __begin_transaction(cmd);
+-
+ out:
+ 	WRITE_UNLOCK(cmd);
+ 	return r;
+@@ -1319,9 +1363,10 @@ int dm_cache_get_free_metadata_block_count(struct dm_cache_metadata *cmd,
+ {
+ 	int r = -EINVAL;
+ 
+-	down_read(&cmd->root_lock);
+-	r = dm_sm_get_nr_free(cmd->metadata_sm, result);
+-	up_read(&cmd->root_lock);
++	READ_LOCK(cmd);
++	if (!cmd->fail_io)
++		r = dm_sm_get_nr_free(cmd->metadata_sm, result);
++	READ_UNLOCK(cmd);
+ 
+ 	return r;
+ }
+@@ -1331,9 +1376,10 @@ int dm_cache_get_metadata_dev_size(struct dm_cache_metadata *cmd,
+ {
+ 	int r = -EINVAL;
+ 
+-	down_read(&cmd->root_lock);
+-	r = dm_sm_get_nr_blocks(cmd->metadata_sm, result);
+-	up_read(&cmd->root_lock);
++	READ_LOCK(cmd);
++	if (!cmd->fail_io)
++		r = dm_sm_get_nr_blocks(cmd->metadata_sm, result);
++	READ_UNLOCK(cmd);
+ 
+ 	return r;
+ }
+@@ -1424,7 +1470,13 @@ int dm_cache_write_hints(struct dm_cache_metadata *cmd, struct dm_cache_policy *
+ 
+ int dm_cache_metadata_all_clean(struct dm_cache_metadata *cmd, bool *result)
+ {
+-	return blocks_are_unmapped_or_clean(cmd, 0, cmd->cache_blocks, result);
++	int r;
++
++	READ_LOCK(cmd);
++	r = blocks_are_unmapped_or_clean(cmd, 0, cmd->cache_blocks, result);
++	READ_UNLOCK(cmd);
++
++	return r;
+ }
+ 
+ void dm_cache_metadata_set_read_only(struct dm_cache_metadata *cmd)
+@@ -1447,10 +1499,7 @@ int dm_cache_metadata_set_needs_check(struct dm_cache_metadata *cmd)
+ 	struct dm_block *sblock;
+ 	struct cache_disk_superblock *disk_super;
+ 
+-	/*
+-	 * We ignore fail_io for this function.
+-	 */
+-	down_write(&cmd->root_lock);
++	WRITE_LOCK(cmd);
+ 	set_bit(NEEDS_CHECK, &cmd->flags);
+ 
+ 	r = superblock_lock(cmd, &sblock);
+@@ -1465,31 +1514,68 @@ int dm_cache_metadata_set_needs_check(struct dm_cache_metadata *cmd)
+ 	dm_bm_unlock(sblock);
+ 
+ out:
+-	up_write(&cmd->root_lock);
++	WRITE_UNLOCK(cmd);
+ 	return r;
+ }
+ 
+-bool dm_cache_metadata_needs_check(struct dm_cache_metadata *cmd)
++int dm_cache_metadata_needs_check(struct dm_cache_metadata *cmd, bool *result)
+ {
+-	bool needs_check;
+-
+-	down_read(&cmd->root_lock);
+-	needs_check = !!test_bit(NEEDS_CHECK, &cmd->flags);
+-	up_read(&cmd->root_lock);
++	READ_LOCK(cmd);
++	*result = !!test_bit(NEEDS_CHECK, &cmd->flags);
++	READ_UNLOCK(cmd);
+ 
+-	return needs_check;
++	return 0;
+ }
+ 
+ int dm_cache_metadata_abort(struct dm_cache_metadata *cmd)
+ {
+-	int r;
++	int r = -EINVAL;
++	struct dm_block_manager *old_bm = NULL, *new_bm = NULL;
++
++	/* fail_io is double-checked with cmd->root_lock held below */
++	if (unlikely(cmd->fail_io))
++		return r;
++
++	/*
++	 * Replacement block manager (new_bm) is created and old_bm destroyed outside of
++	 * cmd root_lock to avoid ABBA deadlock that would result (due to life-cycle of
++	 * shrinker associated with the block manager's bufio client vs cmd root_lock).
++	 * - must take shrinker_rwsem without holding cmd->root_lock
++	 */
++	new_bm = dm_block_manager_create(cmd->bdev, DM_CACHE_METADATA_BLOCK_SIZE << SECTOR_SHIFT,
++					 CACHE_METADATA_CACHE_SIZE,
++					 CACHE_MAX_CONCURRENT_LOCKS);
+ 
+ 	WRITE_LOCK(cmd);
+-	__destroy_persistent_data_objects(cmd);
+-	r = __create_persistent_data_objects(cmd, false);
++	if (cmd->fail_io) {
++		WRITE_UNLOCK(cmd);
++		goto out;
++	}
++
++	__destroy_persistent_data_objects(cmd, false);
++	old_bm = cmd->bm;
++	if (IS_ERR(new_bm)) {
++		DMERR("could not create block manager during abort");
++		cmd->bm = NULL;
++		r = PTR_ERR(new_bm);
++		goto out_unlock;
++	}
++
++	cmd->bm = new_bm;
++	r = __open_or_format_metadata(cmd, false);
++	if (r) {
++		cmd->bm = NULL;
++		goto out_unlock;
++	}
++	new_bm = NULL;
++out_unlock:
+ 	if (r)
+ 		cmd->fail_io = true;
+ 	WRITE_UNLOCK(cmd);
++	dm_block_manager_destroy(old_bm);
++out:
++	if (new_bm && !IS_ERR(new_bm))
++		dm_block_manager_destroy(new_bm);
+ 
+ 	return r;
+ }

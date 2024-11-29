@@ -106,6 +106,9 @@ extern void fpstate_sanitize_xstate(struct fpu *fpu);
 #define user_insn(insn, output, input...)				\
 ({									\
 	int err;							\
+									\
+	might_fault();							\
+									\
 	asm volatile(ASM_STAC "\n"					\
 		     "1:" #insn "\n\t"					\
 		     "2: " ASM_CLAC "\n"				\
@@ -209,6 +212,14 @@ static inline void copy_fxregs_to_kernel(struct fpu *fpu)
 			     : "=m" (fpu->state.fxsave)
 			     : [fx] "R" (&fpu->state.fxsave));
 	}
+}
+
+static inline void fxsave(struct fxregs_state *fx)
+{
+	if (IS_ENABLED(CONFIG_X86_32))
+		asm volatile( "fxsave %[fx]" : [fx] "=m" (*fx));
+	else
+		asm volatile("fxsaveq %[fx]" : [fx] "=m" (*fx));
 }
 
 /* These macros all use (%edi)/(%rdi) as the single memory argument. */

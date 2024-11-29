@@ -1,0 +1,20 @@
+--- drivers/scsi/device_handler/scsi_dh_rdac.c
++++ drivers/scsi/device_handler/scsi_dh_rdac.c
+@@ -562,7 +562,7 @@ static int mode_select_handle_sense(struct scsi_device *sdev,
+ 			/*
+ 			 * Command Lock contention
+ 			 */
+-			err = SCSI_DH_RETRY;
++			err = SCSI_DH_IMM_RETRY;
+ 		break;
+ 	default:
+ 		break;
+@@ -612,6 +612,8 @@ retry:
+ 		err = mode_select_handle_sense(sdev, h->sense);
+ 		if (err == SCSI_DH_RETRY && retry_cnt--)
+ 			goto retry;
++		if (err == SCSI_DH_IMM_RETRY)
++			goto retry;
+ 	}
+ 	if (err == SCSI_DH_OK) {
+ 		h->state = RDAC_STATE_ACTIVE;

@@ -1124,7 +1124,8 @@ static void _rtl8723be_enable_aspm_back_door(struct ieee80211_hw *hw)
 
 	/* Configuration Space offset 0x70f BIT7 is used to control L0S */
 	tmp8 = _rtl8723be_dbi_read(rtlpriv, 0x70f);
-	_rtl8723be_dbi_write(rtlpriv, 0x70f, tmp8 | BIT(7));
+	_rtl8723be_dbi_write(rtlpriv, 0x70f, tmp8 | BIT(7) |
+			     ASPM_L1_LATENCY << 3);
 
 	/* Configuration Space offset 0x719 Bit3 is for L1
 	 * BIT4 is for clock request
@@ -1590,6 +1591,10 @@ void rtl8723be_set_check_bssid(struct ieee80211_hw *hw, bool check_bssid)
 					      (u8 *)(&reg_rcr));
 	}
 
+	/* override ant_num / ant_path */
+	if (mod_params->ant_sel)
+		rtlpriv->btcoexist.btc_info.ant_num =
+			(mod_params->ant_sel == 1 ? ANT_X2 : ANT_X1);
 }
 
 int rtl8723be_set_network_type(struct ieee80211_hw *hw,

@@ -44,6 +44,8 @@ static int bpf_array_alloc_percpu(struct bpf_array *array)
 		}
 		array->pptrs[i] = ptr;
 	}
+	array->index_mask = index_mask;
+	array->map.unpriv_array = unpriv;
 
 	return 0;
 }

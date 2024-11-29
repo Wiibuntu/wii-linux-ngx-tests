@@ -308,6 +308,28 @@ static void complexmode_tryleave(struct sem_array *sma)
 		 */
 		return;
 	}
+	/*
+	 * Immediately after setting complex_mode to false,
+	 * a simple op can start. Thus: all memory writes
+	 * performed by the current operation must be visible
+	 * before we set complex_mode to false.
+	 */
+	smp_store_release(&sma->complex_mode, false);
+}
+
+#define SEM_GLOBAL_LOCK	(-1)
+/*
+ * Try to leave the mode that disallows simple operations:
+ * Caller must own sem_perm.lock.
+ */
+static void complexmode_tryleave(struct sem_array *sma)
+{
+	if (sma->complex_count)  {
+		/* Complex ops are sleeping.
+		 * We must stay in complex mode
+		 */
+		return;
+	}
 	if (sma->use_global_lock == 1) {
 		/*
 		 * Immediately after setting use_global_lock to 0,
@@ -2249,11 +2271,9 @@ void exit_sem(struct task_struct *tsk)
 		ipc_assert_locked_object(&sma->sem_perm);
 		list_del(&un->list_id);
 
-		/* we are the last process using this ulp, acquiring ulp->lock
-		 * isn't required. Besides that, we are also protected against
-		 * IPC_RMID as we hold sma->sem_perm lock now
-		 */
+		spin_lock(&ulp->lock);
 		list_del_rcu(&un->list_proc);
+		spin_unlock(&ulp->lock);
 
 		/* perform adjustments registered in un */
 		for (i = 0; i < sma->sem_nsems; i++) {
@@ -2321,6 +2341,8 @@ static int sysvipc_sem_proc_show(struct seq_file *s, void *it)
 		   from_kgid_munged(user_ns, sma->sem_perm.cgid),
 		   sem_otime,
 		   sma->sem_ctime);
+
+	complexmode_tryleave(sma);
 
 	complexmode_tryleave(sma);
 

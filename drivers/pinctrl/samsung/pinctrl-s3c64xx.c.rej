@@ -1,0 +1,10 @@
+--- drivers/pinctrl/samsung/pinctrl-s3c64xx.c
++++ drivers/pinctrl/samsung/pinctrl-s3c64xx.c
+@@ -713,6 +713,7 @@ static int s3c64xx_eint_eint0_init(struct samsung_pinctrl_drv_data *d)
+ 	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
+ 	if (!data) {
+ 		dev_err(dev, "could not allocate memory for wkup eint data\n");
++		of_node_put(eint0_np);
+ 		return -ENOMEM;
+ 	}
+ 	data->drvdata = d;

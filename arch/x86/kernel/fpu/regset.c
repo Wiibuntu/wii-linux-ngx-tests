@@ -157,6 +157,12 @@ int xstateregs_set(struct task_struct *target, const struct user_regset *regset,
 	if (ret)
 		fpstate_init(&fpu->state);
 
+	/*
+	 * In case of failure, mark all states as init:
+	 */
+	if (ret)
+		fpstate_init(&fpu->state);
+
 	return ret;
 }
 

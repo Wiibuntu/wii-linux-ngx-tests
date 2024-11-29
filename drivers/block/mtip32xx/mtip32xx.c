@@ -937,12 +937,14 @@ static bool mtip_commands_active(struct mtip_port *port)
  *
  * @port    Pointer to port data structure
  * @timeout Max duration to wait (ms)
+ * @atomic  gfp_t flag to indicate blockable context or not
  *
  * return value
  *	0	Success
  *	-EBUSY  Commands still active
  */
-static int mtip_quiesce_io(struct mtip_port *port, unsigned long timeout)
+static int mtip_quiesce_io(struct mtip_port *port, unsigned long timeout,
+								gfp_t atomic)
 {
 	unsigned long to;
 	bool active = true;
@@ -1017,6 +1019,7 @@ static int mtip_exec_internal_command(struct mtip_port *port,
 		.opts = opts
 	};
 	int rv = 0;
+	unsigned long start;
 
 	/* Make sure the buffer is 8 byte aligned. This is asic specific. */
 	if (buffer & 0x00000007) {
@@ -2254,6 +2257,8 @@ static void mtip_hw_submit_io(struct driver_data *dd, struct request *rq,
 		return;
 	}
 
+	start = jiffies;
+
 	/* Issue the command to the hardware */
 	mtip_issue_ncq_command(port, rq->tag);
 }
@@ -2754,6 +2759,42 @@ static void mtip_queue_cmd(struct request *req, void *data,
 	blk_abort_request(req);
 }
 
+static void mtip_softirq_done_fn(struct request *rq)
+{
+	struct mtip_cmd *cmd = blk_mq_rq_to_pdu(rq);
+	struct driver_data *dd = rq->q->queuedata;
+
+	/* Unmap the DMA scatter list entries */
+	dma_unmap_sg(&dd->pdev->dev, cmd->sg, cmd->scatter_ents,
+							cmd->direction);
+
+	if (unlikely(cmd->unaligned))
+		up(&dd->port->cmd_slot_unal);
+
+	blk_mq_end_request(rq, rq->errors);
+}
+
+static void mtip_abort_cmd(struct request *req, void *data,
+							bool reserved)
+{
+	struct driver_data *dd = data;
+
+	dbg_printk(MTIP_DRV_NAME " Aborting request, tag = %d\n", req->tag);
+
+	clear_bit(req->tag, dd->port->cmds_to_issue);
+	req->errors = -EIO;
+	mtip_softirq_done_fn(req);
+}
+
+static void mtip_queue_cmd(struct request *req, void *data,
+							bool reserved)
+{
+	struct driver_data *dd = data;
+
+	set_bit(req->tag, dd->port->cmds_to_issue);
+	blk_abort_request(req);
+}
+
 /*
  * service thread to issue queued commands
  *
@@ -2790,6 +2831,8 @@ static int mtip_service_thread(void *data)
 		if (unlikely(test_bit(MTIP_DDF_REMOVE_PENDING_BIT,
 				&dd->dd_flag)))
 			goto st_out;
+
+		set_bit(MTIP_PF_SVC_THD_ACTIVE_BIT, &port->flags);
 
 		set_bit(MTIP_PF_SVC_THD_ACTIVE_BIT, &port->flags);
 
@@ -2831,6 +2874,32 @@ restart_eh:
 			clear_bit(MTIP_PF_TO_ACTIVE_BIT, &dd->port->flags);
 
 			blk_mq_unquiesce_queue(dd->queue);
+		}
+
+		if (test_bit(MTIP_PF_TO_ACTIVE_BIT, &port->flags)) {
+			to = jiffies + msecs_to_jiffies(5000);
+
+			do {
+				mdelay(100);
+			} while (atomic_read(&dd->irq_workers_active) != 0 &&
+				time_before(jiffies, to));
+
+			if (atomic_read(&dd->irq_workers_active) != 0)
+				dev_warn(&dd->pdev->dev,
+					"Completion workers still active!");
+
+			spin_lock(dd->queue->queue_lock);
+			blk_mq_all_tag_busy_iter(*dd->tags.tags,
+							mtip_queue_cmd, dd);
+			spin_unlock(dd->queue->queue_lock);
+
+			set_bit(MTIP_PF_ISSUE_CMDS_BIT, &dd->port->flags);
+
+			if (mtip_device_reset(dd))
+				blk_mq_all_tag_busy_iter(*dd->tags.tags,
+							mtip_abort_cmd, dd);
+
+			clear_bit(MTIP_PF_TO_ACTIVE_BIT, &dd->port->flags);
 		}
 
 		if (test_bit(MTIP_PF_ISSUE_CMDS_BIT, &port->flags)) {
@@ -3508,6 +3577,28 @@ static void mtip_block_release(struct gendisk *disk, fmode_t mode)
 {
 }
 
+static int mtip_block_open(struct block_device *dev, fmode_t mode)
+{
+	struct driver_data *dd;
+
+	if (dev && dev->bd_disk) {
+		dd = (struct driver_data *) dev->bd_disk->private_data;
+
+		if (dd) {
+			if (test_bit(MTIP_DDF_REMOVAL_BIT,
+							&dd->dd_flag)) {
+				return -ENODEV;
+			}
+			return 0;
+		}
+	}
+	return -ENODEV;
+}
+
+void mtip_block_release(struct gendisk *disk, fmode_t mode)
+{
+}
+
 /*
  * Block device operation function.
  *
@@ -3952,6 +4043,22 @@ static void mtip_no_dev_cleanup(struct request *rq, void *data, bool reserv)
 
 	cmd->status = BLK_STS_IOERR;
 	blk_mq_complete_request(rq);
+}
+
+static void mtip_no_dev_cleanup(struct request *rq, void *data, bool reserv)
+{
+	struct driver_data *dd = (struct driver_data *)data;
+	struct mtip_cmd *cmd;
+
+	if (likely(!reserv))
+		blk_mq_complete_request(rq, -ENODEV);
+	else if (test_bit(MTIP_PF_IC_ACTIVE_BIT, &dd->port->flags)) {
+
+		cmd = mtip_cmd_from_tag(dd, MTIP_TAG_INTERNAL);
+		if (cmd->comp_func)
+			cmd->comp_func(dd->port, MTIP_TAG_INTERNAL,
+					cmd, -ENODEV);
+	}
 }
 
 /*

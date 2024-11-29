@@ -1,0 +1,10 @@
+--- drivers/net/ethernet/broadcom/bcmsysport.h
++++ drivers/net/ethernet/broadcom/bcmsysport.h
+@@ -660,6 +661,7 @@ struct bcm_sysport_priv {
+ 	int			wol_irq;
+ 
+ 	/* Transmit rings */
++	spinlock_t		desc_lock;
+ 	struct bcm_sysport_tx_ring tx_rings[TDMA_NUM_RINGS];
+ 
+ 	/* Receive queue */

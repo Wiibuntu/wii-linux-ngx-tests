@@ -1,0 +1,53 @@
+--- drivers/gpu/drm/drm_edid.c
++++ drivers/gpu/drm/drm_edid.c
+@@ -73,6 +73,10 @@
+ #define EDID_QUIRK_FORCE_8BPC			(1 << 8)
+ /* Force 12bpc */
+ #define EDID_QUIRK_FORCE_12BPC			(1 << 9)
++/* Force 6bpc */
++#define EDID_QUIRK_FORCE_6BPC			(1 << 10)
++/* Force 10bpc */
++#define EDID_QUIRK_FORCE_10BPC			(1 << 11)
+ 
+ struct detailed_mode_closure {
+ 	struct drm_connector *connector;
+@@ -146,8 +159,14 @@ static struct edid_quirk {
+ 	/* Medion MD 30217 PG */
+ 	{ "MED", 0x7b8, EDID_QUIRK_PREFER_LARGE_75 },
+ 
++	/* Lenovo G50 */
++	{ "SDC", 18514, EDID_QUIRK_FORCE_6BPC },
++
+ 	/* Panel in Samsung NP700G7A-S01PL notebook reports 6bpc */
+ 	{ "SEC", 0xd033, EDID_QUIRK_FORCE_8BPC },
++
++	/* Rotel RSX-1058 forwards sink's EDID but only does HDMI 1.1*/
++	{ "ETR", 13896, EDID_QUIRK_FORCE_8BPC },
+ };
+ 
+ /*
+@@ -3728,6 +3754,8 @@ static void drm_add_display_info(struct edid *edid,
+ 	if (!(edid->input & DRM_EDID_INPUT_DIGITAL))
+ 		return;
+ 
++	info->color_formats |= DRM_COLOR_FORMAT_RGB444;
++
+ 	/* Get data from CEA blocks if present */
+ 	edid_ext = drm_find_cea_extension(edid);
+ 	if (edid_ext) {
+@@ -3835,9 +3862,15 @@ int drm_add_edid_modes(struct drm_connector *connector, struct edid *edid)
+ 
+ 	drm_add_display_info(edid, &connector->display_info, connector);
+ 
++	if (quirks & EDID_QUIRK_FORCE_6BPC)
++		connector->display_info.bpc = 6;
++
+ 	if (quirks & EDID_QUIRK_FORCE_8BPC)
+ 		connector->display_info.bpc = 8;
+ 
++	if (quirks & EDID_QUIRK_FORCE_10BPC)
++		connector->display_info.bpc = 10;
++
+ 	if (quirks & EDID_QUIRK_FORCE_12BPC)
+ 		connector->display_info.bpc = 12;
+ 

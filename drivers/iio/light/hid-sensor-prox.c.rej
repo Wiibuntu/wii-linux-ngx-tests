@@ -1,0 +1,15 @@
+--- drivers/iio/light/hid-sensor-prox.c
++++ drivers/iio/light/hid-sensor-prox.c
+@@ -244,6 +248,12 @@ static int prox_parse_report(struct platform_device *pdev,
+ 			st->common_attributes.sensitivity.index,
+ 			st->common_attributes.sensitivity.report_id);
+ 	}
++
++	st->scale_precision = hid_sensor_format_scale(
++				hsdev->usage,
++				&st->prox_attr,
++				&st->scale_pre_decml, &st->scale_post_decml);
++
+ 	return ret;
+ }
+ 

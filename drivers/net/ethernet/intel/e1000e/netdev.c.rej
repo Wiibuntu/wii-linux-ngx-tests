@@ -1,0 +1,86 @@
+--- drivers/net/ethernet/intel/e1000e/netdev.c
++++ drivers/net/ethernet/intel/e1000e/netdev.c
+@@ -1180,6 +1178,7 @@ static void e1000e_tx_hwtstamp_work(struct work_struct *work)
+ 	struct e1000_hw *hw = &adapter->hw;
+ 
+ 	if (er32(TSYNCTXCTL) & E1000_TSYNCTXCTL_VALID) {
++		struct sk_buff *skb = adapter->tx_hwtstamp_skb;
+ 		struct skb_shared_hwtstamps shhwtstamps;
+ 		u64 txstmp;
+ 
+@@ -1188,9 +1187,14 @@ static void e1000e_tx_hwtstamp_work(struct work_struct *work)
+ 
+ 		e1000e_systim_to_hwtstamp(adapter, &shhwtstamps, txstmp);
+ 
+-		skb_tstamp_tx(adapter->tx_hwtstamp_skb, &shhwtstamps);
+-		dev_kfree_skb_any(adapter->tx_hwtstamp_skb);
++		/* Clear the global tx_hwtstamp_skb pointer and force writes
++		 * prior to notifying the stack of a Tx timestamp.
++		 */
+ 		adapter->tx_hwtstamp_skb = NULL;
++		wmb(); /* force write prior to skb_tstamp_tx */
++
++		skb_tstamp_tx(skb, &shhwtstamps);
++		dev_kfree_skb_any(skb);
+ 	} else if (time_after(jiffies, adapter->tx_hwtstamp_start
+ 			      + adapter->tx_timeout_factor * HZ)) {
+ 		dev_kfree_skb_any(adapter->tx_hwtstamp_skb);
+@@ -1957,8 +1961,10 @@ static irqreturn_t e1000_intr_msix_rx(int __always_unused irq, void *data)
+ 	 * previous interrupt.
+ 	 */
+ 	if (rx_ring->set_itr) {
+-		writel(1000000000 / (rx_ring->itr_val * 256),
+-		       rx_ring->itr_register);
++		u32 itr = rx_ring->itr_val ?
++			  1000000000 / (rx_ring->itr_val * 256) : 0;
++
++		writel(itr, rx_ring->itr_register);
+ 		rx_ring->set_itr = 0;
+ 	}
+ 
+@@ -5019,7 +5031,7 @@ static bool e1000e_has_link(struct e1000_adapter *adapter)
+ 	case e1000_media_type_copper:
+ 		if (hw->mac.get_link_status) {
+ 			ret_val = hw->mac.ops.check_for_link(hw);
+-			link_active = !hw->mac.get_link_status;
++			link_active = ret_val > 0;
+ 		} else {
+ 			link_active = true;
+ 		}
+@@ -5037,7 +5049,7 @@ static bool e1000e_has_link(struct e1000_adapter *adapter)
+ 		break;
+ 	}
+ 
+-	if ((ret_val == E1000_ERR_PHY) && (hw->phy.type == e1000_phy_igp_3) &&
++	if ((ret_val == -E1000_ERR_PHY) && (hw->phy.type == e1000_phy_igp_3) &&
+ 	    (er32(CTRL) & E1000_PHY_CTRL_GBE_DISABLE)) {
+ 		/* See e1000_kmrn_lock_loss_workaround_ich8lan() */
+ 		e_info("Gigabit has been disabled, downgrading speed\n");
+@@ -6334,7 +6358,7 @@ static int __e1000_shutdown(struct pci_dev *pdev, bool runtime)
+ 		e1000e_igp3_phy_powerdown_workaround_ich8lan(&adapter->hw);
+ 	} else if ((hw->mac.type == e1000_pch_lpt) ||
+ 		   (hw->mac.type == e1000_pch_spt)) {
+-		if (!(wufc & (E1000_WUFC_EX | E1000_WUFC_MC | E1000_WUFC_BC)))
++		if (wufc && !(wufc & (E1000_WUFC_EX | E1000_WUFC_MC | E1000_WUFC_BC)))
+ 			/* ULP does not support wake from unicast, multicast
+ 			 * or broadcast.
+ 			 */
+@@ -6597,12 +6621,17 @@ static int e1000e_pm_thaw(struct device *dev)
+ static int e1000e_pm_suspend(struct device *dev)
+ {
+ 	struct pci_dev *pdev = to_pci_dev(dev);
++	int rc;
+ 
+ 	e1000e_flush_lpic(pdev);
+ 
+ 	e1000e_pm_freeze(dev);
+ 
+-	return __e1000_shutdown(pdev, false);
++	rc = __e1000_shutdown(pdev, false);
++	if (rc)
++		e1000e_pm_thaw(dev);
++
++	return rc;
+ }
+ 
+ static int e1000e_pm_resume(struct device *dev)

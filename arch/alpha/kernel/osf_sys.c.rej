@@ -1,0 +1,51 @@
+--- arch/alpha/kernel/osf_sys.c
++++ arch/alpha/kernel/osf_sys.c
+@@ -556,24 +551,22 @@ SYSCALL_DEFINE0(getdtablesize)
+  */
+ SYSCALL_DEFINE2(osf_getdomainname, char __user *, name, int, namelen)
+ {
+-	unsigned len;
+-	int i;
+-
+-	if (!access_ok(VERIFY_WRITE, name, namelen))
+-		return -EFAULT;
++	int len, err = 0;
++	char *kname;
++	char tmp[32];
+ 
+-	len = namelen;
+-	if (len > 32)
+-		len = 32;
++	if (namelen < 0 || namelen > 32)
++		namelen = 32;
+ 
+ 	down_read(&uts_sem);
+-	for (i = 0; i < len; ++i) {
+-		__put_user(utsname()->domainname[i], name + i);
+-		if (utsname()->domainname[i] == '\0')
+-			break;
+-	}
++	kname = utsname()->domainname;
++	len = strnlen(kname, namelen);
++	len = min(len + 1, namelen);
++	memcpy(tmp, kname, len);
+ 	up_read(&uts_sem);
+ 
++	if (copy_to_user(name, tmp, len))
++		return -EFAULT;
+ 	return 0;
+ }
+ 
+@@ -1182,8 +1174,10 @@ SYSCALL_DEFINE4(osf_wait4, pid_t, pid, int __user *, ustatus, int, options,
+ 	if (!access_ok(VERIFY_WRITE, ur, sizeof(*ur)))
+ 		return -EFAULT;
+ 
+-	err = 0;
+-	err |= put_user(status, ustatus);
++	err = put_user(status, ustatus);
++	if (ret < 0)
++		return err ? err : ret;
++
+ 	err |= __put_user(r.ru_utime.tv_sec, &ur->ru_utime.tv_sec);
+ 	err |= __put_user(r.ru_utime.tv_usec, &ur->ru_utime.tv_usec);
+ 	err |= __put_user(r.ru_stime.tv_sec, &ur->ru_stime.tv_sec);

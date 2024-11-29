@@ -14,6 +14,7 @@
 #ifndef _NVME_H
 #define _NVME_H
 
+#include <linux/mutex.h>
 #include <linux/nvme.h>
 #include <linux/cdev.h>
 #include <linux/pci.h>
@@ -37,6 +38,13 @@ enum {
 	NVME_NS_LBA		= 0,
 	NVME_NS_LIGHTNVM	= 1,
 };
+
+/* The below value is the specific amount of delay needed before checking
+ * readiness in case of the PCI_DEVICE(0x1c58, 0x0003), which needs the
+ * NVME_QUIRK_DELAY_BEFORE_CHK_RDY quirk enabled. The value (in ms) was
+ * found empirically.
+ */
+#define NVME_QUIRK_DELAY_AMOUNT		2000
 
 /*
  * List of workarounds for devices that required behavior not specified in

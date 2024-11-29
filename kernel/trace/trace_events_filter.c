@@ -338,6 +338,9 @@ static int regex_match_full(char *str, struct regex *r, int len)
 
 static int regex_match_front(char *str, struct regex *r, int len)
 {
+	if (len < r->len)
+		return 0;
+
 	if (strncmp(str, r->pattern, r->len) == 0)
 		return 1;
 	return 0;
@@ -2003,6 +2006,10 @@ static int create_system_filter(struct trace_subsystem_dir *dir,
 		} else {
 			append_filter_err(ps, filter);
 		}
+	}
+	if (err && !set_str) {
+		free_event_filter(filter);
+		filter = NULL;
 	}
 	create_filter_finish(ps);
 

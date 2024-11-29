@@ -25,7 +25,17 @@ extern cpumask_t cpu_sibling_map[];
 extern cpumask_t cpu_core_map[];
 extern cpumask_t cpu_foreign_map[];
 
-#define raw_smp_processor_id() (current_thread_info()->cpu)
+static inline int raw_smp_processor_id(void)
+{
+#if defined(__VDSO__)
+	extern int vdso_smp_processor_id(void)
+		__compiletime_error("VDSO should not call smp_processor_id()");
+	return vdso_smp_processor_id();
+#else
+	return current_thread_info()->cpu;
+#endif
+}
+#define raw_smp_processor_id raw_smp_processor_id
 
 /* Map from cpu id to sequential logical cpu number.  This will only
    not be idempotent when cpus failed to come on-line.	*/
@@ -48,6 +58,8 @@ extern int __cpu_logical_map[NR_CPUS];
 extern cpumask_t cpu_coherent_mask;
 
 extern asmlinkage void smp_bootstrap(void);
+
+extern void calculate_cpu_foreign_map(void);
 
 extern void calculate_cpu_foreign_map(void);
 

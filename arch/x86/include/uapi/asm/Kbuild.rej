@@ -1,0 +1,10 @@
+--- arch/x86/include/uapi/asm/Kbuild
++++ arch/x86/include/uapi/asm/Kbuild
+@@ -27,7 +27,6 @@ header-y += ldt.h
+ header-y += mce.h
+ header-y += mman.h
+ header-y += msgbuf.h
+-header-y += msr-index.h
+ header-y += msr.h
+ header-y += mtrr.h
+ header-y += param.h

@@ -121,6 +121,8 @@ void save_mce_event(struct pt_regs *regs, long handled,
 	mce->initiator = mce_err->initiator;
 	mce->severity = mce_err->severity;
 
+	add_taint(TAINT_MACHINE_CHECK, LOCKDEP_NOW_UNRELIABLE);
+
 	/*
 	 * Populate the mce error_type and type-specific error_type.
 	 */

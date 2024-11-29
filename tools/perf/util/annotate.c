@@ -1490,7 +1490,7 @@ int symbol__disassemble(struct symbol *sym, struct map *map,
 		strcpy(symfs_filename, tmp);
 	}
 
-	snprintf(command, sizeof(command),
+	err = asprintf(&command,
 		 "%s %s%s --start-address=0x%016" PRIx64
 		 " --stop-address=0x%016" PRIx64
 		 " -l -d %s %s -C \"%s\" 2>/dev/null|grep -v \"%s:\"|expand",
@@ -1502,6 +1502,11 @@ int symbol__disassemble(struct symbol *sym, struct map *map,
 		 symbol_conf.annotate_asm_raw ? "" : "--no-show-raw",
 		 symbol_conf.annotate_src ? "-S" : "",
 		 symfs_filename, symfs_filename);
+
+	if (err < 0) {
+		pr_err("Failure allocating memory for the command to run\n");
+		goto out_remove_tmp;
+	}
 
 	pr_debug("Executing: %s\n", command);
 
@@ -1535,7 +1540,7 @@ int symbol__disassemble(struct symbol *sym, struct map *map,
 		 * If we were using debug info should retry with
 		 * original binary.
 		 */
-		goto out_remove_tmp;
+		goto out_free_command;
 	}
 
 	nline = 0;

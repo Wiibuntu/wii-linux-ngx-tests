@@ -1,0 +1,10 @@
+--- include/uapi/linux/netfilter_ipv4/ipt_ttl.h
++++ include/uapi/linux/netfilter_ipv4/ipt_ttl.h
+@@ -1,5 +1,5 @@
+-/* IP tables module for matching the value of the TTL
+- * (C) 2000 by Harald Welte <laforge@gnumonks.org> */
++/* TTL modification module for IP tables
++ * (C) 2000 by Harald Welte <laforge@netfilter.org> */
+ 
+ #ifndef _IPT_TTL_H
+ #define _IPT_TTL_H

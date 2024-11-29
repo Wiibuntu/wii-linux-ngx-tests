@@ -1,0 +1,11 @@
+--- crypto/pcbc.c
++++ crypto/pcbc.c
+@@ -152,7 +148,7 @@ static int crypto_pcbc_decrypt_inplace(struct blkcipher_desc *desc,
+ 	int bsize = crypto_cipher_blocksize(tfm);
+ 	unsigned int nbytes = walk->nbytes;
+ 	u8 *src = walk->src.virt.addr;
+-	u8 *iv = walk->iv;
++	u8 * const iv = walk->iv;
+ 	u8 tmpbuf[bsize];
+ 
+ 	do {

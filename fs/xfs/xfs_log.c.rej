@@ -1,0 +1,30 @@
+--- fs/xfs/xfs_log.c
++++ fs/xfs/xfs_log.c
+@@ -3325,8 +3327,6 @@ maybe_sleep:
+ 		 */
+ 		if (iclog->ic_state & XLOG_STATE_IOERROR)
+ 			return -EIO;
+-		if (log_flushed)
+-			*log_flushed = 1;
+ 	} else {
+ 
+ no_sleep:
+@@ -3434,8 +3434,6 @@ try_again:
+ 
+ 				xlog_wait(&iclog->ic_prev->ic_write_wait,
+ 							&log->l_icloglock);
+-				if (log_flushed)
+-					*log_flushed = 1;
+ 				already_slept = 1;
+ 				goto try_again;
+ 			}
+@@ -3469,9 +3467,6 @@ try_again:
+ 			 */
+ 			if (iclog->ic_state & XLOG_STATE_IOERROR)
+ 				return -EIO;
+-
+-			if (log_flushed)
+-				*log_flushed = 1;
+ 		} else {		/* just return */
+ 			spin_unlock(&log->l_icloglock);
+ 		}

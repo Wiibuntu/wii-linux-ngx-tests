@@ -24,6 +24,10 @@
 
 #include <linux/bitops.h>
 
+#ifdef CONFIG_THREAD_INFO_IN_TASK
+#define current_thread_info() ((struct thread_info *)current)
+#endif
+
 /*
  * For per-arch arch_within_stack_frames() implementations, defined in
  * asm/thread_info.h.

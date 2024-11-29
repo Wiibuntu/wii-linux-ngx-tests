@@ -451,6 +451,7 @@ static void walk_p4d_level(struct seq_file *m, struct pg_state *st, pgd_t addr, 
 		} else
 			note_page(m, st, __pgprot(0), 2);
 
+		cond_resched();
 		start++;
 	}
 }

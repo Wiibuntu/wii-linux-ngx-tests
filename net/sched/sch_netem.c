@@ -419,6 +419,25 @@ static void netem_enqueue_skb_head(struct qdisc_skb_head *qh, struct sk_buff *sk
 	qh->qlen++;
 }
 
+/* netem can't properly corrupt a megapacket (like we get from GSO), so instead
+ * when we statistically choose to corrupt one, we instead segment it, returning
+ * the first packet to be corrupted, and re-enqueue the remaining frames
+ */
+static struct sk_buff *netem_segment(struct sk_buff *skb, struct Qdisc *sch)
+{
+	struct sk_buff *segs;
+	netdev_features_t features = netif_skb_features(skb);
+
+	segs = skb_gso_segment(skb, features & ~NETIF_F_GSO_MASK);
+
+	if (IS_ERR_OR_NULL(segs)) {
+		qdisc_reshape_fail(skb, sch);
+		return NULL;
+	}
+	consume_skb(skb);
+	return segs;
+}
+
 /*
  * Insert one skb into qdisc.
  * Note: parent depends on return value to account for queue length.
@@ -467,7 +486,7 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	 * skb will be queued.
 	 */
 	if (count > 1 && (skb2 = skb_clone(skb, GFP_ATOMIC)) != NULL) {
-		struct Qdisc *rootq = qdisc_root(sch);
+		struct Qdisc *rootq = qdisc_root_bh(sch);
 		u32 dupsave = q->duplicate; /* prevent duplicating a dup... */
 
 		q->duplicate = 0;
@@ -730,7 +749,7 @@ static int get_dist_table(struct Qdisc *sch, const struct nlattr *attr)
 	struct disttable *d;
 	int i;
 
-	if (n > NETEM_DIST_MAX)
+	if (!n || n > NETEM_DIST_MAX)
 		return -EINVAL;
 
 	d = kvmalloc(sizeof(struct disttable) + n * sizeof(s16), GFP_KERNEL);
@@ -910,6 +929,7 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt)
 	if (ret < 0)
 		return ret;
 
+	sch_tree_lock(sch);
 	/* backup q->clg and q->loss_model */
 	old_clg = q->clg;
 	old_loss_model = q->loss_model;
@@ -918,7 +938,7 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt)
 		ret = get_loss_clg(q, tb[TCA_NETEM_LOSS]);
 		if (ret) {
 			q->loss_model = old_loss_model;
-			return ret;
+			goto unlock;
 		}
 	} else {
 		q->loss_model = CLG_RANDOM;
@@ -933,7 +953,7 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt)
 			 */
 			q->clg = old_clg;
 			q->loss_model = old_loss_model;
-			return ret;
+			goto unlock;
 		}
 	}
 
@@ -981,6 +1001,8 @@ static int netem_change(struct Qdisc *sch, struct nlattr *opt)
 	if (tb[TCA_NETEM_SLOT])
 		get_slot(q, tb[TCA_NETEM_SLOT]);
 
+unlock:
+	sch_tree_unlock(sch);
 	return ret;
 }
 

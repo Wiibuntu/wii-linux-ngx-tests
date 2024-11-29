@@ -26,6 +26,8 @@
 #define PTR_SUB(x, y) (((char *) (x)) - ((unsigned long) (y)))
 #define PTR_DIFF(x, y) ((unsigned long)(((char *) (x)) - ((unsigned long) (y))))
 
+#define LINUX_NOTE_NAME "LINUX"
+
 static struct memblock_region oldmem_region;
 
 static struct memblock_type oldmem_type = {
@@ -427,6 +429,20 @@ static void *nt_vmcoreinfo(void *ptr)
 	if (!vmcoreinfo)
 		return ptr;
 	return nt_init_name(ptr, 0, vmcoreinfo, size, "VMCOREINFO");
+}
+
+/*
+ * Initialize final note (needed for /proc/vmcore code)
+ */
+static void *nt_final(void *ptr)
+{
+	Elf64_Nhdr *note;
+
+	note = (Elf64_Nhdr *) ptr;
+	note->n_namesz = 0;
+	note->n_descsz = 0;
+	note->n_type = 0;
+	return PTR_ADD(ptr, sizeof(Elf64_Nhdr));
 }
 
 /*

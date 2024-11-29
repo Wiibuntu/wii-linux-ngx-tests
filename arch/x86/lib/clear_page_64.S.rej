@@ -1,0 +1,9 @@
+--- arch/x86/lib/clear_page_64.S
++++ arch/x86/lib/clear_page_64.S
+@@ -1,5 +1,5 @@
+ #include <linux/linkage.h>
+-#include <asm/cpufeature.h>
++#include <asm/cpufeatures.h>
+ #include <asm/alternative-asm.h>
+ 
+ /*

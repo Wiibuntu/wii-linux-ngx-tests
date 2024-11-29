@@ -1,0 +1,14 @@
+--- drivers/scsi/scsi_transport_iscsi.c
++++ drivers/scsi/scsi_transport_iscsi.c
+@@ -3739,9 +3783,10 @@ iscsi_if_rx(struct sk_buff *skb)
+ 		struct nlmsghdr	*nlh;
+ 		struct iscsi_uevent *ev;
+ 		uint32_t group;
++		int retries = ISCSI_SEND_MAX_ALLOWED;
+ 
+ 		nlh = nlmsg_hdr(skb);
+-		if (nlh->nlmsg_len < sizeof(*nlh) ||
++		if (nlh->nlmsg_len < sizeof(*nlh) + sizeof(*ev) ||
+ 		    skb->len < nlh->nlmsg_len) {
+ 			break;
+ 		}

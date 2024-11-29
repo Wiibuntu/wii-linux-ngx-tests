@@ -1,0 +1,12 @@
+--- drivers/misc/eeprom/at24.c
++++ drivers/misc/eeprom/at24.c
+@@ -314,6 +317,9 @@ static ssize_t at24_eeprom_write(struct at24_data *at24, const char *buf,
+ 	unsigned long timeout, write_time;
+ 	unsigned next_page;
+ 
++	if (offset + count > at24->chip.byte_len)
++		return -EINVAL;
++
+ 	/* Get corresponding I2C address and adjust offset */
+ 	client = at24_translate_offset(at24, &offset);
+ 

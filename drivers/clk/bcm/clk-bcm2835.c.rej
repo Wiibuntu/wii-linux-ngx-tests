@@ -1,0 +1,92 @@
+--- drivers/clk/bcm/clk-bcm2835.c
++++ drivers/clk/bcm/clk-bcm2835.c
+@@ -890,8 +890,12 @@ static void bcm2835_pll_off(struct clk_hw *hw)
+ 	struct bcm2835_cprman *cprman = pll->cprman;
+ 	const struct bcm2835_pll_data *data = pll->data;
+ 
++	spin_lock(&cprman->regs_lock);
+ 	cprman_write(cprman, data->cm_ctrl_reg, CM_PLL_ANARST);
+-	cprman_write(cprman, data->a2w_ctrl_reg, A2W_PLL_CTRL_PWRDN);
++	cprman_write(cprman, data->a2w_ctrl_reg,
++		     cprman_read(cprman, data->a2w_ctrl_reg) |
++		     A2W_PLL_CTRL_PWRDN);
++	spin_unlock(&cprman->regs_lock);
+ }
+ 
+ static int bcm2835_pll_on(struct clk_hw *hw)
+@@ -1080,10 +1096,14 @@ static void bcm2835_pll_divider_off(struct clk_hw *hw)
+ 	struct bcm2835_cprman *cprman = divider->cprman;
+ 	const struct bcm2835_pll_divider_data *data = divider->data;
+ 
++	spin_lock(&cprman->regs_lock);
+ 	cprman_write(cprman, data->cm_reg,
+ 		     (cprman_read(cprman, data->cm_reg) &
+ 		      ~data->load_mask) | data->hold_mask);
+-	cprman_write(cprman, data->a2w_reg, A2W_PLL_CHANNEL_DISABLE);
++	cprman_write(cprman, data->a2w_reg,
++		     cprman_read(cprman, data->a2w_reg) |
++		     A2W_PLL_CHANNEL_DISABLE);
++	spin_unlock(&cprman->regs_lock);
+ }
+ 
+ static int bcm2835_pll_divider_on(struct clk_hw *hw)
+@@ -1092,12 +1112,14 @@ static int bcm2835_pll_divider_on(struct clk_hw *hw)
+ 	struct bcm2835_cprman *cprman = divider->cprman;
+ 	const struct bcm2835_pll_divider_data *data = divider->data;
+ 
++	spin_lock(&cprman->regs_lock);
+ 	cprman_write(cprman, data->a2w_reg,
+ 		     cprman_read(cprman, data->a2w_reg) &
+ 		     ~A2W_PLL_CHANNEL_DISABLE);
+ 
+ 	cprman_write(cprman, data->cm_reg,
+ 		     cprman_read(cprman, data->cm_reg) & ~data->hold_mask);
++	spin_unlock(&cprman->regs_lock);
+ 
+ 	return 0;
+ }
+@@ -1109,13 +1131,15 @@ static int bcm2835_pll_divider_set_rate(struct clk_hw *hw,
+ 	struct bcm2835_pll_divider *divider = bcm2835_pll_divider_from_hw(hw);
+ 	struct bcm2835_cprman *cprman = divider->cprman;
+ 	const struct bcm2835_pll_divider_data *data = divider->data;
+-	u32 cm;
+-	int ret;
++	u32 cm, div, max_div = 1 << A2W_PLL_DIV_BITS;
+ 
+-	ret = clk_divider_ops.set_rate(hw, rate, parent_rate);
+-	if (ret)
+-		return ret;
++	div = DIV_ROUND_UP_ULL(parent_rate, rate);
++
++	div = min(div, max_div);
++	if (div == max_div)
++		div = 0;
+ 
++	cprman_write(cprman, data->a2w_reg, div);
+ 	cm = cprman_read(cprman, data->cm_reg);
+ 	cprman_write(cprman, data->cm_reg, cm | data->load_mask);
+ 	cprman_write(cprman, data->cm_reg, cm & ~data->load_mask);
+@@ -1177,17 +1201,18 @@ static u32 bcm2835_clock_choose_div(struct clk_hw *hw,
+ 		div &= ~unused_frac_mask;
+ 	}
+ 
+-	/* Clamp to the limits. */
+-	div = max(div, unused_frac_mask + 1);
++	/* clamp to min divider of 1 */
++	div = max_t(u32, div, 1 << CM_DIV_FRAC_BITS);
++	/* clamp to the highest possible fractional divider */
+ 	div = min_t(u32, div, GENMASK(data->int_bits + CM_DIV_FRAC_BITS - 1,
+ 				      CM_DIV_FRAC_BITS - data->frac_bits));
+ 
+ 	return div;
+ }
+ 
+-static long bcm2835_clock_rate_from_divisor(struct bcm2835_clock *clock,
+-					    unsigned long parent_rate,
+-					    u32 div)
++static unsigned long bcm2835_clock_rate_from_divisor(struct bcm2835_clock *clock,
++						     unsigned long parent_rate,
++						     u32 div)
+ {
+ 	const struct bcm2835_clock_data *data = clock->data;
+ 	u64 temp;

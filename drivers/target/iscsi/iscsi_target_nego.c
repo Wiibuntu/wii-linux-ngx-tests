@@ -640,6 +640,20 @@ static void iscsi_target_do_login_rx(struct work_struct *work)
 
 	pr_debug("iscsi_target_do_login_rx after rx_login_io, %p, %s:%d\n",
 			conn, current->comm, current->pid);
+	/*
+	 * If iscsi_target_do_login_rx() has been invoked by ->sk_data_ready()
+	 * before initial PDU processing in iscsi_target_start_negotiation()
+	 * has completed, go ahead and retry until it's cleared.
+	 *
+	 * Otherwise if the TCP connection drops while this is occuring,
+	 * iscsi_target_start_negotiation() will detect the failure, call
+	 * cancel_delayed_work_sync(&conn->login_work), and cleanup the
+	 * remaining iscsi connection resources from iscsi_np process context.
+	 */
+	if (iscsi_target_sk_check_flag(conn, LOGIN_FLAGS_INITIAL_PDU)) {
+		schedule_delayed_work(&conn->login_work, msecs_to_jiffies(10));
+		return;
+	}
 
 	rc = iscsi_target_do_login(conn, login);
 	if (rc < 0) {
@@ -1070,6 +1084,7 @@ int iscsi_target_locate_portal(
 	iscsi_target_set_sock_callbacks(conn);
 
 	login->np = np;
+	conn->tpg = NULL;
 
 	login_req = (struct iscsi_login_req *) login->req;
 	payload_length = ntoh24(login_req->dlength);
@@ -1139,7 +1154,6 @@ int iscsi_target_locate_portal(
 	 */
 	sessiontype = strncmp(s_buf, DISCOVERY, 9);
 	if (!sessiontype) {
-		conn->tpg = iscsit_global->discovery_tpg;
 		if (!login->leading_connection)
 			goto get_target;
 
@@ -1156,9 +1170,11 @@ int iscsi_target_locate_portal(
 		 * Serialize access across the discovery struct iscsi_portal_group to
 		 * process login attempt.
 		 */
+		conn->tpg = iscsit_global->discovery_tpg;
 		if (iscsit_access_np(np, conn->tpg) < 0) {
 			iscsit_tx_login_rsp(conn, ISCSI_STATUS_CLS_TARGET_ERR,
 				ISCSI_LOGIN_STATUS_SVC_UNAVAILABLE);
+			conn->tpg = NULL;
 			ret = -1;
 			goto out;
 		}

@@ -1456,6 +1456,13 @@ out:
 	return remain;
 }
 
+static inline bool use_cmdparser(const struct intel_engine_cs *ring,
+				 u32 batch_len)
+{
+	return ring->requires_cmd_parser ||
+		(ring->using_cmd_parser && batch_len && USES_PPGTT(ring->dev));
+}
+
 static int
 eb_relocate_vma_slow(struct i915_execbuffer *eb, struct i915_vma *vma)
 {

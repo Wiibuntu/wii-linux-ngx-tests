@@ -1,0 +1,12 @@
+--- drivers/platform/x86/tc1100-wmi.c
++++ drivers/platform/x86/tc1100-wmi.c
+@@ -52,7 +52,9 @@ struct tc1100_data {
+ 	u32 jogdial;
+ };
+ 
++#ifdef CONFIG_PM
+ static struct tc1100_data suspend_data;
++#endif
+ 
+ /* --------------------------------------------------------------------------
+ 				Device Management

@@ -189,6 +189,22 @@ static inline void pte_clear(struct mm_struct *mm, unsigned long addr, pte_t *pt
 #define pte_present(pte)	(pte_val(pte) & _PAGE_PRESENT)
 #define pte_no_exec(pte)	(pte_val(pte) & _PAGE_NO_EXEC)
 
+static inline void set_pte_at(struct mm_struct *mm, unsigned long addr,
+			      pte_t *ptep, pte_t pteval)
+{
+	extern void __update_cache(unsigned long address, pte_t pte);
+
+	if (!pte_present(pteval))
+		goto cache_sync_done;
+
+	if (pte_present(*ptep) && (pte_pfn(*ptep) == pte_pfn(pteval)))
+		goto cache_sync_done;
+
+	__update_cache(addr, pteval);
+cache_sync_done:
+	set_pte(ptep, pteval);
+}
+
 /*
  * Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

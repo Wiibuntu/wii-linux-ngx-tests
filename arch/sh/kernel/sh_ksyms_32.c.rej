@@ -1,0 +1,12 @@
+--- arch/sh/kernel/sh_ksyms_32.c
++++ arch/sh/kernel/sh_ksyms_32.c
+@@ -34,6 +34,9 @@ DECLARE_EXPORT(__sdivsi3);
+ DECLARE_EXPORT(__lshrsi3);
+ DECLARE_EXPORT(__ashrsi3);
+ DECLARE_EXPORT(__ashlsi3);
++DECLARE_EXPORT(__lshrsi3_r0);
++DECLARE_EXPORT(__ashrsi3_r0);
++DECLARE_EXPORT(__ashlsi3_r0);
+ DECLARE_EXPORT(__ashiftrt_r4_6);
+ DECLARE_EXPORT(__ashiftrt_r4_7);
+ DECLARE_EXPORT(__ashiftrt_r4_8);

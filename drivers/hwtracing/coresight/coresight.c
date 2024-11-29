@@ -115,7 +115,7 @@ static int coresight_find_link_inport(struct coresight_device *csdev,
 	dev_err(&csdev->dev, "couldn't find inport, parent: %s, child: %s\n",
 		dev_name(&parent->dev), dev_name(&csdev->dev));
 
-	return 0;
+	return -ENODEV;
 }
 
 static int coresight_find_link_outport(struct coresight_device *csdev,
@@ -133,7 +133,7 @@ static int coresight_find_link_outport(struct coresight_device *csdev,
 	dev_err(&csdev->dev, "couldn't find outport, parent: %s, child: %s\n",
 		dev_name(&csdev->dev), dev_name(&child->dev));
 
-	return 0;
+	return -ENODEV;
 }
 
 static int coresight_enable_sink(struct coresight_device *csdev, u32 mode)
@@ -185,6 +185,9 @@ static int coresight_enable_link(struct coresight_device *csdev,
 		refport = outport;
 	else
 		refport = 0;
+
+	if (refport < 0)
+		return refport;
 
 	if (atomic_inc_return(&csdev->refcnt[refport]) == 1) {
 		if (link_ops(csdev)->enable) {
@@ -878,6 +881,50 @@ static void coresight_fixup_device_conns(struct coresight_device *csdev)
 			conn->child_dev = NULL;
 		}
 	}
+}
+
+static int coresight_remove_match(struct device *dev, void *data)
+{
+	int i;
+	struct coresight_device *csdev, *iterator;
+	struct coresight_connection *conn;
+
+	csdev = data;
+	iterator = to_coresight_device(dev);
+
+	/* No need to check oneself */
+	if (csdev == iterator)
+		return 0;
+
+	/*
+	 * Circle throuch all the connection of that component.  If we find
+	 * a connection whose name matches @csdev, remove it.
+	 */
+	for (i = 0; i < iterator->nr_outport; i++) {
+		conn = &iterator->conns[i];
+
+		if (conn->child_dev == NULL)
+			continue;
+
+		if (!strcmp(dev_name(&csdev->dev), conn->child_name)) {
+			iterator->orphan = true;
+			conn->child_dev = NULL;
+			/* No need to continue */
+			break;
+		}
+	}
+
+	/*
+	 * Returning '0' ensures that all known component on the
+	 * bus will be checked.
+	 */
+	return 0;
+}
+
+static void coresight_remove_conns(struct coresight_device *csdev)
+{
+	bus_for_each_dev(&coresight_bustype, NULL,
+			 csdev, coresight_remove_match);
 }
 
 static int coresight_remove_match(struct device *dev, void *data)

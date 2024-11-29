@@ -1,0 +1,40 @@
+--- net/ipv4/af_inet.c
++++ net/ipv4/af_inet.c
+@@ -1014,7 +1014,7 @@ static struct inet_protosw inetsw_array[] =
+ 		.type =       SOCK_DGRAM,
+ 		.protocol =   IPPROTO_ICMP,
+ 		.prot =       &ping_prot,
+-		.ops =        &inet_dgram_ops,
++		.ops =        &inet_sockraw_ops,
+ 		.flags =      INET_PROTOSW_REUSE,
+        },
+ 
+@@ -1108,7 +1108,7 @@ static int inet_sk_reselect_saddr(struct sock *sk)
+ 	struct ip_options_rcu *inet_opt;
+ 
+ 	inet_opt = rcu_dereference_protected(inet->inet_opt,
+-					     sock_owned_by_user(sk));
++					     lockdep_sock_is_held(sk));
+ 	if (inet_opt && inet_opt->opt.srr)
+ 		daddr = inet_opt->opt.faddr;
+ 
+@@ -1376,7 +1380,7 @@ static struct sk_buff **inet_gro_receive(struct sk_buff **head,
+ 	skb_gro_pull(skb, sizeof(*iph));
+ 	skb_set_transport_header(skb, skb_gro_offset(skb));
+ 
+-	pp = ops->callbacks.gro_receive(head, skb);
++	pp = call_gro_receive(ops->callbacks.gro_receive, head, skb);
+ 
+ out_unlock:
+ 	rcu_read_unlock();
+@@ -1676,8 +1700,8 @@ static struct packet_offload ip_packet_offload __read_mostly = {
+ static const struct net_offload ipip_offload = {
+ 	.callbacks = {
+ 		.gso_segment	= inet_gso_segment,
+-		.gro_receive	= inet_gro_receive,
+-		.gro_complete	= inet_gro_complete,
++		.gro_receive	= ipip_gro_receive,
++		.gro_complete	= ipip_gro_complete,
+ 	},
+ };
+ 

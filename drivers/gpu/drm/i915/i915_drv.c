@@ -766,6 +766,8 @@ static int i915_kick_out_vgacon(struct drm_i915_private *dev_priv)
 	}
 	console_unlock();
 
+	i915_rc6_ctx_wa_resume(dev_priv);
+
 	return ret;
 }
 #endif

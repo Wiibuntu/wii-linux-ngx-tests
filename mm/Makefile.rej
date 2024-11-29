@@ -1,0 +1,20 @@
+--- mm/Makefile
++++ mm/Makefile
+@@ -6,7 +6,7 @@ KASAN_SANITIZE_slab_common.o := n
+ KASAN_SANITIZE_slub.o := n
+ 
+ mmu-y			:= nommu.o
+-mmu-$(CONFIG_MMU)	:= gup.o highmem.o memory.o mincore.o \
++mmu-$(CONFIG_MMU)	:= gup.o memory.o mincore.o \
+ 			   mlock.o mmap.o mprotect.o mremap.o msync.o rmap.o \
+ 			   vmalloc.o pagewalk.o pgtable-generic.o
+ 
+@@ -49,7 +50,7 @@ obj-$(CONFIG_SPARSEMEM_VMEMMAP) += sparse-vmemmap.o
+ obj-$(CONFIG_SLOB) += slob.o
+ obj-$(CONFIG_MMU_NOTIFIER) += mmu_notifier.o
+ obj-$(CONFIG_KSM) += ksm.o
+-obj-$(CONFIG_PAGE_POISONING) += debug-pagealloc.o
++obj-$(CONFIG_PAGE_POISONING) += page_poison.o
+ obj-$(CONFIG_SLAB) += slab.o
+ obj-$(CONFIG_SLUB) += slub.o
+ obj-$(CONFIG_KMEMCHECK) += kmemcheck.o

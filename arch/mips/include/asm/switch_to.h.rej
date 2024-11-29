@@ -1,0 +1,20 @@
+--- arch/mips/include/asm/switch_to.h
++++ arch/mips/include/asm/switch_to.h
+@@ -101,6 +117,8 @@ do {	if (cpu_has_rw_llb) {						\
+ do {									\
+ 	__mips_mt_fpaff_switch_to(prev);				\
+ 	lose_fpu_inatomic(1, prev);					\
++	if (tsk_used_math(next))					\
++		__sanitize_fcr31(next);					\
+ 	if (cpu_has_dsp) {						\
+ 		__save_dsp(prev);					\
+ 		__restore_dsp(next);					\
+@@ -121,7 +139,7 @@ do {									\
+ 	__clear_software_ll_bit();					\
+ 	if (cpu_has_userlocal)						\
+ 		write_c0_userlocal(task_thread_info(next)->tp_value);	\
+-	__restore_watch();						\
++	__restore_watch(next);						\
+ 	(last) = resume(prev, next, task_thread_info(next));		\
+ } while (0)
+ 

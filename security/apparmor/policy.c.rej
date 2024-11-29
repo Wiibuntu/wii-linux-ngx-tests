@@ -1,0 +1,11 @@
+--- security/apparmor/policy.c
++++ security/apparmor/policy.c
+@@ -946,7 +962,7 @@ bool aa_may_manage_policy(int op)
+ 		return 0;
+ 	}
+ 
+-	if (!capable(CAP_MAC_ADMIN)) {
++	if (!policy_admin_capable()) {
+ 		audit_policy(op, GFP_KERNEL, NULL, "not policy admin", -EACCES);
+ 		return 0;
+ 	}

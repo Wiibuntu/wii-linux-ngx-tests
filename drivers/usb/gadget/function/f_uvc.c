@@ -216,8 +216,9 @@ uvc_function_ep0_complete(struct usb_ep *ep, struct usb_request *req)
 
 		memset(&v4l2_event, 0, sizeof(v4l2_event));
 		v4l2_event.type = UVC_EVENT_DATA;
-		uvc_event->data.length = req->actual;
-		memcpy(&uvc_event->data.data, req->buf, req->actual);
+		uvc_event->data.length = min_t(unsigned int, req->actual,
+			sizeof(uvc_event->data.data));
+		memcpy(&uvc_event->data.data, req->buf, uvc_event->data.length);
 		v4l2_event_queue(&uvc->vdev, &v4l2_event);
 	}
 }
@@ -598,6 +599,14 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 		     opts->streaming_maxpacket);
 	}
 
+	/* For SS, wMaxPacketSize has to be 1024 if bMaxBurst is not 0 */
+	if (opts->streaming_maxburst &&
+	    (opts->streaming_maxpacket % 1024) != 0) {
+		opts->streaming_maxpacket = roundup(opts->streaming_maxpacket, 1024);
+		INFO(cdev, "overriding streaming_maxpacket to %d\n",
+		     opts->streaming_maxpacket);
+	}
+
 	/* Fill in the FS/HS/SS Video Streaming specific descriptors from the
 	 * module parameters.
 	 *
@@ -621,7 +630,12 @@ uvc_function_bind(struct usb_configuration *c, struct usb_function *f)
 
 	uvc_hs_streaming_ep.wMaxPacketSize =
 		cpu_to_le16(max_packet_size | ((max_packet_mult - 1) << 11));
-	uvc_hs_streaming_ep.bInterval = opts->streaming_interval;
+
+	/* A high-bandwidth endpoint must specify a bInterval value of 1 */
+	if (max_packet_mult > 1)
+		uvc_hs_streaming_ep.bInterval = 1;
+	else
+		uvc_hs_streaming_ep.bInterval = opts->streaming_interval;
 
 	uvc_ss_streaming_ep.wMaxPacketSize = cpu_to_le16(max_packet_size);
 	uvc_ss_streaming_ep.bInterval = opts->streaming_interval;

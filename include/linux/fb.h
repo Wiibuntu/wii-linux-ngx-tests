@@ -572,7 +572,13 @@ static inline struct apertures_struct *alloc_apertures(unsigned int max_num) {
 #define fb_readq __raw_readq
 #define fb_writeb __raw_writeb
 #define fb_writew __raw_writew
-#define fb_writel __raw_writel
+#ifndef CONFIG_FB_GAMECUBE	/* XXX Why? O' why? */
+#  define fb_writel __raw_writel
+#else
+   extern unsigned int vifb_writel(unsigned int, void *);
+#  define fb_writel(b, addr) vifb_writel(b, addr)
+#  define fb_writel_real(b, addr) (*(/*volatile*/ u32 __iomem *)(addr) = (b))
+#endif
 #define fb_writeq __raw_writeq
 #define fb_memset memset_io
 #define fb_memcpy_fromfb memcpy_fromio
@@ -725,8 +731,6 @@ extern int fb_parse_edid(unsigned char *edid, struct fb_var_screeninfo *var);
 extern const unsigned char *fb_firmware_edid(struct device *device);
 extern void fb_edid_to_monspecs(unsigned char *edid,
 				struct fb_monspecs *specs);
-extern void fb_edid_add_monspecs(unsigned char *edid,
-				 struct fb_monspecs *specs);
 extern void fb_destroy_modedb(struct fb_videomode *modedb);
 extern int fb_find_mode_cvt(struct fb_videomode *mode, int margins, int rb);
 extern unsigned char *fb_ddc_read(struct i2c_adapter *adapter);
@@ -800,7 +804,6 @@ struct dmt_videomode {
 
 extern const char *fb_mode_option;
 extern const struct fb_videomode vesa_modes[];
-extern const struct fb_videomode cea_modes[65];
 extern const struct dmt_videomode dmt_modes[];
 
 struct fb_modelist {

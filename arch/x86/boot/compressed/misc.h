@@ -10,6 +10,7 @@
  */
 #undef CONFIG_PARAVIRT
 #undef CONFIG_PARAVIRT_SPINLOCKS
+#undef CONFIG_PAGE_TABLE_ISOLATION
 #undef CONFIG_KASAN
 
 #include <linux/linkage.h>
@@ -19,7 +20,6 @@
 #include <asm/page.h>
 #include <asm/boot.h>
 #include <asm/bootparam.h>
-#include <asm/bootparam_utils.h>
 
 #define BOOT_BOOT_H
 #include "../ctype.h"

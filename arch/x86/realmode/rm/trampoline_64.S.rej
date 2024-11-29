@@ -1,0 +1,10 @@
+--- arch/x86/realmode/rm/trampoline_64.S
++++ arch/x86/realmode/rm/trampoline_64.S
+@@ -30,6 +30,7 @@
+ #include <asm/msr.h>
+ #include <asm/segment.h>
+ #include <asm/processor-flags.h>
++#include <asm/kaiser.h>
+ #include "realmode.h"
+ 
+ 	.text

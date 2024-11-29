@@ -26,6 +26,7 @@
 
 #define ZYXEL_VENDOR_ID		0x0586
 #define ZYXEL_OMNINET_ID	0x1000
+#define ZYXEL_OMNI_56K_PLUS_ID	0x1500
 /* This one seems to be a re-branded ZyXEL device */
 #define BT_IGNITIONPRO_ID	0x2000
 
@@ -106,6 +107,17 @@ static int omninet_calc_num_ports(struct usb_serial *serial,
 	epds->num_bulk_out = 1;
 
 	return 1;
+}
+
+static int omninet_attach(struct usb_serial *serial)
+{
+	/* The second bulk-out endpoint is used for writing. */
+	if (serial->num_bulk_out < 2) {
+		dev_err(&serial->interface->dev, "missing endpoints\n");
+		return -ENODEV;
+	}
+
+	return 0;
 }
 
 static int omninet_port_probe(struct usb_serial_port *port)

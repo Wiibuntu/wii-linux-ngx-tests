@@ -1,0 +1,31 @@
+--- drivers/usb/serial/usb-serial-simple.c
++++ drivers/usb/serial/usb-serial-simple.c
+@@ -41,22 +41,18 @@ static struct usb_serial_driver vendor##_device = {		\
+ 	{ USB_DEVICE(0x0a21, 0x8001) }	/* MMT-7305WW */
+ DEVICE(carelink, CARELINK_IDS);
+ 
+-/* ZIO Motherboard USB driver */
+-#define ZIO_IDS()			\
+-	{ USB_DEVICE(0x1CBE, 0x0103) }
+-DEVICE(zio, ZIO_IDS);
++/* Infineon Flashloader driver */
++#define FLASHLOADER_IDS()		\
++	{ USB_DEVICE_INTERFACE_CLASS(0x058b, 0x0041, USB_CLASS_CDC_DATA) }, \
++	{ USB_DEVICE(0x8087, 0x0716) }, \
++	{ USB_DEVICE(0x8087, 0x0801) }
++DEVICE(flashloader, FLASHLOADER_IDS);
+ 
+ /* Funsoft Serial USB driver */
+ #define FUNSOFT_IDS()			\
+ 	{ USB_DEVICE(0x1404, 0xcddc) }
+ DEVICE(funsoft, FUNSOFT_IDS);
+ 
+-/* Infineon Flashloader driver */
+-#define FLASHLOADER_IDS()		\
+-	{ USB_DEVICE_INTERFACE_CLASS(0x058b, 0x0041, USB_CLASS_CDC_DATA) }, \
+-	{ USB_DEVICE(0x8087, 0x0716) }
+-DEVICE(flashloader, FLASHLOADER_IDS);
+-
+ /* Google Serial USB SubClass */
+ #define GOOGLE_IDS()						\
+ 	{ USB_VENDOR_AND_INTERFACE_INFO(0x18d1,			\

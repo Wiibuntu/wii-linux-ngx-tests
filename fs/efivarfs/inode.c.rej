@@ -1,0 +1,63 @@
+--- fs/efivarfs/inode.c
++++ fs/efivarfs/inode.c
+@@ -10,12 +10,14 @@
+ #include <linux/efi.h>
+ #include <linux/fs.h>
+ #include <linux/ctype.h>
++#include <linux/kmemleak.h>
+ #include <linux/slab.h>
+ 
+ #include "internal.h"
+ 
+ struct inode *efivarfs_get_inode(struct super_block *sb,
+-				const struct inode *dir, int mode, dev_t dev)
++				const struct inode *dir, int mode,
++				dev_t dev, bool is_removable)
+ {
+ 	struct inode *inode = new_inode(sb);
+ 
+@@ -23,6 +25,7 @@ struct inode *efivarfs_get_inode(struct super_block *sb,
+ 		inode->i_ino = get_next_ino();
+ 		inode->i_mode = mode;
+ 		inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
++		inode->i_flags = is_removable ? 0 : S_IMMUTABLE;
+ 		switch (mode & S_IFMT) {
+ 		case S_IFREG:
+ 			inode->i_fop = &efivarfs_file_operations;
+@@ -102,22 +105,17 @@ static void efivarfs_hex_to_guid(const char *str, efi_guid_t *guid)
+ static int efivarfs_create(struct inode *dir, struct dentry *dentry,
+ 			  umode_t mode, bool excl)
+ {
+-	struct inode *inode;
++	struct inode *inode = NULL;
+ 	struct efivar_entry *var;
+ 	int namelen, i = 0, err = 0;
++	bool is_removable = false;
+ 
+ 	if (!efivarfs_valid_name(dentry->d_name.name, dentry->d_name.len))
+ 		return -EINVAL;
+ 
+-	inode = efivarfs_get_inode(dir->i_sb, dir, mode, 0);
+-	if (!inode)
+-		return -ENOMEM;
+-
+ 	var = kzalloc(sizeof(struct efivar_entry), GFP_KERNEL);
+-	if (!var) {
+-		err = -ENOMEM;
+-		goto out;
+-	}
++	if (!var)
++		return -ENOMEM;
+ 
+ 	/* length of the variable name itself: remove GUID and separator */
+ 	namelen = dentry->d_name.len - EFI_VARIABLE_GUID_LEN - 1;
+@@ -149,7 +158,8 @@ static int efivarfs_create(struct inode *dir, struct dentry *dentry,
+ out:
+ 	if (err) {
+ 		kfree(var);
+-		iput(inode);
++		if (inode)
++			iput(inode);
+ 	}
+ 	return err;
+ }

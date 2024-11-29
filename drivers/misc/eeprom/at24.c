@@ -323,6 +323,9 @@ static ssize_t at24_eeprom_read_i2c(struct at24_data *at24, char *buf,
 	if (count > io_limit)
 		count = io_limit;
 
+	if (off + count > at24->chip.byte_len)
+		return -EINVAL;
+
 	/*
 	 * When we have a better choice than SMBus calls, use a combined I2C
 	 * message. Write address; then read up to io_limit data bytes. Note

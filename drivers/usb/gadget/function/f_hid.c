@@ -88,7 +88,7 @@ static struct usb_interface_descriptor hidg_interface_desc = {
 static struct hid_descriptor hidg_desc = {
 	.bLength			= sizeof hidg_desc,
 	.bDescriptorType		= HID_DT_HID,
-	.bcdHID				= 0x0101,
+	.bcdHID				= cpu_to_le16(0x0101),
 	.bCountryCode			= 0x00,
 	.bNumDescriptors		= 0x1,
 	/*.desc[0].bDescriptorType	= DYNAMIC */
@@ -654,7 +654,7 @@ static int hidg_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 		}
 		status = usb_ep_enable(hidg->in_ep);
 		if (status < 0) {
-			ERROR(cdev, "Enable IN endpoint FAILED!\n");
+			ERROR(cdev, "Enable OUT endpoint FAILED!\n");
 			goto fail;
 		}
 		hidg->in_ep->driver_data = hidg;

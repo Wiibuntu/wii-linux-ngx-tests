@@ -1,0 +1,10 @@
+--- arch/x86/kvm/hyperv.c
++++ arch/x86/kvm/hyperv.c
+@@ -26,6 +26,7 @@
+ #include "hyperv.h"
+ 
+ #include <linux/kvm_host.h>
++#include <linux/nospec.h>
+ #include <trace/events/kvm.h>
+ 
+ #include "trace.h"

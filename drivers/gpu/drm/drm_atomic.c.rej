@@ -1,0 +1,10 @@
+--- drivers/gpu/drm/drm_atomic.c
++++ drivers/gpu/drm/drm_atomic.c
+@@ -381,7 +383,6 @@ int drm_atomic_set_mode_prop_for_crtc(struct drm_crtc_state *state,
+ 		DRM_DEBUG_ATOMIC("Set [MODE:%s] for CRTC state %p\n",
+ 				 state->mode.name, state);
+ 	} else {
+-		memset(&state->mode, 0, sizeof(state->mode));
+ 		state->enable = false;
+ 		DRM_DEBUG_ATOMIC("Set [NOMODE] for CRTC state %p\n",
+ 				 state);

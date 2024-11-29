@@ -1,0 +1,10 @@
+--- drivers/platform/x86/Kconfig
++++ drivers/platform/x86/Kconfig
+@@ -95,6 +95,7 @@ config DELL_LAPTOP
+ 	tristate "Dell Laptop Extras"
+ 	depends on X86
+ 	depends on DCDBAS
++	depends on DMI
+ 	depends on BACKLIGHT_CLASS_DEVICE
+ 	depends on ACPI_VIDEO || ACPI_VIDEO = n
+ 	depends on RFKILL || RFKILL = n

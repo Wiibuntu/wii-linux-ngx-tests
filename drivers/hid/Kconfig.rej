@@ -1,0 +1,31 @@
+--- drivers/hid/Kconfig
++++ drivers/hid/Kconfig
+@@ -165,15 +165,15 @@ config HID_CHERRY
+ 	Support for Cherry Cymotion keyboard.
+ 
+ config HID_CHICONY
+-	tristate "Chicony Tactical pad"
+-	depends on HID
++	tristate "Chicony devices"
++	depends on USB_HID
+ 	default !EXPERT
+ 	---help---
+-	Support for Chicony Tactical pad.
++	Support for Chicony Tactical pad and special keys on Chicony keyboards.
+ 
+ config HID_CORSAIR
+ 	tristate "Corsair devices"
+-	depends on HID && USB && LEDS_CLASS
++	depends on USB_HID && LEDS_CLASS
+ 	---help---
+ 	Support for Corsair devices that are not fully compliant with the
+ 	HID standard.
+@@ -827,7 +827,7 @@ config THRUSTMASTER_FF
+ 
+ config HID_WACOM
+ 	tristate "Wacom Intuos/Graphire tablet support (USB)"
+-	depends on HID
++	depends on USB_HID
+ 	select POWER_SUPPLY
+ 	select NEW_LEDS
+ 	select LEDS_CLASS

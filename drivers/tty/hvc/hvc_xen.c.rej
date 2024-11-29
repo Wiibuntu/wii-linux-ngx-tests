@@ -1,0 +1,68 @@
+--- drivers/tty/hvc/hvc_xen.c
++++ drivers/tty/hvc/hvc_xen.c
+@@ -343,14 +398,15 @@ static int xen_initial_domain_console_init(void)
+ 		info = kzalloc(sizeof(struct xencons_info), GFP_KERNEL);
+ 		if (!info)
+ 			return -ENOMEM;
++		spin_lock_init(&info->ring_lock);
+ 	}
+ 
+ 	info->irq = bind_virq_to_irq(VIRQ_CONSOLE, 0, false);
+ 	info->vtermno = HVC_COOKIE;
+ 
+-	spin_lock(&xencons_lock);
++	spin_lock_irqsave(&xencons_lock, flags);
+ 	list_add_tail(&info->list, &xenconsoles);
+-	spin_unlock(&xencons_lock);
++	spin_unlock_irqrestore(&xencons_lock, flags);
+ 
+ 	return 0;
+ }
+@@ -378,6 +434,7 @@ void xen_console_resume(void)
+ 	}
+ }
+ 
++#ifdef CONFIG_HVC_XEN_FRONTEND
+ static void xencons_disconnect_backend(struct xencons_info *info)
+ {
+ 	if (info->irq > 0)
+@@ -404,10 +461,12 @@ static void xencons_free(struct xencons_info *info)
+ 
+ static int xen_console_remove(struct xencons_info *info)
+ {
++	unsigned long flags;
++
+ 	xencons_disconnect_backend(info);
+-	spin_lock(&xencons_lock);
++	spin_lock_irqsave(&xencons_lock, flags);
+ 	list_del(&info->list);
+-	spin_unlock(&xencons_lock);
++	spin_unlock_irqrestore(&xencons_lock, flags);
+ 	if (info->xbdev != NULL)
+ 		xencons_free(info);
+ 	else {
+@@ -418,7 +477,6 @@ static int xen_console_remove(struct xencons_info *info)
+ 	return 0;
+ }
+ 
+-#ifdef CONFIG_HVC_XEN_FRONTEND
+ static int xencons_remove(struct xenbus_device *dev)
+ {
+ 	return xen_console_remove(dev_get_drvdata(&dev->dev));
+@@ -435,7 +493,7 @@ static int xencons_connect_backend(struct xenbus_device *dev,
+ 	if (ret)
+ 		return ret;
+ 	info->evtchn = evtchn;
+-	irq = bind_evtchn_to_irq(evtchn);
++	irq = bind_interdomain_evtchn_to_irq_lateeoi(dev->otherend_id, evtchn);
+ 	if (irq < 0)
+ 		return irq;
+ 	info->irq = irq;
+@@ -489,6 +547,7 @@ static int xencons_probe(struct xenbus_device *dev,
+ {
+ 	int ret, devid;
+ 	struct xencons_info *info;
++	unsigned long flags;
+ 
+ 	devid = dev->nodename[strlen(dev->nodename) - 1] - '0';
+ 	if (devid == 0)

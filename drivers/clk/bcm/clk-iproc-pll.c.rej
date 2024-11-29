@@ -1,0 +1,17 @@
+--- drivers/clk/bcm/clk-iproc-pll.c
++++ drivers/clk/bcm/clk-iproc-pll.c
+@@ -674,13 +680,11 @@ void __init iproc_pll_clk_setup(struct device_node *node,
+ 		goto err_pll_register;
+ 
+ 	pll->clk_data.clks[0] = clk;
++	parent_name = clk_name;
+ 
+ 	/* now initialize and register all leaf clocks */
+ 	for (i = 1; i < num_clks; i++) {
+-		const char *clk_name;
+-
+ 		memset(&init, 0, sizeof(init));
+-		parent_name = node->name;
+ 
+ 		ret = of_property_read_string_index(node, "clock-output-names",
+ 						    i, &clk_name);

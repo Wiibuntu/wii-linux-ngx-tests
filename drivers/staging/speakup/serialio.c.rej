@@ -1,0 +1,19 @@
+--- drivers/staging/speakup/serialio.c
++++ drivers/staging/speakup/serialio.c
+@@ -28,9 +33,15 @@ const struct old_serial_port *spk_serial_init(int index)
+ 	int baud = 9600, quot = 0;
+ 	unsigned int cval = 0;
+ 	int cflag = CREAD | HUPCL | CLOCAL | B9600 | CS8;
+-	const struct old_serial_port *ser = rs_table + index;
++	const struct old_serial_port *ser;
+ 	int err;
+ 
++	if (index >= ARRAY_SIZE(rs_table)) {
++		pr_info("no port info for ttyS%d\n", index);
++		return NULL;
++	}
++	ser = rs_table + index;
++
+ 	/*	Divisor, bytesize and parity */
+ 	quot = ser->baud_base / baud;
+ 	cval = cflag & (CSIZE | CSTOPB);

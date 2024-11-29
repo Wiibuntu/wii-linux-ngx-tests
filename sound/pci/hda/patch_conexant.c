@@ -255,6 +255,7 @@ enum {
 	CXT_PINCFG_LEMOTE_A1205,
 	CXT_PINCFG_COMPAQ_CQ60,
 	CXT_FIXUP_STEREO_DMIC,
+	CXT_PINCFG_LENOVO_NOTEBOOK,
 	CXT_FIXUP_INC_MIC_BOOST,
 	CXT_FIXUP_HEADPHONE_MIC_PIN,
 	CXT_FIXUP_HEADPHONE_MIC,
@@ -735,6 +736,17 @@ static void cxt_fixup_mute_led_gpio(struct hda_codec *codec,
 }
 
 
+static void cxt_fixup_hp_gate_mic_jack(struct hda_codec *codec,
+				       const struct hda_fixup *fix,
+				       int action)
+{
+	/* the mic pin (0x19) doesn't give an unsolicited event;
+	 * probe the mic pin together with the headphone pin (0x16)
+	 */
+	if (action == HDA_FIXUP_ACT_PROBE)
+		snd_hda_jack_set_gating_jack(codec, 0x19, 0x16);
+}
+
 /* ThinkPad X200 & co with cxt5051 */
 static const struct hda_pintbl cxt_pincfg_lenovo_x200[] = {
 	{ 0x16, 0x042140ff }, /* HP (seq# overridden) */
@@ -797,6 +809,14 @@ static const struct hda_fixup cxt_fixups[] = {
 	[CXT_FIXUP_STEREO_DMIC] = {
 		.type = HDA_FIXUP_FUNC,
 		.v.func = cxt_fixup_stereo_dmic,
+	},
+	[CXT_PINCFG_LENOVO_NOTEBOOK] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x1a, 0x05d71030 },
+			{ }
+		},
+		.chain_id = CXT_FIXUP_STEREO_DMIC,
 	},
 	[CXT_FIXUP_INC_MIC_BOOST] = {
 		.type = HDA_FIXUP_FUNC,
@@ -906,6 +926,26 @@ static const struct hda_fixup cxt_fixups[] = {
 		},
 		.chained = true,
 		.chain_id = CXT_FIXUP_HEADSET_MIC,
+	},
+	[CXT_FIXUP_HP_DOCK] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			{ 0x16, 0x21011020 }, /* line-out */
+			{ 0x18, 0x2181103f }, /* line-in */
+			{ }
+		}
+	},
+	[CXT_FIXUP_HP_SPECTRE] = {
+		.type = HDA_FIXUP_PINS,
+		.v.pins = (const struct hda_pintbl[]) {
+			/* enable NID 0x1d for the speaker on top */
+			{ 0x1d, 0x91170111 },
+			{ }
+		}
+	},
+	[CXT_FIXUP_HP_GATE_MIC] = {
+		.type = HDA_FIXUP_FUNC,
+		.v.func = cxt_fixup_hp_gate_mic_jack,
 	},
 };
 
@@ -1115,7 +1155,10 @@ static int patch_conexant_auto(struct hda_codec *codec)
  */
 
 static const struct hda_device_id snd_hda_id_conexant[] = {
+	HDA_CODEC_ENTRY(0x14f11f86, "CX8070", patch_conexant_auto),
 	HDA_CODEC_ENTRY(0x14f12008, "CX8200", patch_conexant_auto),
+	HDA_CODEC_ENTRY(0x14f120d0, "CX11970", patch_conexant_auto),
+	HDA_CODEC_ENTRY(0x14f120d1, "SN6180", patch_conexant_auto),
 	HDA_CODEC_ENTRY(0x14f15045, "CX20549 (Venice)", patch_conexant_auto),
 	HDA_CODEC_ENTRY(0x14f15047, "CX20551 (Waikiki)", patch_conexant_auto),
 	HDA_CODEC_ENTRY(0x14f15051, "CX20561 (Hermosa)", patch_conexant_auto),

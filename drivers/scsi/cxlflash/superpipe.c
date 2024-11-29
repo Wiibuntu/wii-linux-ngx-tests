@@ -1626,6 +1626,13 @@ err1:
  * avoid a 3-way deadlock when multiple process recoveries operate in
  * parallel.
  *
+ * As this routine is called on ioctl context, it holds the ioctl r/w
+ * semaphore that is used to drain ioctls in recovery scenarios. The
+ * implementation to achieve the pacing described above (a local mutex)
+ * requires that the ioctl r/w semaphore be dropped and reacquired to
+ * avoid a 3-way deadlock when multiple process recoveries operate in
+ * parallel.
+ *
  * Because a user can detect an error condition before the kernel, it is
  * quite possible for this routine to act as the kernel's EEH detection
  * source (MMIO read of mbox_r). Because of this, there is a window of

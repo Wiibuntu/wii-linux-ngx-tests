@@ -1,0 +1,17 @@
+--- drivers/net/wan/x25_asy.c
++++ drivers/net/wan/x25_asy.c
+@@ -198,13 +198,12 @@ static void x25_asy_bump(struct x25_asy *sl)
+ 	count = sl->rcount;
+ 	dev->stats.rx_bytes += count;
+ 
+-	skb = dev_alloc_skb(count+1);
++	skb = dev_alloc_skb(count);
+ 	if (skb == NULL) {
+ 		netdev_warn(sl->dev, "memory squeeze, dropping packet\n");
+ 		dev->stats.rx_dropped++;
+ 		return;
+ 	}
+-	skb_push(skb, 1);	/* LAPB internal control */
+ 	memcpy(skb_put(skb, count), sl->rbuff, count);
+ 	skb->protocol = x25_type_trans(skb, sl->dev);
+ 	err = lapb_data_received(skb->dev, skb);

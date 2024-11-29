@@ -1,0 +1,11 @@
+--- arch/x86/um/asm/barrier.h
++++ arch/x86/um/asm/barrier.h
+@@ -3,7 +3,7 @@
+ 
+ #include <asm/asm.h>
+ #include <asm/segment.h>
+-#include <asm/cpufeature.h>
++#include <asm/cpufeatures.h>
+ #include <asm/cmpxchg.h>
+ #include <asm/nops.h>
+ 

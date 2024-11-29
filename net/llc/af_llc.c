@@ -98,8 +98,16 @@ static inline u8 llc_ui_header_len(struct sock *sk, struct sockaddr_llc *addr)
 {
 	u8 rc = LLC_PDU_LEN_U;
 
-	if (addr->sllc_test || addr->sllc_xid)
+	if (addr->sllc_test)
 		rc = LLC_PDU_LEN_U;
+	else if (addr->sllc_xid)
+		/* We need to expand header to sizeof(struct llc_xid_info)
+		 * since llc_pdu_init_as_xid_cmd() sets 4,5,6 bytes of LLC header
+		 * as XID PDU. In llc_ui_sendmsg() we reserved header size and then
+		 * filled all other space with user data. If we won't reserve this
+		 * bytes, llc_pdu_init_as_xid_cmd() will overwrite user data
+		 */
+		rc = LLC_PDU_LEN_U_XID;
 	else if (sk->sk_type == SOCK_STREAM)
 		rc = LLC_PDU_LEN_I;
 	return rc;
@@ -113,22 +121,26 @@ static inline u8 llc_ui_header_len(struct sock *sk, struct sockaddr_llc *addr)
  *
  *	Send data via reliable llc2 connection.
  *	Returns 0 upon success, non-zero if action did not succeed.
+ *
+ *	This function always consumes a reference to the skb.
  */
 static int llc_ui_send_data(struct sock* sk, struct sk_buff *skb, int noblock)
 {
 	struct llc_sock* llc = llc_sk(sk);
-	int rc = 0;
 
 	if (unlikely(llc_data_accept_state(llc->state) ||
 		     llc->remote_busy_flag ||
 		     llc->p_flag)) {
 		long timeout = sock_sndtimeo(sk, noblock);
+		int rc;
 
 		rc = llc_ui_wait_for_busy_core(sk, timeout);
+		if (rc) {
+			kfree_skb(skb);
+			return rc;
+		}
 	}
-	if (unlikely(!rc))
-		rc = llc_build_and_send_pkt(sk, skb);
-	return rc;
+	return llc_build_and_send_pkt(sk, skb);
 }
 
 static void llc_ui_sk_init(struct socket *sock, struct sock *sk)
@@ -199,9 +211,19 @@ static int llc_ui_release(struct socket *sock)
 		llc->laddr.lsap, llc->daddr.lsap);
 	if (!llc_send_disc(sk))
 		llc_ui_wait_for_disc(sk, sk->sk_rcvtimeo);
-	if (!sock_flag(sk, SOCK_ZAPPED))
+	if (!sock_flag(sk, SOCK_ZAPPED)) {
+		struct llc_sap *sap = llc->sap;
+
+		/* Hold this for release_sock(), so that llc_backlog_rcv()
+		 * could still use it.
+		 */
+		llc_sap_hold(sap);
 		llc_sap_remove_socket(llc->sap, sk);
-	release_sock(sk);
+		release_sock(sk);
+		llc_sap_put(sap);
+	} else {
+		release_sock(sk);
+	}
 	if (llc->dev)
 		dev_put(llc->dev);
 	sock_put(sk);
@@ -254,21 +276,26 @@ static int llc_ui_autobind(struct socket *sock, struct sockaddr_llc *addr)
 {
 	struct sock *sk = sock->sk;
 	struct llc_sock *llc = llc_sk(sk);
+	struct net_device *dev = NULL;
 	struct llc_sap *sap;
 	int rc = -EINVAL;
 
 	if (!sock_flag(sk, SOCK_ZAPPED))
 		goto out;
+	if (!addr->sllc_arphrd)
+		addr->sllc_arphrd = ARPHRD_ETHER;
+	if (addr->sllc_arphrd != ARPHRD_ETHER)
+		goto out;
 	rc = -ENODEV;
 	if (sk->sk_bound_dev_if) {
-		llc->dev = dev_get_by_index(&init_net, sk->sk_bound_dev_if);
-		if (llc->dev && addr->sllc_arphrd != llc->dev->type) {
-			dev_put(llc->dev);
-			llc->dev = NULL;
+		dev = dev_get_by_index(&init_net, sk->sk_bound_dev_if);
+		if (dev && addr->sllc_arphrd != dev->type) {
+			dev_put(dev);
+			dev = NULL;
 		}
 	} else
-		llc->dev = dev_getfirstbyhwtype(&init_net, addr->sllc_arphrd);
-	if (!llc->dev)
+		dev = dev_getfirstbyhwtype(&init_net, addr->sllc_arphrd);
+	if (!dev)
 		goto out;
 	rc = -EUSERS;
 	llc->laddr.lsap = llc_ui_autoport();
@@ -278,6 +305,11 @@ static int llc_ui_autobind(struct socket *sock, struct sockaddr_llc *addr)
 	sap = llc_sap_open(llc->laddr.lsap, NULL);
 	if (!sap)
 		goto out;
+
+	/* Note: We do not expect errors from this point. */
+	llc->dev = dev;
+	dev = NULL;
+
 	memcpy(llc->laddr.mac, llc->dev->dev_addr, IFHWADDRLEN);
 	memcpy(&llc->addr, addr, sizeof(llc->addr));
 	/* assign new connection to its SAP */
@@ -285,6 +317,7 @@ static int llc_ui_autobind(struct socket *sock, struct sockaddr_llc *addr)
 	sock_reset_flag(sk, SOCK_ZAPPED);
 	rc = 0;
 out:
+	dev_put(dev);
 	return rc;
 }
 
@@ -374,6 +407,11 @@ static int llc_ui_bind(struct socket *sock, struct sockaddr *uaddr, int addrlen)
 			goto out_put;
 		}
 	}
+
+	/* Note: We do not expect errors from this point. */
+	llc->dev = dev;
+	dev = NULL;
+
 	llc->laddr.lsap = addr->sllc_sap;
 	memcpy(llc->laddr.mac, addr->sllc_mac, IFHWADDRLEN);
 	memcpy(&llc->addr, addr, sizeof(llc->addr));
@@ -1227,6 +1265,8 @@ static int __init llc2_init(void)
 	llc_add_pack(LLC_DEST_SAP, llc_sap_handler);
 	llc_add_pack(LLC_DEST_CONN, llc_conn_handler);
 out:
+	dev_put(dev);
+	release_sock(sk);
 	return rc;
 out_sysctl:
 	llc_sysctl_exit();

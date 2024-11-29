@@ -1,0 +1,28 @@
+--- drivers/iio/adc/axp288_adc.c
++++ drivers/iio/adc/axp288_adc.c
+@@ -44,7 +42,7 @@ struct axp288_adc_info {
+ 	struct regmap *regmap;
+ };
+ 
+-static const struct iio_chan_spec const axp288_adc_channels[] = {
++static const struct iio_chan_spec axp288_adc_channels[] = {
+ 	{
+ 		.indexed = 1,
+ 		.type = IIO_TEMP,
+@@ -121,16 +119,6 @@ static int axp288_adc_read_channel(int *val, unsigned long address,
+ 	return IIO_VAL_INT;
+ }
+ 
+-static int axp288_adc_set_ts(struct regmap *regmap, unsigned int mode,
+-				unsigned long address)
+-{
+-	/* channels other than GPADC do not need to switch TS pin */
+-	if (address != AXP288_GP_ADC_H)
+-		return 0;
+-
+-	return regmap_write(regmap, AXP288_ADC_TS_PIN_CTRL, mode);
+-}
+-
+ static int axp288_adc_read_raw(struct iio_dev *indio_dev,
+ 			struct iio_chan_spec const *chan,
+ 			int *val, int *val2, long mask)

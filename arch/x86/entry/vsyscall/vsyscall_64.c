@@ -50,6 +50,7 @@ static enum { EMULATE, NATIVE, NONE } vsyscall_mode =
 #else
 	EMULATE;
 #endif
+unsigned long vsyscall_pgprot = __PAGE_KERNEL_VSYSCALL;
 
 static int __init vsyscall_setup(char *str)
 {
@@ -69,6 +70,11 @@ static int __init vsyscall_setup(char *str)
 	return -EINVAL;
 }
 early_param("vsyscall", vsyscall_setup);
+
+bool vsyscall_enabled(void)
+{
+	return vsyscall_mode != NONE;
+}
 
 static void warn_bad_vsyscall(const char *level, struct pt_regs *regs,
 			      const char *message)

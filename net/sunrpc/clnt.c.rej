@@ -1,0 +1,81 @@
+--- net/sunrpc/clnt.c
++++ net/sunrpc/clnt.c
+@@ -337,6 +337,11 @@ out:
+ 
+ static DEFINE_IDA(rpc_clids);
+ 
++void rpc_cleanup_clids(void)
++{
++	ida_destroy(&rpc_clids);
++}
++
+ static int rpc_alloc_clid(struct rpc_clnt *clnt)
+ {
+ 	int clid;
+@@ -442,7 +447,7 @@ out_no_rpciod:
+ 	return ERR_PTR(err);
+ }
+ 
+-struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
++static struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
+ 					struct rpc_xprt *xprt)
+ {
+ 	struct rpc_clnt *clnt = NULL;
+@@ -474,7 +479,6 @@ struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
+ 
+ 	return clnt;
+ }
+-EXPORT_SYMBOL_GPL(rpc_create_xprt);
+ 
+ /**
+  * rpc_create - create an RPC client and transport with one call
+@@ -500,6 +504,15 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
+ 	};
+ 	char servername[48];
+ 
++	if (args->bc_xprt) {
++		WARN_ON(args->protocol != XPRT_TRANSPORT_BC_TCP);
++		xprt = args->bc_xprt->xpt_bc_xprt;
++		if (xprt) {
++			xprt_get(xprt);
++			return rpc_create_xprt(args, xprt);
++		}
++	}
++
+ 	if (args->flags & RPC_CLNT_CREATE_INFINITE_SLOTS)
+ 		xprtargs.flags |= XPRT_CREATE_INFINITE_SLOTS;
+ 	if (args->flags & RPC_CLNT_CREATE_NO_IDLE_TIMEOUT)
+@@ -1163,7 +1176,7 @@ static int rpc_sockname(struct net *net, struct sockaddr *sap, size_t salen,
+ 		break;
+ 	default:
+ 		err = -EAFNOSUPPORT;
+-		goto out;
++		goto out_release;
+ 	}
+ 	if (err < 0) {
+ 		dprintk("RPC:       can't bind UDP socket (%d)\n", err);
+@@ -1725,9 +1738,6 @@ call_bind_status(struct rpc_task *task)
+ 			status = -EOPNOTSUPP;
+ 			break;
+ 		}
+-		if (task->tk_rebind_retry == 0)
+-			break;
+-		task->tk_rebind_retry--;
+ 		rpc_delay(task, 3*HZ);
+ 		goto retry_timeout;
+ 	case -ETIMEDOUT:
+@@ -1813,6 +1823,14 @@ call_connect_status(struct rpc_task *task)
+ 	task->tk_status = 0;
+ 	switch (status) {
+ 	case -ECONNREFUSED:
++		/* A positive refusal suggests a rebind is needed. */
++		if (RPC_IS_SOFTCONN(task))
++			break;
++		if (clnt->cl_autobind) {
++			rpc_force_rebind(clnt);
++			task->tk_action = call_bind;
++			return;
++		}
+ 	case -ECONNRESET:
+ 	case -ECONNABORTED:
+ 	case -ENETUNREACH:

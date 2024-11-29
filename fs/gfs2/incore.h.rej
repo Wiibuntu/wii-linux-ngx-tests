@@ -1,0 +1,10 @@
+--- fs/gfs2/incore.h
++++ fs/gfs2/incore.h
+@@ -367,6 +367,7 @@ struct gfs2_glock {
+ 			loff_t end;
+ 		} gl_vm;
+ 	};
++	struct rcu_head gl_rcu;
+ 	struct rhash_head gl_node;
+ };
+ 

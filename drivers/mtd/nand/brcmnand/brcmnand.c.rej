@@ -1,0 +1,13 @@
+--- drivers/mtd/nand/brcmnand/brcmnand.c
++++ drivers/mtd/nand/brcmnand/brcmnand.c
+@@ -434,7 +464,9 @@ static int brcmnand_revision_init(struct brcmnand_controller *ctrl)
+ 	}
+ 
+ 	/* Register offsets */
+-	if (ctrl->nand_version >= 0x0600)
++	if (ctrl->nand_version >= 0x0701)
++		ctrl->reg_offsets = brcmnand_regs_v71;
++	else if (ctrl->nand_version >= 0x0600)
+ 		ctrl->reg_offsets = brcmnand_regs_v60;
+ 	else if (ctrl->nand_version >= 0x0500)
+ 		ctrl->reg_offsets = brcmnand_regs_v50;

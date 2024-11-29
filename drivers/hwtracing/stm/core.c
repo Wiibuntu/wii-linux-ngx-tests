@@ -27,6 +27,7 @@
 #include <linux/stm.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/vmalloc.h>
 #include "stm.h"
 
 #include <uapi/linux/stm.h>
@@ -205,6 +206,9 @@ static void stm_output_claim(struct stm_device *stm, struct stm_output *output)
 	lockdep_assert_held(&stm->mc_lock);
 	lockdep_assert_held(&output->lock);
 
+	lockdep_assert_held(&stm->mc_lock);
+	lockdep_assert_held(&output->lock);
+
 	if (WARN_ON_ONCE(master->nr_free < output->nr_chans))
 		return;
 
@@ -222,11 +226,14 @@ stm_output_disclaim(struct stm_device *stm, struct stm_output *output)
 	lockdep_assert_held(&stm->mc_lock);
 	lockdep_assert_held(&output->lock);
 
+	lockdep_assert_held(&stm->mc_lock);
+	lockdep_assert_held(&output->lock);
+
 	bitmap_release_region(&master->chan_map[0], output->channel,
 			      ilog2(output->nr_chans));
 
-	output->nr_chans = 0;
 	master->nr_free += output->nr_chans;
+	output->nr_chans = 0;
 }
 
 /*
@@ -251,6 +258,9 @@ static int find_free_channels(unsigned long *bitmap, unsigned int start,
 			;
 		if (i == width)
 			return pos;
+
+		/* step over [pos..pos+i) to continue search */
+		pos += i;
 	}
 
 	return -1;
@@ -383,6 +393,8 @@ static int stm_char_open(struct inode *inode, struct file *file)
 	return nonseekable_open(inode, file);
 
 err_free:
+	/* matches class_find_device() above */
+	put_device(dev);
 	kfree(stmf);
 err_put_device:
 	/* matches class_find_device() above */
@@ -457,6 +469,9 @@ static ssize_t stm_char_write(struct file *file, const char __user *buf,
 	struct stm_device *stm = stmf->stm;
 	char *kbuf;
 	int err;
+
+	if (count + 1 > PAGE_SIZE)
+		count = PAGE_SIZE - 1;
 
 	if (count + 1 > PAGE_SIZE)
 		count = PAGE_SIZE - 1;
@@ -557,7 +572,7 @@ static int stm_char_policy_set_ioctl(struct stm_file *stmf, void __user *arg)
 {
 	struct stm_device *stm = stmf->stm;
 	struct stp_policy_id *id;
-	int ret = -EINVAL;
+	int ret = -EINVAL, wlimit = 1;
 	u32 size;
 
 	if (stmf->output.nr_chans)
@@ -585,8 +600,10 @@ static int stm_char_policy_set_ioctl(struct stm_file *stmf, void __user *arg)
 	if (id->__reserved_0 || id->__reserved_1)
 		goto err_free;
 
-	if (id->width < 1 ||
-	    id->width > PAGE_SIZE / stm->data->sw_mmiosz)
+	if (stm->data->sw_mmiosz)
+		wlimit = PAGE_SIZE / stm->data->sw_mmiosz;
+
+	if (id->width < 1 || id->width > wlimit)
 		goto err_free;
 
 	ret = stm_file_assign(stmf, id->id, id->width);
@@ -682,7 +699,7 @@ static void stm_device_release(struct device *dev)
 {
 	struct stm_device *stm = to_stm_device(dev);
 
-	kfree(stm);
+	vfree(stm);
 }
 
 int stm_register_device(struct device *parent, struct stm_data *stm_data,
@@ -800,6 +817,17 @@ void stm_unregister_device(struct stm_data *stm_data)
 	stm_data->stm = NULL;
 }
 EXPORT_SYMBOL_GPL(stm_unregister_device);
+
+/*
+ * stm::link_list access serialization uses a spinlock and a mutex; holding
+ * either of them guarantees that the list is stable; modification requires
+ * holding both of them.
+ *
+ * Lock ordering is as follows:
+ *   stm::link_mutex
+ *     stm::link_lock
+ *       src::link_lock
+ */
 
 /*
  * stm::link_list access serialization uses a spinlock and a mutex; holding
@@ -933,6 +961,7 @@ static int __stm_source_link_drop(struct stm_source_device *src,
 unlock:
 	spin_unlock(&src->link_lock);
 	spin_unlock(&stm->link_lock);
+	mutex_unlock(&stm->link_mutex);
 
 	/*
 	 * Call the unlink callbacks for both source and stm, when we know
@@ -1101,7 +1130,6 @@ int stm_source_register_device(struct device *parent,
 
 err:
 	put_device(&src->dev);
-	kfree(src);
 
 	return err;
 }

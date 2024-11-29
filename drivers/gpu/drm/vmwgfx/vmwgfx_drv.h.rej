@@ -1,0 +1,10 @@
+--- drivers/gpu/drm/vmwgfx/vmwgfx_drv.h
++++ drivers/gpu/drm/vmwgfx/vmwgfx_drv.h
+@@ -387,6 +387,7 @@ struct vmw_private {
+ 	spinlock_t hw_lock;
+ 	spinlock_t cap_lock;
+ 	bool has_dx;
++	bool assume_16bpp;
+ 
+ 	/*
+ 	 * VGA registers.

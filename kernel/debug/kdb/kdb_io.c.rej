@@ -1,0 +1,18 @@
+--- kernel/debug/kdb/kdb_io.c
++++ kernel/debug/kdb/kdb_io.c
+@@ -348,9 +347,13 @@ poll_again:
+ 			}
+ 			kdb_printf("\n");
+ 			for (i = 0; i < count; i++) {
+-				if (kallsyms_symbol_next(p_tmp, i) < 0)
++				ret = kallsyms_symbol_next(p_tmp, i, buf_size);
++				if (WARN_ON(!ret))
+ 					break;
+-				kdb_printf("%s ", p_tmp);
++				if (ret != -E2BIG)
++					kdb_printf("%s ", p_tmp);
++				else
++					kdb_printf("%s... ", p_tmp);
+ 				*(p_tmp + len) = '\0';
+ 			}
+ 			if (i >= dtab_count)

@@ -1,0 +1,19 @@
+--- drivers/mmc/host/sdhci-pltfm.c
++++ drivers/mmc/host/sdhci-pltfm.c
+@@ -148,14 +148,14 @@ struct sdhci_host *sdhci_pltfm_init(struct platform_device *pdev,
+ 	}
+ 
+ 	host->irq = platform_get_irq(pdev, 0);
+-
++	#ifndef CONFIG_MMC_SDHCI_OF_HLWD
+ 	if (!request_mem_region(iomem->start, resource_size(iomem),
+ 		mmc_hostname(host->mmc))) {
+ 		dev_err(&pdev->dev, "cannot request region\n");
+ 		ret = -EBUSY;
+ 		goto err_request;
+ 	}
+-
++	#endif
+ 	host->ioaddr = ioremap(iomem->start, resource_size(iomem));
+ 	if (!host->ioaddr) {
+ 		dev_err(&pdev->dev, "failed to remap registers\n");

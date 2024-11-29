@@ -1,0 +1,12 @@
+--- arch/arm64/kernel/suspend.c
++++ arch/arm64/kernel/suspend.c
+@@ -1,7 +1,9 @@
+ #include <linux/ftrace.h>
+ #include <linux/percpu.h>
+ #include <linux/slab.h>
++#include <asm/alternative.h>
+ #include <asm/cacheflush.h>
++#include <asm/cpufeature.h>
+ #include <asm/debug-monitors.h>
+ #include <asm/pgtable.h>
+ #include <asm/memory.h>

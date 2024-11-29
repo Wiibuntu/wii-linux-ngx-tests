@@ -692,6 +692,11 @@ struct vmbus_device {
 	bool perf_device;
 };
 
+enum hv_signal_policy {
+	HV_SIGNAL_POLICY_DEFAULT = 0,
+	HV_SIGNAL_POLICY_EXPLICIT,
+};
+
 struct vmbus_channel {
 	struct list_head listentry;
 

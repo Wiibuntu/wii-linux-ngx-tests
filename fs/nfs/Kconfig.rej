@@ -1,0 +1,10 @@
+--- fs/nfs/Kconfig
++++ fs/nfs/Kconfig
+@@ -121,6 +121,7 @@ config PNFS_FILE_LAYOUT
+ config PNFS_BLOCK
+ 	tristate
+ 	depends on NFS_V4_1 && BLK_DEV_DM
++	depends on 64BIT || LBDAF
+ 	default NFS_V4
+ 
+ config PNFS_OBJLAYOUT

@@ -1,0 +1,35 @@
+--- fs/binfmt_script.c
++++ fs/binfmt_script.c
+@@ -14,14 +14,31 @@
+ #include <linux/err.h>
+ #include <linux/fs.h>
+ 
++static inline bool spacetab(char c) { return c == ' ' || c == '\t'; }
++static inline char *next_non_spacetab(char *first, const char *last)
++{
++	for (; first <= last; first++)
++		if (!spacetab(*first))
++			return first;
++	return NULL;
++}
++static inline char *next_terminator(char *first, const char *last)
++{
++	for (; first <= last; first++)
++		if (spacetab(*first) || !*first)
++			return first;
++	return NULL;
++}
++
+ static int load_script(struct linux_binprm *bprm)
+ {
+ 	const char *i_arg, *i_name;
+-	char *cp;
++	char *cp, *buf_end;
+ 	struct file *file;
+ 	char interp[BINPRM_BUF_SIZE];
+ 	int retval;
+ 
++	/* Not ours to exec if we don't start with "#!". */
+ 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!'))
+ 		return -ENOEXEC;
+ 

@@ -619,6 +619,14 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 	if (err)
 		return err;
 
+	if (!ip_checkentry(&e->ip))
+		return -EINVAL;
+
+	err = xt_check_entry_offsets(e, e->elems, e->target_offset,
+				     e->next_offset);
+	if (err)
+		return err;
+
 	/* Check hooks & underflows */
 	for (h = 0; h < NF_INET_NUMHOOKS; h++) {
 		if (!(valid_hooks & (1 << h)))
@@ -1567,6 +1575,9 @@ compat_do_ipt_set_ctl(struct sock *sk,	int cmd, void __user *user,
 	}
 
 	return ret;
+ out_free:
+	kvfree(offsets);
+	return ret;
 }
 
 struct compat_ipt_get_entries {
@@ -1842,6 +1853,7 @@ icmp_match(const struct sk_buff *skb, struct xt_action_param *par)
 		par->hotdrop = true;
 		return false;
 	}
+	get.name[sizeof(get.name) - 1] = '\0';
 
 	return icmp_type_code_match(icmpinfo->type,
 				    icmpinfo->code[0],
@@ -1902,6 +1914,7 @@ static struct xt_match ipt_builtin_mt[] __read_mostly = {
 		.checkentry = icmp_checkentry,
 		.proto      = IPPROTO_ICMP,
 		.family     = NFPROTO_IPV4,
+		.me	    = THIS_MODULE,
 	},
 };
 

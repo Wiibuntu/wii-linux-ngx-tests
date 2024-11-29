@@ -1,0 +1,25 @@
+--- drivers/xen/xenbus/xenbus_client.c
++++ drivers/xen/xenbus/xenbus_client.c
+@@ -114,18 +114,22 @@ EXPORT_SYMBOL_GPL(xenbus_strstate);
+  */
+ int xenbus_watch_path(struct xenbus_device *dev, const char *path,
+ 		      struct xenbus_watch *watch,
++		      bool (*will_handle)(struct xenbus_watch *,
++					  const char **, unsigned int),
+ 		      void (*callback)(struct xenbus_watch *,
+ 				       const char **, unsigned int))
+ {
+ 	int err;
+ 
+ 	watch->node = path;
++	watch->will_handle = will_handle;
+ 	watch->callback = callback;
+ 
+ 	err = register_xenbus_watch(watch);
+ 
+ 	if (err) {
+ 		watch->node = NULL;
++		watch->will_handle = NULL;
+ 		watch->callback = NULL;
+ 		xenbus_dev_fatal(dev, err, "adding watch on %s", path);
+ 	}

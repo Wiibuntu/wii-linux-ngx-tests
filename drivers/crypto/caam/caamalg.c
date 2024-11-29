@@ -1102,6 +1102,7 @@ static void init_ablkcipher_job(u32 *sh_desc, dma_addr_t ptr,
 	} else {
 		if (edesc->dst_nents == 1) {
 			dst_dma = sg_dma_address(req->dst);
+			out_options = 0;
 		} else {
 			dst_dma = edesc->sec4_sg_dma +
 				sec4_sg_index * sizeof(struct sec4_sg_entry);
@@ -3444,6 +3445,15 @@ static int __init caam_algapi_init(void)
 
 		/* Skip AES algorithms if not supported by device */
 		if (!aes_inst && (alg_sel == OP_ALG_ALGSEL_AES))
+				continue;
+
+		/*
+		 * Check support for AES modes not available
+		 * on LP devices.
+		 */
+		if ((cha_vid & CHA_ID_LS_AES_MASK) == CHA_ID_LS_AES_LP)
+			if ((alg->class1_alg_type & OP_ALG_AAI_MASK) ==
+			     OP_ALG_AAI_XTS)
 				continue;
 
 		/*

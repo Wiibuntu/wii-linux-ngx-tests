@@ -1,0 +1,189 @@
+--- drivers/scsi/ipr.c
++++ drivers/scsi/ipr.c
+@@ -835,8 +835,10 @@ static void ipr_sata_eh_done(struct ipr_cmnd *ipr_cmd)
+ 
+ 	qc->err_mask |= AC_ERR_OTHER;
+ 	sata_port->ioasa.status |= ATA_BUSY;
+-	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ 	ata_qc_complete(qc);
++	if (ipr_cmd->eh_comp)
++		complete(ipr_cmd->eh_comp);
++	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ }
+ 
+ /**
+@@ -1488,23 +1490,22 @@ static void ipr_process_ccn(struct ipr_cmnd *ipr_cmd)
+ }
+ 
+ /**
+- * strip_and_pad_whitespace - Strip and pad trailing whitespace.
+- * @i:		index into buffer
+- * @buf:		string to modify
++ * strip_whitespace - Strip and pad trailing whitespace.
++ * @i:		size of buffer
++ * @buf:	string to modify
+  *
+- * This function will strip all trailing whitespace, pad the end
+- * of the string with a single space, and NULL terminate the string.
++ * This function will strip all trailing whitespace and
++ * NUL terminate the string.
+  *
+- * Return value:
+- * 	new length of string
+  **/
+-static int strip_and_pad_whitespace(int i, char *buf)
++static void strip_whitespace(int i, char *buf)
+ {
++	if (i < 1)
++		return;
++	i--;
+ 	while (i && buf[i] == ' ')
+ 		i--;
+-	buf[i+1] = ' ';
+-	buf[i+2] = '\0';
+-	return i + 2;
++	buf[i+1] = '\0';
+ }
+ 
+ /**
+@@ -1519,19 +1520,21 @@ static int strip_and_pad_whitespace(int i, char *buf)
+ static void ipr_log_vpd_compact(char *prefix, struct ipr_hostrcb *hostrcb,
+ 				struct ipr_vpd *vpd)
+ {
+-	char buffer[IPR_VENDOR_ID_LEN + IPR_PROD_ID_LEN + IPR_SERIAL_NUM_LEN + 3];
+-	int i = 0;
++	char vendor_id[IPR_VENDOR_ID_LEN + 1];
++	char product_id[IPR_PROD_ID_LEN + 1];
++	char sn[IPR_SERIAL_NUM_LEN + 1];
+ 
+-	memcpy(buffer, vpd->vpids.vendor_id, IPR_VENDOR_ID_LEN);
+-	i = strip_and_pad_whitespace(IPR_VENDOR_ID_LEN - 1, buffer);
++	memcpy(vendor_id, vpd->vpids.vendor_id, IPR_VENDOR_ID_LEN);
++	strip_whitespace(IPR_VENDOR_ID_LEN, vendor_id);
+ 
+-	memcpy(&buffer[i], vpd->vpids.product_id, IPR_PROD_ID_LEN);
+-	i = strip_and_pad_whitespace(i + IPR_PROD_ID_LEN - 1, buffer);
++	memcpy(product_id, vpd->vpids.product_id, IPR_PROD_ID_LEN);
++	strip_whitespace(IPR_PROD_ID_LEN, product_id);
+ 
+-	memcpy(&buffer[i], vpd->sn, IPR_SERIAL_NUM_LEN);
+-	buffer[IPR_SERIAL_NUM_LEN + i] = '\0';
++	memcpy(sn, vpd->sn, IPR_SERIAL_NUM_LEN);
++	strip_whitespace(IPR_SERIAL_NUM_LEN, sn);
+ 
+-	ipr_hcam_err(hostrcb, "%s VPID/SN: %s\n", prefix, buffer);
++	ipr_hcam_err(hostrcb, "%s VPID/SN: %s %s %s\n", prefix,
++		     vendor_id, product_id, sn);
+ }
+ 
+ /**
+@@ -4003,13 +4006,17 @@ static ssize_t ipr_store_update_fw(struct device *dev,
+ 	struct ipr_sglist *sglist;
+ 	char fname[100];
+ 	char *src;
+-	int len, result, dnld_size;
++	char *endline;
++	int result, dnld_size;
+ 
+ 	if (!capable(CAP_SYS_ADMIN))
+ 		return -EACCES;
+ 
+-	len = snprintf(fname, 99, "%s", buf);
+-	fname[len-1] = '\0';
++	snprintf(fname, sizeof(fname), "%s", buf);
++
++	endline = strchr(fname, '\n');
++	if (endline)
++		*endline = '\0';
+ 
+ 	if (request_firmware(&fw_entry, fname, &ioa_cfg->pdev->dev)) {
+ 		dev_err(&ioa_cfg->pdev->dev, "Firmware file %s not found\n", fname);
+@@ -5860,8 +5867,10 @@ static void ipr_erp_done(struct ipr_cmnd *ipr_cmd)
+ 		res->in_erp = 0;
+ 	}
+ 	scsi_dma_unmap(ipr_cmd->scsi_cmd);
+-	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ 	scsi_cmd->scsi_done(scsi_cmd);
++	if (ipr_cmd->eh_comp)
++		complete(ipr_cmd->eh_comp);
++	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ }
+ 
+ /**
+@@ -6251,8 +6260,10 @@ static void ipr_erp_start(struct ipr_ioa_cfg *ioa_cfg,
+ 	}
+ 
+ 	scsi_dma_unmap(ipr_cmd->scsi_cmd);
+-	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ 	scsi_cmd->scsi_done(scsi_cmd);
++	if (ipr_cmd->eh_comp)
++		complete(ipr_cmd->eh_comp);
++	list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ }
+ 
+ /**
+@@ -6278,8 +6289,10 @@ static void ipr_scsi_done(struct ipr_cmnd *ipr_cmd)
+ 		scsi_dma_unmap(scsi_cmd);
+ 
+ 		spin_lock_irqsave(ipr_cmd->hrrq->lock, lock_flags);
+-		list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ 		scsi_cmd->scsi_done(scsi_cmd);
++		if (ipr_cmd->eh_comp)
++			complete(ipr_cmd->eh_comp);
++		list_add_tail(&ipr_cmd->queue, &ipr_cmd->hrrq->hrrq_free_q);
+ 		spin_unlock_irqrestore(ipr_cmd->hrrq->lock, lock_flags);
+ 	} else {
+ 		spin_lock_irqsave(ioa_cfg->host->host_lock, lock_flags);
+@@ -9718,6 +9731,7 @@ static void ipr_init_ioa_cfg(struct ipr_ioa_cfg *ioa_cfg,
+ 	ioa_cfg->max_devs_supported = ipr_max_devs;
+ 
+ 	if (ioa_cfg->sis64) {
++		host->max_channel = IPR_MAX_SIS64_BUSES;
+ 		host->max_id = IPR_MAX_SIS64_TARGETS_PER_BUS;
+ 		host->max_lun = IPR_MAX_SIS64_LUNS_PER_TARGET;
+ 		if (ipr_max_devs > IPR_MAX_SIS64_DEVS)
+@@ -9726,6 +9740,7 @@ static void ipr_init_ioa_cfg(struct ipr_ioa_cfg *ioa_cfg,
+ 					   + ((sizeof(struct ipr_config_table_entry64)
+ 					       * ioa_cfg->max_devs_supported)));
+ 	} else {
++		host->max_channel = IPR_VSET_BUS;
+ 		host->max_id = IPR_MAX_NUM_TARGETS_PER_BUS;
+ 		host->max_lun = IPR_MAX_NUM_LUNS_PER_TARGET;
+ 		if (ipr_max_devs > IPR_MAX_PHYSICAL_DEVS)
+@@ -9735,7 +9750,6 @@ static void ipr_init_ioa_cfg(struct ipr_ioa_cfg *ioa_cfg,
+ 					       * ioa_cfg->max_devs_supported)));
+ 	}
+ 
+-	host->max_channel = IPR_VSET_BUS;
+ 	host->unique_id = host->host_no;
+ 	host->max_cmd_len = IPR_MAX_CDB_LEN;
+ 	host->can_queue = ioa_cfg->max_cmds;
+@@ -10091,6 +10105,7 @@ static int ipr_probe_ioa(struct pci_dev *pdev,
+ 		ioa_cfg->intr_flag = IPR_USE_MSI;
+ 	else {
+ 		ioa_cfg->intr_flag = IPR_USE_LSI;
++		ioa_cfg->clear_isr = 1;
+ 		ioa_cfg->nvectors = 1;
+ 		dev_info(&pdev->dev, "Cannot enable MSI.\n");
+ 	}
+@@ -10644,11 +10659,19 @@ static struct notifier_block ipr_notifier = {
+  **/
+ static int __init ipr_init(void)
+ {
++	int rc;
++
+ 	ipr_info("IBM Power RAID SCSI Device Driver version: %s %s\n",
+ 		 IPR_DRIVER_VERSION, IPR_DRIVER_DATE);
+ 
+ 	register_reboot_notifier(&ipr_notifier);
+-	return pci_register_driver(&ipr_driver);
++	rc = pci_register_driver(&ipr_driver);
++	if (rc) {
++		unregister_reboot_notifier(&ipr_notifier);
++		return rc;
++	}
++
++	return 0;
+ }
+ 
+ /**

@@ -57,6 +57,30 @@ static void msr_restore_context(struct saved_context *ctxt)
 	}
 }
 
+static void msr_save_context(struct saved_context *ctxt)
+{
+	struct saved_msr *msr = ctxt->saved_msrs.array;
+	struct saved_msr *end = msr + ctxt->saved_msrs.num;
+
+	while (msr < end) {
+		if (msr->valid)
+			rdmsrl(msr->info.msr_no, msr->info.reg.q);
+		msr++;
+	}
+}
+
+static void msr_restore_context(struct saved_context *ctxt)
+{
+	struct saved_msr *msr = ctxt->saved_msrs.array;
+	struct saved_msr *end = msr + ctxt->saved_msrs.num;
+
+	while (msr < end) {
+		if (msr->valid)
+			wrmsrl(msr->info.msr_no, msr->info.reg.q);
+		msr++;
+	}
+}
+
 /**
  *	__save_processor_state - save CPU registers before creating a
  *		hibernation image and before restoring the memory state from it

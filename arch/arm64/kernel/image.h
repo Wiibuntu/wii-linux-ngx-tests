@@ -62,6 +62,16 @@
 				 (__HEAD_FLAG_PHYS_BASE << 3))
 
 /*
+ * Prevent the symbol aliases below from being emitted into the kallsyms
+ * table, by forcing them to be absolute symbols (which are conveniently
+ * ignored by scripts/kallsyms) rather than section relative symbols.
+ * The distinction is only relevant for partial linking, and only for symbols
+ * that are defined within a section declaration (which is not the case for
+ * the definitions below) so the resulting values will be identical.
+ */
+#define KALLSYMS_HIDE(sym)	ABSOLUTE(sym)
+
+/*
  * These will output as part of the Image header, which should be little-endian
  * regardless of the endianness of the kernel. While constant values could be
  * endian swapped in head.S, all are done here for consistency.

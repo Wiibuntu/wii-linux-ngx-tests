@@ -722,6 +722,10 @@ nouveau_display_resume(struct drm_device *dev, bool runtime)
 
 	drm_helper_resume_force_mode(dev);
 
+	/* Make sure that drm and hw vblank irqs get resumed if needed. */
+	for (head = 0; head < dev->mode_config.num_crtc; head++)
+		drm_vblank_on(dev, head);
+
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct nouveau_crtc *nv_crtc = nouveau_crtc(crtc);
 

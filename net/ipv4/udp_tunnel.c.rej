@@ -1,0 +1,19 @@
+--- net/ipv4/udp_tunnel.c
++++ net/ipv4/udp_tunnel.c
+@@ -89,6 +89,8 @@ int udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb,
+ 	uh->source = src_port;
+ 	uh->len = htons(skb->len);
+ 
++	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
++
+ 	udp_set_csum(nocheck, skb, src, dst, skb->len);
+ 
+ 	return iptunnel_xmit(sk, rt, skb, src, dst, IPPROTO_UDP,
+@@ -99,6 +101,7 @@ EXPORT_SYMBOL_GPL(udp_tunnel_xmit_skb);
+ void udp_tunnel_sock_release(struct socket *sock)
+ {
+ 	rcu_assign_sk_user_data(sock->sk, NULL);
++	synchronize_rcu();
+ 	kernel_sock_shutdown(sock, SHUT_RDWR);
+ 	sock_release(sock);
+ }

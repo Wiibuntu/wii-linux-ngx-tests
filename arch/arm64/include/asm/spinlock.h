@@ -87,8 +87,8 @@ static inline int arch_spin_trylock(arch_spinlock_t *lock)
 	"	cbnz	%w1, 1f\n"
 	"	add	%w1, %w0, %3\n"
 	"	casa	%w0, %w1, %2\n"
-	"	and	%w1, %w1, #0xffff\n"
-	"	eor	%w1, %w1, %w0, lsr #16\n"
+	"	sub	%w1, %w1, %3\n"
+	"	eor	%w1, %w1, %w0\n"
 	"1:")
 	: "=&r" (lockval), "=&r" (tmp), "+Q" (*lock)
 	: "I" (1 << TICKET_SHIFT)
@@ -141,5 +141,15 @@ static inline int arch_spin_is_contended(arch_spinlock_t *lock)
 
 /* See include/linux/spinlock.h */
 #define smp_mb__after_spinlock()	smp_mb()
+
+/*
+ * Accesses appearing in program order before a spin_lock() operation
+ * can be reordered with accesses inside the critical section, by virtue
+ * of arch_spin_lock being constructed using acquire semantics.
+ *
+ * In cases where this is problematic (e.g. try_to_wake_up), an
+ * smp_mb__before_spinlock() can restore the required ordering.
+ */
+#define smp_mb__before_spinlock()	smp_mb()
 
 #endif /* __ASM_SPINLOCK_H */

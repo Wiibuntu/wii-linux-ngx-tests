@@ -1,0 +1,11 @@
+--- sound/soc/fsl/imx-spdif.c
++++ sound/soc/fsl/imx-spdif.c
+@@ -72,8 +72,6 @@ static int imx_spdif_audio_probe(struct platform_device *pdev)
+ 		goto end;
+ 	}
+ 
+-	platform_set_drvdata(pdev, data);
+-
+ end:
+ 	of_node_put(spdif_np);
+ 

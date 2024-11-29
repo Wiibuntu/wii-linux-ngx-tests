@@ -6,6 +6,8 @@
 #include <linux/types.h>
 #include <uapi/linux/lightnvm.h>
 
+#include <linux/types.h>
+
 enum {
 	NVM_IO_OK = 0,
 	NVM_IO_REQUEUE = 1,

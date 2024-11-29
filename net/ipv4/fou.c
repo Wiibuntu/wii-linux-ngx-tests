@@ -120,6 +120,7 @@ static int gue_udp_recv(struct sock *sk, struct sk_buff *skb)
 	struct guehdr *guehdr;
 	void *data;
 	u16 doffset = 0;
+	u8 proto_ctype;
 
 	if (!fou)
 		return 1;

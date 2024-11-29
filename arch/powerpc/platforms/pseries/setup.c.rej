@@ -1,0 +1,22 @@
+--- arch/powerpc/platforms/pseries/setup.c
++++ arch/powerpc/platforms/pseries/setup.c
+@@ -67,6 +67,7 @@
+ #include <asm/eeh.h>
+ #include <asm/reg.h>
+ #include <asm/plpar_wrappers.h>
++#include <asm/security_features.h>
+ 
+ #include "pseries.h"
+ 
+@@ -609,7 +704,10 @@ static void __init pSeries_setup_arch(void)
+ 
+ 	fwnmi_init();
+ 
+-	/* By default, only probe PCI (can be overriden by rtas_pci) */
++	pseries_setup_rfi_flush();
++	setup_stf_barrier();
++
++	/* By default, only probe PCI (can be overridden by rtas_pci) */
+ 	pci_add_flags(PCI_PROBE_ONLY);
+ 
+ 	/* Find and initialize PCI host bridges */

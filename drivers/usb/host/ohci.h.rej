@@ -1,0 +1,10 @@
+--- drivers/usb/host/ohci.h
++++ drivers/usb/host/ohci.h
+@@ -441,7 +464,6 @@ struct ohci_hcd {
+ #define	OHCI_QUIRK_AMD_PLL	0x200			/* AMD PLL quirk*/
+ #define	OHCI_QUIRK_AMD_PREFETCH	0x400			/* pre-fetch for ISO transfer */
+ #define	OHCI_QUIRK_GLOBAL_SUSPEND	0x800		/* must suspend ports */
+-
+ 	// there are also chip quirks/bugs in init logic
+ 
+ 	unsigned		prev_frame_no;

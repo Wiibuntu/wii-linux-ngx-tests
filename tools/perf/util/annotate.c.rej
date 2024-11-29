@@ -1,0 +1,21 @@
+--- tools/perf/util/annotate.c
++++ tools/perf/util/annotate.c
+@@ -1077,7 +1077,7 @@ int symbol__annotate(struct symbol *sym, struct map *map, size_t privsize)
+ 	struct dso *dso = map->dso;
+ 	char *filename = dso__build_id_filename(dso, NULL, 0);
+ 	bool free_filename = true;
+-	char command[PATH_MAX * 2];
++	char *command;
+ 	FILE *file;
+ 	int err = 0;
+ 	char symfs_filename[PATH_MAX];
+@@ -1242,6 +1247,9 @@ fallback:
+ 
+ 	pclose(file);
+ 
++out_free_command:
++	free(command);
++
+ out_remove_tmp:
+ 	if (dso__needs_decompress(dso))
+ 		unlink(symfs_filename);

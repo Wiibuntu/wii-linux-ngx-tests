@@ -1,0 +1,43 @@
+--- drivers/usb/misc/adutux.c
++++ drivers/usb/misc/adutux.c
+@@ -683,11 +686,11 @@ static int adu_probe(struct usb_interface *interface,
+ 
+ 	mutex_init(&dev->mtx);
+ 	spin_lock_init(&dev->buflock);
+-	dev->udev = udev;
++	dev->udev = usb_get_dev(udev);
+ 	init_waitqueue_head(&dev->read_wait);
+ 	init_waitqueue_head(&dev->write_wait);
+ 
+-	iface_desc = &interface->altsetting[0];
++	iface_desc = &interface->cur_altsetting[0];
+ 
+ 	/* set up the endpoint information */
+ 	for (i = 0; i < iface_desc->desc.bNumEndpoints; ++i) {
+@@ -803,19 +806,21 @@ error:
+ static void adu_disconnect(struct usb_interface *interface)
+ {
+ 	struct adu_device *dev;
+-	int minor;
+ 
+ 	dev = usb_get_intfdata(interface);
+ 
+-	mutex_lock(&dev->mtx);	/* not interruptible */
+-	dev->udev = NULL;	/* poison */
+-	minor = dev->minor;
+ 	usb_deregister_dev(interface, &adu_class);
+-	mutex_unlock(&dev->mtx);
++
++	usb_poison_urb(dev->interrupt_in_urb);
++	usb_poison_urb(dev->interrupt_out_urb);
+ 
+ 	mutex_lock(&adutux_mutex);
+ 	usb_set_intfdata(interface, NULL);
+ 
++	mutex_lock(&dev->mtx);	/* not interruptible */
++	dev->disconnected = 1;
++	mutex_unlock(&dev->mtx);
++
+ 	/* if the device is not opened, then we clean up right now */
+ 	if (!dev->open_count)
+ 		adu_delete(dev);

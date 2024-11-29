@@ -318,6 +318,9 @@ nouveau_ttm_init(struct nouveau_drm *drm)
 	arch_io_reserve_memtype_wc(device->func->resource_addr(device, 1),
 				   device->func->resource_size(device, 1));
 
+	arch_io_reserve_memtype_wc(device->func->resource_addr(device, 1),
+				   device->func->resource_size(device, 1));
+
 	ret = ttm_bo_init_mm(&drm->ttm.bdev, TTM_PL_VRAM,
 			      drm->gem.vram_available >> PAGE_SHIFT);
 	if (ret) {

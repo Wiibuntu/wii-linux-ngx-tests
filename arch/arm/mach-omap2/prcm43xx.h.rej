@@ -1,0 +1,10 @@
+--- arch/arm/mach-omap2/prcm43xx.h
++++ arch/arm/mach-omap2/prcm43xx.h
+@@ -39,6 +39,7 @@
+ 
+ /* RM RSTST offsets */
+ #define AM43XX_RM_GFX_RSTST_OFFSET			0x0014
++#define AM43XX_RM_PER_RSTST_OFFSET			0x0014
+ #define AM43XX_RM_WKUP_RSTST_OFFSET			0x0014
+ 
+ /* CM instances */

@@ -186,6 +186,14 @@ struct pinmux_irq {
 };
 
 /*
+ * Describe a pinmux configuration for a single-function pin with GPIO
+ * capability.
+ *   - fn: Function name
+ */
+#define PINMUX_SINGLE(fn)						\
+	PINMUX_DATA(fn##_MARK, FN_##fn)
+
+/*
  * Describe the mapping from GPIOs to a single IRQ
  *   - ids...: List of GPIOs that are mapped to the same IRQ
  */

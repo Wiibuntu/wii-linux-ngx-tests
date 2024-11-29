@@ -266,6 +266,7 @@ static int gssx_dec_option_array(struct xdr_stream *xdr,
 		kfree(oa->data);
 		return -ENOMEM;
 	}
+	groups_sort(creds->cr_group_info);
 
 	oa->data[0].option.data = CREDS_VALUE;
 	oa->data[0].option.len = sizeof(CREDS_VALUE);

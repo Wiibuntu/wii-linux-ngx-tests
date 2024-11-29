@@ -1,0 +1,93 @@
+--- drivers/xen/events/events_base.c
++++ drivers/xen/events/events_base.c
+@@ -737,14 +994,25 @@ static void pirq_query_unmask(int irq)
+ 
+ static void eoi_pirq(struct irq_data *data)
+ {
+-	int evtchn = evtchn_from_irq(data->irq);
++	struct irq_info *info = info_for_irq(data->irq);
++	int evtchn = info ? info->evtchn : 0;
+ 	struct physdev_eoi eoi = { .irq = pirq_from_irq(data->irq) };
+ 	int rc = 0;
+ 
+-	irq_move_irq(data);
++	if (!VALID_EVTCHN(evtchn))
++		return;
+ 
+-	if (VALID_EVTCHN(evtchn))
+-		clear_evtchn(evtchn);
++	if (unlikely(irqd_is_setaffinity_pending(data)) &&
++	    likely(!irqd_irq_disabled(data))) {
++		do_mask(info, EVT_MASK_REASON_TEMPORARY);
++
++		event_handler_exit(info);
++
++		irq_move_masked_irq(data);
++
++		do_unmask(info, EVT_MASK_REASON_TEMPORARY);
++	} else
++		event_handler_exit(info);
+ 
+ 	if (pirq_needs_eoi(data->irq)) {
+ 		rc = HYPERVISOR_physdev_op(PHYSDEVOP_eoi, &eoi);
+@@ -1687,8 +2089,8 @@ void rebind_evtchn_irq(int evtchn, int irq)
+ static int rebind_irq_to_cpu(unsigned irq, unsigned tcpu)
+ {
+ 	struct evtchn_bind_vcpu bind_vcpu;
+-	int evtchn = evtchn_from_irq(irq);
+-	int masked;
++	struct irq_info *info = info_for_irq(irq);
++	int evtchn = info ? info->evtchn : 0;
+ 
+ 	if (!VALID_EVTCHN(evtchn))
+ 		return -1;
+@@ -1729,28 +2130,41 @@ static int set_affinity_irq(struct irq_data *data, const struct cpumask *dest,
+ 
+ static void enable_dynirq(struct irq_data *data)
+ {
+-	int evtchn = evtchn_from_irq(data->irq);
++	struct irq_info *info = info_for_irq(data->irq);
++	evtchn_port_t evtchn = info ? info->evtchn : 0;
+ 
+ 	if (VALID_EVTCHN(evtchn))
+-		unmask_evtchn(evtchn);
++		do_unmask(info, EVT_MASK_REASON_EXPLICIT);
+ }
+ 
+ static void disable_dynirq(struct irq_data *data)
+ {
+-	int evtchn = evtchn_from_irq(data->irq);
++	struct irq_info *info = info_for_irq(data->irq);
++	evtchn_port_t evtchn = info ? info->evtchn : 0;
+ 
+ 	if (VALID_EVTCHN(evtchn))
+-		mask_evtchn(evtchn);
++		do_mask(info, EVT_MASK_REASON_EXPLICIT);
+ }
+ 
+ static void ack_dynirq(struct irq_data *data)
+ {
+-	int evtchn = evtchn_from_irq(data->irq);
++	struct irq_info *info = info_for_irq(data->irq);
++	evtchn_port_t evtchn = info ? info->evtchn : 0;
+ 
+-	irq_move_irq(data);
++	if (!VALID_EVTCHN(evtchn))
++		return;
+ 
+-	if (VALID_EVTCHN(evtchn))
+-		clear_evtchn(evtchn);
++	if (unlikely(irqd_is_setaffinity_pending(data)) &&
++	    likely(!irqd_irq_disabled(data))) {
++		do_mask(info, EVT_MASK_REASON_TEMPORARY);
++
++		event_handler_exit(info);
++
++		irq_move_masked_irq(data);
++
++		do_unmask(info, EVT_MASK_REASON_TEMPORARY);
++	} else
++		event_handler_exit(info);
+ }
+ 
+ static void mask_ack_dynirq(struct irq_data *data)

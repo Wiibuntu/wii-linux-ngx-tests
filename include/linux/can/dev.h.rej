@@ -1,0 +1,28 @@
+--- include/linux/can/dev.h
++++ include/linux/can/dev.h
+@@ -33,6 +34,7 @@ enum can_mode {
+  * CAN common private data
+  */
+ struct can_priv {
++	struct net_device *dev;
+ 	struct can_device_stats can_stats;
+ 
+ 	struct can_bittiming bittiming, data_bittiming;
+@@ -41,11 +43,14 @@ struct can_priv {
+ 	struct can_clock clock;
+ 
+ 	enum can_state state;
+-	u32 ctrlmode;
+-	u32 ctrlmode_supported;
++
++	/* CAN controller features - see include/uapi/linux/can/netlink.h */
++	u32 ctrlmode;		/* current options setting */
++	u32 ctrlmode_supported;	/* options that can be modified by netlink */
++	u32 ctrlmode_static;	/* static enabled options for driver/hardware */
+ 
+ 	int restart_ms;
+-	struct timer_list restart_timer;
++	struct delayed_work restart_work;
+ 
+ 	int (*do_set_bittiming)(struct net_device *dev);
+ 	int (*do_set_data_bittiming)(struct net_device *dev);

@@ -595,6 +595,8 @@ static int __test_aead(struct crypto_aead *tfm, int enc,
 
 	iv_len = crypto_aead_ivsize(tfm);
 
+	iv_len = crypto_aead_ivsize(tfm);
+
 	for (i = 0, j = 0; i < tcount; i++) {
 		if (template[i].np)
 			continue;

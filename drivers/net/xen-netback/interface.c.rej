@@ -1,0 +1,75 @@
+--- drivers/net/xen-netback/interface.c
++++ drivers/net/xen-netback/interface.c
+@@ -121,25 +137,58 @@ static int xenvif_poll(struct napi_struct *napi, int budget)
+ 
+ 	if (work_done < budget) {
+ 		napi_complete(napi);
+-		xenvif_napi_schedule_or_enable_events(queue);
++		/* If the queue is rate-limited, it shall be
++		 * rescheduled in the timer callback.
++		 */
++		if (likely(!queue->rate_limited))
++			xenvif_napi_schedule_or_enable_events(queue);
+ 	}
+ 
+ 	return work_done;
+ }
+ 
++static bool xenvif_handle_rx_interrupt(struct xenvif_queue *queue)
++{
++	bool rc;
++
++	rc = xenvif_have_rx_work(queue, false);
++	if (rc)
++		xenvif_kick_thread(queue);
++	return rc;
++}
++
+ static irqreturn_t xenvif_rx_interrupt(int irq, void *dev_id)
+ {
+ 	struct xenvif_queue *queue = dev_id;
++	int old;
+ 
+-	xenvif_kick_thread(queue);
++	old = xenvif_atomic_fetch_or(NETBK_RX_EOI, &queue->eoi_pending);
++	WARN(old & NETBK_RX_EOI, "Interrupt while EOI pending\n");
++
++	if (!xenvif_handle_rx_interrupt(queue)) {
++		atomic_andnot(NETBK_RX_EOI, &queue->eoi_pending);
++		xen_irq_lateeoi(irq, XEN_EOI_FLAG_SPURIOUS);
++	}
+ 
+ 	return IRQ_HANDLED;
+ }
+ 
+ irqreturn_t xenvif_interrupt(int irq, void *dev_id)
+ {
+-	xenvif_tx_interrupt(irq, dev_id);
+-	xenvif_rx_interrupt(irq, dev_id);
++	struct xenvif_queue *queue = dev_id;
++	int old;
++	bool has_rx, has_tx;
++
++	old = xenvif_atomic_fetch_or(NETBK_COMMON_EOI, &queue->eoi_pending);
++	WARN(old, "Interrupt while EOI pending\n");
++
++	has_tx = xenvif_handle_tx_interrupt(queue);
++	has_rx = xenvif_handle_rx_interrupt(queue);
++
++	if (!has_rx && !has_tx) {
++		atomic_andnot(NETBK_COMMON_EOI, &queue->eoi_pending);
++		xen_irq_lateeoi(irq, XEN_EOI_FLAG_SPURIOUS);
++	}
+ 
+ 	return IRQ_HANDLED;
+ }
+@@ -633,8 +684,8 @@ err_tx_unbind:
+ 	queue->tx_irq = 0;
+ err_unmap:
+ 	xenvif_unmap_frontend_rings(queue);
++	netif_napi_del(&queue->napi);
+ err:
+-	module_put(THIS_MODULE);
+ 	return err;
+ }
+ 

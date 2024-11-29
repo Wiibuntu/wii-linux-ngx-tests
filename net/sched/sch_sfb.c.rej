@@ -1,0 +1,50 @@
+--- net/sched/sch_sfb.c
++++ net/sched/sch_sfb.c
+@@ -401,6 +403,7 @@ static int sfb_enqueue(struct sk_buff *skb, struct Qdisc *sch)
+ enqueue:
+ 	ret = qdisc_enqueue(skb, child);
+ 	if (likely(ret == NET_XMIT_SUCCESS)) {
++		sch->qstats.backlog += len;
+ 		sch->q.qlen++;
+ 		increment_qlen(skb, q);
+ 	} else if (net_xmit_drop_count(ret)) {
+@@ -429,6 +432,7 @@ static struct sk_buff *sfb_dequeue(struct Qdisc *sch)
+ 
+ 	if (skb) {
+ 		qdisc_bstats_update(sch, skb);
++		qdisc_qstats_backlog_dec(sch, skb);
+ 		sch->q.qlen--;
+ 		decrement_qlen(skb, q);
+ 	}
+@@ -451,6 +455,7 @@ static void sfb_reset(struct Qdisc *sch)
+ 	struct sfb_sched_data *q = qdisc_priv(sch);
+ 
+ 	qdisc_reset(q->qdisc);
++	sch->qstats.backlog = 0;
+ 	sch->q.qlen = 0;
+ 	q->slot = 0;
+ 	q->double_buffering = false;
+@@ -512,7 +517,8 @@ static int sfb_change(struct Qdisc *sch, struct nlattr *opt)
+ 
+ 	sch_tree_lock(sch);
+ 
+-	qdisc_tree_decrease_qlen(q->qdisc, q->qdisc->q.qlen);
++	qdisc_tree_reduce_backlog(q->qdisc, q->qdisc->q.qlen,
++				  q->qdisc->qstats.backlog);
+ 	qdisc_destroy(q->qdisc);
+ 	q->qdisc = child;
+ 
+@@ -608,12 +614,7 @@ static int sfb_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new,
+ 	if (new == NULL)
+ 		new = &noop_qdisc;
+ 
+-	sch_tree_lock(sch);
+-	*old = q->qdisc;
+-	q->qdisc = new;
+-	qdisc_tree_decrease_qlen(*old, (*old)->q.qlen);
+-	qdisc_reset(*old);
+-	sch_tree_unlock(sch);
++	*old = qdisc_replace(sch, new, &q->qdisc);
+ 	return 0;
+ }
+ 

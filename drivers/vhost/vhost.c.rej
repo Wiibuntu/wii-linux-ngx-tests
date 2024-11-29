@@ -1,0 +1,19 @@
+--- drivers/vhost/vhost.c
++++ drivers/vhost/vhost.c
+@@ -27,6 +27,7 @@
+ #include <linux/cgroup.h>
+ #include <linux/module.h>
+ #include <linux/sort.h>
++#include <linux/nospec.h>
+ 
+ #include "vhost.h"
+ 
+@@ -401,6 +417,8 @@ void vhost_dev_init(struct vhost_dev *dev,
+ 	spin_lock_init(&dev->work_lock);
+ 	INIT_LIST_HEAD(&dev->work_list);
+ 	dev->worker = NULL;
++	dev->weight = weight;
++	dev->byte_weight = byte_weight;
+ 
+ 	for (i = 0; i < dev->nvqs; ++i) {
+ 		vq = dev->vqs[i];

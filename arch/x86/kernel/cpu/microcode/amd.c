@@ -185,6 +185,9 @@ static int __apply_microcode_amd(struct microcode_amd *mc)
 	return 0;
 }
 
+static enum ucode_state
+load_microcode_amd(bool save, u8 family, const u8 *data, size_t size);
+
 /*
  * Early load occurs before we can vmalloc(). So we look for the microcode
  * patch container file in initrd, traverse equivalent cpu table, look for a
@@ -481,6 +484,9 @@ static unsigned int verify_patch_size(u8 family, u32 patch_size,
 		break;
 	case 0x16:
 		max_size = F16H_MPB_MAX_SIZE;
+		break;
+	case 0x17:
+		max_size = F17H_MPB_MAX_SIZE;
 		break;
 	case 0x17:
 		max_size = F17H_MPB_MAX_SIZE;

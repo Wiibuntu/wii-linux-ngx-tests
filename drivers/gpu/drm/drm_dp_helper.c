@@ -194,6 +194,8 @@ static int drm_dp_dpcd_access(struct drm_dp_aux *aux, u8 request,
 
 	mutex_lock(&aux->hw_mutex);
 
+	mutex_lock(&aux->hw_mutex);
+
 	/*
 	 * The specification doesn't give any recommendation on how often to
 	 * retry native transactions. We used to retry 7 times like for
@@ -897,6 +899,8 @@ static int drm_dp_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 
 	memset(&msg, 0, sizeof(msg));
 
+	mutex_lock(&aux->hw_mutex);
+
 	for (i = 0; i < num; i++) {
 		msg.address = msgs[i].addr;
 		drm_dp_i2c_msg_set_request(&msg, &msgs[i]);
@@ -950,6 +954,8 @@ static int drm_dp_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs,
 	msg.buffer = NULL;
 	msg.size = 0;
 	(void)drm_dp_i2c_do_msg(aux, &msg);
+
+	mutex_unlock(&aux->hw_mutex);
 
 	return err;
 }

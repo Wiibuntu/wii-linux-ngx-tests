@@ -1,0 +1,10 @@
+--- arch/x86/kernel/cpu/cyrix.c
++++ arch/x86/kernel/cpu/cyrix.c
+@@ -8,6 +8,7 @@
+ #include <linux/timer.h>
+ #include <asm/pci-direct.h>
+ #include <asm/tsc.h>
++#include <asm/cpufeature.h>
+ 
+ #include "cpu.h"
+ 

@@ -1,0 +1,56 @@
+--- kernel/printk/printk.c
++++ kernel/printk/printk.c
+@@ -1447,7 +1458,7 @@ static void call_console_drivers(int level,
+ {
+ 	struct console *con;
+ 
+-	trace_console(text, len);
++	trace_console_rcuidle(text, len);
+ 
+ 	if (level >= console_loglevel && !ignore_loglevel)
+ 		return;
+@@ -2254,13 +2275,24 @@ void console_unlock(void)
+ 	static u64 seen_seq;
+ 	unsigned long flags;
+ 	bool wake_klogd = false;
+-	bool retry;
++	bool do_cond_resched, retry;
+ 
+ 	if (console_suspended) {
+ 		up_console_sem();
+ 		return;
+ 	}
+ 
++	/*
++	 * Console drivers are called under logbuf_lock, so
++	 * @console_may_schedule should be cleared before; however, we may
++	 * end up dumping a lot of lines, for example, if called from
++	 * console registration path, and should invoke cond_resched()
++	 * between lines if allowable.  Not doing so can cause a very long
++	 * scheduling stall on a slow console leading to RCU stall and
++	 * softlockup warnings which exacerbate the issue with more
++	 * messages practically incapacitating the system.
++	 */
++	do_cond_resched = console_may_schedule;
+ 	console_may_schedule = 0;
+ 
+ 	/* flush buffered message fragment immediately to console */
+@@ -2332,6 +2364,9 @@ skip:
+ 		call_console_drivers(level, ext_text, ext_len, text, len);
+ 		start_critical_timings();
+ 		local_irq_restore(flags);
++
++		if (do_cond_resched)
++			cond_resched();
+ 	}
+ 	console_locked = 0;
+ 
+@@ -3050,7 +3104,7 @@ bool kmsg_dump_get_buffer(struct kmsg_dumper *dumper, bool syslog,
+ 	seq = dumper->cur_seq;
+ 	idx = dumper->cur_idx;
+ 	prev = 0;
+-	while (l > size && seq < dumper->next_seq) {
++	while (l >= size && seq < dumper->next_seq) {
+ 		struct printk_log *msg = log_from_idx(idx);
+ 
+ 		l -= msg_print_text(msg, prev, true, NULL, 0);

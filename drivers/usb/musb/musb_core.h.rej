@@ -1,0 +1,10 @@
+--- drivers/usb/musb/musb_core.h
++++ drivers/usb/musb/musb_core.h
+@@ -214,6 +214,7 @@ struct musb_platform_ops {
+ 				dma_addr_t *dma_addr, u32 *len);
+ 	void	(*pre_root_reset_end)(struct musb *musb);
+ 	void	(*post_root_reset_end)(struct musb *musb);
++	void	(*clear_ep_rxintr)(struct musb *musb, int epnum);
+ };
+ 
+ /*

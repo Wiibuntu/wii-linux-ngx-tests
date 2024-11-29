@@ -1,0 +1,11 @@
+--- include/uapi/linux/netfilter_ipv6/ip6t_hl.h
++++ include/uapi/linux/netfilter_ipv6/ip6t_hl.h
+@@ -1,6 +1,6 @@
+-/* ip6tables module for matching the Hop Limit value
++/* Hop Limit modification module for ip6tables
+  * Maciej Soltysiak <solt@dns.toxicfilms.tv>
+- * Based on HW's ttl module */
++ * Based on HW's TTL module */
+ 
+ #ifndef _IP6T_HL_H
+ #define _IP6T_HL_H

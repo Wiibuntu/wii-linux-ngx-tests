@@ -1,0 +1,21 @@
+--- net/ipv6/ndisc.c
++++ net/ipv6/ndisc.c
+@@ -187,7 +187,8 @@ static struct nd_opt_hdr *ndisc_next_option(struct nd_opt_hdr *cur,
+ 
+ static inline int ndisc_is_useropt(struct nd_opt_hdr *opt)
+ {
+-	return opt->nd_opt_type == ND_OPT_RDNSS ||
++	return opt->nd_opt_type == ND_OPT_PREFIX_INFO ||
++		opt->nd_opt_type == ND_OPT_RDNSS ||
+ 		opt->nd_opt_type == ND_OPT_DNSSL;
+ }
+ 
+@@ -1686,6 +1687,8 @@ static int ndisc_netdev_event(struct notifier_block *this, unsigned long event,
+ 	case NETDEV_CHANGEADDR:
+ 		neigh_changeaddr(&nd_tbl, dev);
+ 		fib6_run_gc(0, net, false);
++		/* fallthrough */
++	case NETDEV_UP:
+ 		idev = in6_dev_get(dev);
+ 		if (!idev)
+ 			break;

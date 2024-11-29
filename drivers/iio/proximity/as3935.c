@@ -341,6 +341,8 @@ static int as3935_resume(struct device *dev)
 
 	calibrate_as3935(st);
 
+	calibrate_as3935(st);
+
 err_resume:
 	mutex_unlock(&st->lock);
 

@@ -1,0 +1,121 @@
+--- drivers/i2c/busses/i2c-i801.c
++++ drivers/i2c/busses/i2c-i801.c
+@@ -245,6 +246,13 @@ struct i801_priv {
+ 	struct platform_device *mux_pdev;
+ #endif
+ 	struct platform_device *tco_pdev;
++
++	/*
++	 * If set to true the host controller registers are reserved for
++	 * ACPI AML use. Protected by acpi_lock.
++	 */
++	bool acpi_reserved;
++	struct mutex acpi_lock;
+ };
+ 
+ #define FEATURE_SMBUS_PEC	(1 << 0)
+@@ -708,9 +709,15 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
+ {
+ 	int hwpec;
+ 	int block = 0;
+-	int ret, xact = 0;
++	int ret = 0, xact = 0;
+ 	struct i801_priv *priv = i2c_get_adapdata(adap);
+ 
++	mutex_lock(&priv->acpi_lock);
++	if (priv->acpi_reserved) {
++		mutex_unlock(&priv->acpi_lock);
++		return -EBUSY;
++	}
++
+ 	hwpec = (priv->features & FEATURE_SMBUS_PEC) && (flags & I2C_CLIENT_PEC)
+ 		&& size != I2C_SMBUS_QUICK
+ 		&& size != I2C_SMBUS_I2C_BLOCK_DATA;
+@@ -767,7 +774,8 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
+ 	default:
+ 		dev_err(&priv->pci_dev->dev, "Unsupported transaction %d\n",
+ 			size);
+-		return -EOPNOTSUPP;
++		ret = -EOPNOTSUPP;
++		goto out;
+ 	}
+ 
+ 	if (hwpec)	/* enable/disable hardware PEC */
+@@ -790,11 +798,11 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
+ 		       ~(SMBAUXCTL_CRC | SMBAUXCTL_E32B), SMBAUXCTL(priv));
+ 
+ 	if (block)
+-		return ret;
++		goto out;
+ 	if (ret)
+-		return ret;
++		goto out;
+ 	if ((read_write == I2C_SMBUS_WRITE) || (xact == I801_QUICK))
+-		return 0;
++		goto out;
+ 
+ 	switch (xact & 0x7f) {
+ 	case I801_BYTE:	/* Result put in SMBHSTDAT0 */
+@@ -806,7 +814,10 @@ static s32 i801_access(struct i2c_adapter *adap, u16 addr,
+ 			     (inb_p(SMBHSTDAT1(priv)) << 8);
+ 		break;
+ 	}
+-	return 0;
++
++out:
++	mutex_unlock(&priv->acpi_lock);
++	return ret;
+ }
+ 
+ 
+@@ -1337,11 +1425,14 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
+ 	priv->adapter.dev.parent = &dev->dev;
+ 	ACPI_COMPANION_SET(&priv->adapter.dev, ACPI_COMPANION(&dev->dev));
+ 	priv->adapter.retries = 3;
++	mutex_init(&priv->acpi_lock);
+ 
+ 	priv->pci_dev = dev;
+ 	switch (dev->device) {
+ 	case PCI_DEVICE_ID_INTEL_SUNRISEPOINT_H_SMBUS:
+ 	case PCI_DEVICE_ID_INTEL_SUNRISEPOINT_LP_SMBUS:
++	case PCI_DEVICE_ID_INTEL_LEWISBURG_SMBUS:
++	case PCI_DEVICE_ID_INTEL_LEWISBURG_SSKU_SMBUS:
+ 	case PCI_DEVICE_ID_INTEL_DNV_SMBUS:
+ 		priv->features |= FEATURE_I2C_BLOCK_READ;
+ 		priv->features |= FEATURE_IRQ;
+@@ -1397,10 +1488,8 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
+ 		return -ENODEV;
+ 	}
+ 
+-	err = acpi_check_resource_conflict(&dev->resource[SMBBAR]);
+-	if (err) {
++	if (i801_acpi_probe(priv))
+ 		return -ENODEV;
+-	}
+ 
+ 	err = pcim_iomap_regions(dev, 1 << SMBBAR,
+ 				 dev_driver_string(&dev->dev));
+@@ -1409,6 +1498,7 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
+ 			"Failed to request SMBus region 0x%lx-0x%Lx\n",
+ 			priv->smba,
+ 			(unsigned long long)pci_resource_end(dev, SMBBAR));
++		i801_acpi_remove(priv);
+ 		return err;
+ 	}
+ 
+@@ -1473,6 +1563,7 @@ static int i801_probe(struct pci_dev *dev, const struct pci_device_id *id)
+ 	err = i2c_add_adapter(&priv->adapter);
+ 	if (err) {
+ 		dev_err(&dev->dev, "Failed to add SMBus adapter\n");
++		i801_acpi_remove(priv);
+ 		return err;
+ 	}
+ 
+@@ -1491,6 +1582,7 @@ static void i801_remove(struct pci_dev *dev)
+ 
+ 	i801_del_mux(priv);
+ 	i2c_del_adapter(&priv->adapter);
++	i801_acpi_remove(priv);
+ 	pci_write_config_byte(dev, SMBHSTCFG, priv->original_hstcfg);
+ 
+ 	platform_device_unregister(priv->tco_pdev);

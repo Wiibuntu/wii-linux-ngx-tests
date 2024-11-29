@@ -1,0 +1,43 @@
+--- drivers/net/ethernet/mellanox/mlxsw/spectrum_switchdev.c
++++ drivers/net/ethernet/mellanox/mlxsw/spectrum_switchdev.c
+@@ -45,6 +45,7 @@
+ #include <linux/if_bridge.h>
+ #include <linux/workqueue.h>
+ #include <linux/jiffies.h>
++#include <linux/rtnetlink.h>
+ #include <net/switchdev.h>
+ 
+ #include "spectrum.h"
+@@ -86,14 +87,14 @@ static int mlxsw_sp_port_stp_state_set(struct mlxsw_sp_port *mlxsw_sp_port,
+ 	int err;
+ 
+ 	switch (state) {
+-	case BR_STATE_DISABLED: /* fall-through */
+ 	case BR_STATE_FORWARDING:
+ 		spms_state = MLXSW_REG_SPMS_STATE_FORWARDING;
+ 		break;
+-	case BR_STATE_LISTENING: /* fall-through */
+ 	case BR_STATE_LEARNING:
+ 		spms_state = MLXSW_REG_SPMS_STATE_LEARNING;
+ 		break;
++	case BR_STATE_LISTENING: /* fall-through */
++	case BR_STATE_DISABLED: /* fall-through */
+ 	case BR_STATE_BLOCKING:
+ 		spms_state = MLXSW_REG_SPMS_STATE_DISCARDING;
+ 		break;
+@@ -817,6 +823,7 @@ static void mlxsw_sp_fdb_notify_work(struct work_struct *work)
+ 
+ 	mlxsw_sp = container_of(work, struct mlxsw_sp, fdb_notify.dw.work);
+ 
++	rtnl_lock();
+ 	do {
+ 		mlxsw_reg_sfn_pack(sfn_pl);
+ 		err = mlxsw_reg_query(mlxsw_sp->core, MLXSW_REG(sfn), sfn_pl);
+@@ -829,6 +836,7 @@ static void mlxsw_sp_fdb_notify_work(struct work_struct *work)
+ 			mlxsw_sp_fdb_notify_rec_process(mlxsw_sp, sfn_pl, i);
+ 
+ 	} while (num_rec);
++	rtnl_unlock();
+ 
+ 	kfree(sfn_pl);
+ 	mlxsw_sp_fdb_notify_work_schedule(mlxsw_sp);

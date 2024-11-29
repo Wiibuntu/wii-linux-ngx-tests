@@ -276,6 +276,7 @@ void mei_me_cl_rm_by_uuid(struct mei_device *dev, const uuid_le *uuid)
 	down_write(&dev->me_clients_rwsem);
 	me_cl = __mei_me_cl_by_uuid(dev, uuid);
 	__mei_me_cl_del(dev, me_cl);
+	mei_me_cl_put(me_cl);
 	up_write(&dev->me_clients_rwsem);
 }
 
@@ -297,6 +298,7 @@ void mei_me_cl_rm_by_uuid_id(struct mei_device *dev, const uuid_le *uuid, u8 id)
 	down_write(&dev->me_clients_rwsem);
 	me_cl = __mei_me_cl_by_uuid_id(dev, uuid, id);
 	__mei_me_cl_del(dev, me_cl);
+	mei_me_cl_put(me_cl);
 	up_write(&dev->me_clients_rwsem);
 }
 
@@ -1083,6 +1085,9 @@ int mei_cl_connect(struct mei_cl *cl, struct mei_me_client *me_cl,
 		goto nortpm;
 	}
 
+	if (!mei_cl_is_connected(cl))
+		return -ENODEV;
+
 	rets = pm_runtime_get(dev->dev);
 	if (rets < 0 && rets != -EINPROGRESS) {
 		pm_runtime_put_noidle(dev->dev);
@@ -1766,6 +1771,10 @@ void mei_cl_complete(struct mei_cl *cl, struct mei_cl_cb *cb)
 		if (waitqueue_active(&cl->wait))
 			wake_up(&cl->wait);
 
+		break;
+	case MEI_FOP_DISCONNECT_RSP:
+		mei_io_cb_free(cb);
+		mei_cl_set_disconnected(cl);
 		break;
 	case MEI_FOP_DISCONNECT_RSP:
 		mei_io_cb_free(cb);

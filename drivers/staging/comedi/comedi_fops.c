@@ -2603,8 +2603,10 @@ static int comedi_open(struct inode *inode, struct file *file)
 	}
 
 	cfp = kzalloc(sizeof(*cfp), GFP_KERNEL);
-	if (!cfp)
+	if (!cfp) {
+		comedi_dev_put(dev);
 		return -ENOMEM;
+	}
 
 	cfp->dev = dev;
 
@@ -2919,6 +2921,9 @@ static int __init comedi_init(void)
 		/* comedi_alloc_board_minor() locked the mutex */
 		mutex_unlock(&dev->mutex);
 	}
+
+	/* XXX requires /proc interface */
+	comedi_proc_init();
 
 	/* XXX requires /proc interface */
 	comedi_proc_init();

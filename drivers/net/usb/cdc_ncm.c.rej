@@ -1,0 +1,137 @@
+--- drivers/net/usb/cdc_ncm.c
++++ drivers/net/usb/cdc_ncm.c
+@@ -730,8 +736,10 @@ int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_
+ 	u8 *buf;
+ 	int len;
+ 	int temp;
++	int err;
+ 	u8 iface_no;
+ 	struct usb_cdc_parsed_header hdr;
++	__le16 curr_ntb_format;
+ 
+ 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+ 	if (!ctx)
+@@ -800,7 +808,11 @@ int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_
+ 
+ 	iface_no = ctx->data->cur_altsetting->desc.bInterfaceNumber;
+ 
+-	/* reset data interface */
++	/* Reset data interface. Some devices will not reset properly
++	 * unless they are configured first.  Toggle the altsetting to
++	 * force a reset
++	 */
++	usb_set_interface(dev->udev, iface_no, data_altsetting);
+ 	temp = usb_set_interface(dev->udev, iface_no, 0);
+ 	if (temp) {
+ 		dev_dbg(&intf->dev, "set interface failed\n");
+@@ -876,9 +924,6 @@ int cdc_ncm_bind_common(struct usbnet *dev, struct usb_interface *intf, u8 data_
+ 	/* finish setting up the device specific data */
+ 	cdc_ncm_setup(dev);
+ 
+-	/* Device-specific flags */
+-	ctx->drvflags = drvflags;
+-
+ 	/* Allocate the delayed NDP if needed. */
+ 	if (ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END) {
+ 		ctx->delayed_ndp16 = kzalloc(ctx->max_ndp_size, GFP_KERNEL);
+@@ -983,8 +1028,6 @@ EXPORT_SYMBOL_GPL(cdc_ncm_select_altsetting);
+ 
+ static int cdc_ncm_bind(struct usbnet *dev, struct usb_interface *intf)
+ {
+-	int ret;
+-
+ 	/* MBIM backwards compatible function? */
+ 	if (cdc_ncm_select_altsetting(intf) != CDC_NCM_COMM_ALTSETTING_NCM)
+ 		return -ENODEV;
+@@ -993,16 +1036,7 @@ static int cdc_ncm_bind(struct usbnet *dev, struct usb_interface *intf)
+ 	 * Additionally, generic NCM devices are assumed to accept arbitrarily
+ 	 * placed NDP.
+ 	 */
+-	ret = cdc_ncm_bind_common(dev, intf, CDC_NCM_DATA_ALTSETTING_NCM, 0);
+-
+-	/*
+-	 * We should get an event when network connection is "connected" or
+-	 * "disconnected". Set network connection in "disconnected" state
+-	 * (carrier is OFF) during attach, so the IP network stack does not
+-	 * start IPv6 negotiation and more.
+-	 */
+-	usbnet_link_change(dev, 0, 0);
+-	return ret;
++	return cdc_ncm_bind_common(dev, intf, CDC_NCM_DATA_ALTSETTING_NCM, 0);
+ }
+ 
+ static void cdc_ncm_align_tail(struct sk_buff *skb, size_t modulus, size_t remainder, size_t max)
+@@ -1083,12 +1117,16 @@ cdc_ncm_fill_tx_frame(struct usbnet *dev, struct sk_buff *skb, __le32 sign)
+ 	u16 n = 0, index, ndplen;
+ 	u8 ready2send = 0;
+ 	u32 delayed_ndp_size;
++	size_t padding_count;
+ 
+ 	/* When our NDP gets written in cdc_ncm_ndp(), then skb_out->len gets updated
+ 	 * accordingly. Otherwise, we should check here.
+ 	 */
+ 	if (ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END)
+-		delayed_ndp_size = ctx->max_ndp_size;
++		delayed_ndp_size = ctx->max_ndp_size +
++			max_t(u32,
++			      ctx->tx_ndp_modulus,
++			      ctx->tx_modulus + ctx->tx_remainder) - 1;
+ 	else
+ 		delayed_ndp_size = 0;
+ 
+@@ -1221,7 +1259,7 @@ cdc_ncm_fill_tx_frame(struct usbnet *dev, struct sk_buff *skb, __le32 sign)
+ 	/* If requested, put NDP at end of frame. */
+ 	if (ctx->drvflags & CDC_NCM_FLAG_NDP_TO_END) {
+ 		nth16 = (struct usb_cdc_ncm_nth16 *)skb_out->data;
+-		cdc_ncm_align_tail(skb_out, ctx->tx_ndp_modulus, 0, ctx->tx_max);
++		cdc_ncm_align_tail(skb_out, ctx->tx_ndp_modulus, 0, ctx->tx_max - ctx->max_ndp_size);
+ 		nth16->wNdpIndex = cpu_to_le16(skb_out->len);
+ 		memcpy(skb_put(skb_out, ctx->max_ndp_size), ctx->delayed_ndp16, ctx->max_ndp_size);
+ 
+@@ -1239,11 +1277,14 @@ cdc_ncm_fill_tx_frame(struct usbnet *dev, struct sk_buff *skb, __le32 sign)
+ 	 * a ZLP after full sized NTBs.
+ 	 */
+ 	if (!(dev->driver_info->flags & FLAG_SEND_ZLP) &&
+-	    skb_out->len > ctx->min_tx_pkt)
+-		memset(skb_put(skb_out, ctx->tx_max - skb_out->len), 0,
+-		       ctx->tx_max - skb_out->len);
+-	else if (skb_out->len < ctx->tx_max && (skb_out->len % dev->maxpacket) == 0)
++	    skb_out->len > ctx->min_tx_pkt) {
++		padding_count = ctx->tx_max - skb_out->len;
++		if (!WARN_ON(padding_count > ctx->tx_max))
++			memset(skb_put(skb_out, padding_count), 0, padding_count);
++	} else if (skb_out->len < ctx->tx_max &&
++		   (skb_out->len % dev->maxpacket) == 0) {
+ 		*skb_put(skb_out, 1) = 0;	/* force short packet */
++	}
+ 
+ 	/* set final frame length */
+ 	nth16 = (struct usb_cdc_ncm_nth16 *)skb_out->data;
+@@ -1582,7 +1620,8 @@ static void cdc_ncm_status(struct usbnet *dev, struct urb *urb)
+ 
+ static const struct driver_info cdc_ncm_info = {
+ 	.description = "CDC NCM",
+-	.flags = FLAG_POINTTOPOINT | FLAG_NO_SETINT | FLAG_MULTI_PACKET,
++	.flags = FLAG_POINTTOPOINT | FLAG_NO_SETINT | FLAG_MULTI_PACKET
++			| FLAG_LINK_INTR | FLAG_ETHER,
+ 	.bind = cdc_ncm_bind,
+ 	.unbind = cdc_ncm_unbind,
+ 	.manage_power = usbnet_manage_power,
+@@ -1595,7 +1634,7 @@ static const struct driver_info cdc_ncm_info = {
+ static const struct driver_info wwan_info = {
+ 	.description = "Mobile Broadband Network Device",
+ 	.flags = FLAG_POINTTOPOINT | FLAG_NO_SETINT | FLAG_MULTI_PACKET
+-			| FLAG_WWAN,
++			| FLAG_LINK_INTR | FLAG_WWAN,
+ 	.bind = cdc_ncm_bind,
+ 	.unbind = cdc_ncm_unbind,
+ 	.manage_power = usbnet_manage_power,
+@@ -1608,7 +1647,7 @@ static const struct driver_info wwan_info = {
+ static const struct driver_info wwan_noarp_info = {
+ 	.description = "Mobile Broadband Network Device (NO ARP)",
+ 	.flags = FLAG_POINTTOPOINT | FLAG_NO_SETINT | FLAG_MULTI_PACKET
+-			| FLAG_WWAN | FLAG_NOARP,
++			| FLAG_LINK_INTR | FLAG_WWAN | FLAG_NOARP,
+ 	.bind = cdc_ncm_bind,
+ 	.unbind = cdc_ncm_unbind,
+ 	.manage_power = usbnet_manage_power,

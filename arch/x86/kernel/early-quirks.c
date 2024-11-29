@@ -91,6 +91,13 @@ static void __init nvidia_bugs(int num, int slot, int func)
 		return;
 
 	/*
+	 * Only applies to Nvidia root ports (bus 0) and not to
+	 * Nvidia graphics cards with PCI ports on secondary buses.
+	 */
+	if (num)
+		return;
+
+	/*
 	 * All timer overrides on Nvidia are
 	 * wrong unless HPET is enabled.
 	 * Unfortunately that's not true on many Asus boards.

@@ -336,6 +336,11 @@ static inline struct device_node *dev_pm_opp_of_get_opp_desc_node(struct device 
 {
 	return NULL;
 }
+
+static inline struct device_node *dev_pm_opp_of_get_opp_desc_node(struct device *dev)
+{
+	return NULL;
+}
 #endif
 
 #endif		/* __LINUX_OPP_H__ */

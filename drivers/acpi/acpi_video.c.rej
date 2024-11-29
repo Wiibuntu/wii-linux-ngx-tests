@@ -1,0 +1,60 @@
+--- drivers/acpi/acpi_video.c
++++ drivers/acpi/acpi_video.c
+@@ -464,6 +464,15 @@ static struct dmi_system_id video_dmi_table[] = {
+ 	 * control on these systems, but do not register a backlight sysfs
+ 	 * as brightness control does not work.
+ 	 */
++	{
++	 /* https://bugzilla.kernel.org/show_bug.cgi?id=21012 */
++	 .callback = video_disable_backlight_sysfs_if,
++	 .ident = "Toshiba Portege R700",
++	 .matches = {
++		DMI_MATCH(DMI_SYS_VENDOR, "TOSHIBA"),
++		DMI_MATCH(DMI_PRODUCT_NAME, "PORTEGE R700"),
++		},
++	},
+ 	{
+ 	 /* https://bugs.freedesktop.org/show_bug.cgi?id=82634 */
+ 	 .callback = video_disable_backlight_sysfs_if,
+@@ -473,6 +482,31 @@ static struct dmi_system_id video_dmi_table[] = {
+ 		DMI_MATCH(DMI_PRODUCT_NAME, "PORTEGE R830"),
+ 		},
+ 	},
++	{
++	 /* https://bugzilla.kernel.org/show_bug.cgi?id=21012 */
++	 .callback = video_disable_backlight_sysfs_if,
++	 .ident = "Toshiba Satellite R830",
++	 .matches = {
++		DMI_MATCH(DMI_SYS_VENDOR, "TOSHIBA"),
++		DMI_MATCH(DMI_PRODUCT_NAME, "SATELLITE R830"),
++		},
++	},
++	{
++	 .callback = video_disable_backlight_sysfs_if,
++	 .ident = "Toshiba Satellite Z830",
++	 .matches = {
++		DMI_MATCH(DMI_SYS_VENDOR, "TOSHIBA"),
++		DMI_MATCH(DMI_PRODUCT_NAME, "SATELLITE Z830"),
++		},
++	},
++	{
++	 .callback = video_disable_backlight_sysfs_if,
++	 .ident = "Toshiba Portege Z830",
++	 .matches = {
++		DMI_MATCH(DMI_SYS_VENDOR, "TOSHIBA"),
++		DMI_MATCH(DMI_PRODUCT_NAME, "PORTEGE Z830"),
++		},
++	},
+ 	/*
+ 	 * Some machine's _DOD IDs don't have bit 31(Device ID Scheme) set
+ 	 * but the IDs actually follow the Device ID Scheme.
+@@ -1193,6 +1227,9 @@ static int acpi_video_device_enumerate(struct acpi_video_bus *video)
+ 	union acpi_object *dod = NULL;
+ 	union acpi_object *obj;
+ 
++	if (!video->cap._DOD)
++		return AE_NOT_EXIST;
++
+ 	status = acpi_evaluate_object(video->device->handle, "_DOD", NULL, &buffer);
+ 	if (!ACPI_SUCCESS(status)) {
+ 		ACPI_EXCEPTION((AE_INFO, status, "Evaluating _DOD"));

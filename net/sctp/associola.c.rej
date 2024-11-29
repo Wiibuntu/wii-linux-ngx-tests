@@ -1,0 +1,23 @@
+--- net/sctp/associola.c
++++ net/sctp/associola.c
+@@ -1004,9 +1008,10 @@ static void sctp_assoc_bh_rcv(struct work_struct *work)
+ 	struct sctp_endpoint *ep;
+ 	struct sctp_chunk *chunk;
+ 	struct sctp_inq *inqueue;
+-	int state;
+ 	sctp_subtype_t subtype;
++	int first_time = 1;	/* is this the first time through the loop */
+ 	int error = 0;
++	int state;
+ 
+ 	/* The association should be held so we should be safe. */
+ 	ep = asoc->ep;
+@@ -1289,7 +1321,7 @@ static struct sctp_transport *sctp_trans_elect_best(struct sctp_transport *curr,
+ 	if (score_curr > score_best)
+ 		return curr;
+ 	else if (score_curr == score_best)
+-		return sctp_trans_elect_tie(curr, best);
++		return sctp_trans_elect_tie(best, curr);
+ 	else
+ 		return best;
+ }

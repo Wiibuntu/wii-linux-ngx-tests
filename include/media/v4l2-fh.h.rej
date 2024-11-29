@@ -1,0 +1,10 @@
+--- include/media/v4l2-fh.h
++++ include/media/v4l2-fh.h
+@@ -43,6 +43,7 @@ struct v4l2_fh {
+ 	wait_queue_head_t	wait;
+ 	struct list_head	subscribed; /* Subscribed events */
+ 	struct list_head	available; /* Dequeueable event */
++	struct mutex		subscribe_lock;
+ 	unsigned int		navailable;
+ 	u32			sequence;
+ 

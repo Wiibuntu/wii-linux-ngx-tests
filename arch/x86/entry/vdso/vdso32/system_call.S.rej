@@ -1,0 +1,11 @@
+--- arch/x86/entry/vdso/vdso32/system_call.S
++++ arch/x86/entry/vdso/vdso32/system_call.S
+@@ -3,7 +3,7 @@
+ */
+ 
+ #include <asm/dwarf2.h>
+-#include <asm/cpufeature.h>
++#include <asm/cpufeatures.h>
+ #include <asm/alternative-asm.h>
+ 
+ /*

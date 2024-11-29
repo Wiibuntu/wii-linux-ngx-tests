@@ -1,0 +1,10 @@
+--- drivers/hwmon/ina2xx.c
++++ drivers/hwmon/ina2xx.c
+@@ -456,6 +481,7 @@ static int ina2xx_probe(struct i2c_client *client,
+ 
+ 	/* set the device type */
+ 	data->config = &ina2xx_config[id->driver_data];
++	mutex_init(&data->config_lock);
+ 
+ 	if (of_property_read_u32(dev->of_node, "shunt-resistor", &val) < 0) {
+ 		struct ina2xx_platform_data *pdata = dev_get_platdata(dev);

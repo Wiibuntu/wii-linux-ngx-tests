@@ -329,6 +329,16 @@ static struct clk mdio_clk = {
 	.parent		= &emac_clk,
 };
 
+/*
+ * In order to avoid adding the emac_clk to the clock lookup table twice (and
+ * screwing up the linked list in the process) create a separate clock for
+ * mdio inheriting the rate from emac_clk.
+ */
+static struct clk mdio_clk = {
+	.name		= "mdio",
+	.parent		= &emac_clk,
+};
+
 static struct clk mcasp_clk = {
 	.name		= "mcasp",
 	.parent		= &async3_clk,

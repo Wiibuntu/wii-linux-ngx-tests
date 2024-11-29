@@ -1140,6 +1140,14 @@ static int dwc_alloc_chan_resources(struct dma_chan *chan)
 		return -EINVAL;
 	}
 
+	/*
+	 * We need controller-specific data to set up slave transfers.
+	 */
+	if (chan->private && !dw_dma_filter(chan, chan->private)) {
+		dev_warn(chan2dev(chan), "Wrong controller-specific data\n");
+		return -EINVAL;
+	}
+
 	/* Enable controller here if needed */
 	if (!dw->in_use)
 		dw_dma_on(dw);

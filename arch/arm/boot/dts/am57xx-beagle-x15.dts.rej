@@ -1,0 +1,10 @@
+--- arch/arm/boot/dts/am57xx-beagle-x15.dts
++++ arch/arm/boot/dts/am57xx-beagle-x15.dts
+@@ -411,6 +411,7 @@
+ 		interrupt-controller;
+ 
+ 		ti,system-power-controller;
++		ti,palmas-override-powerhold;
+ 
+ 		tps659038_pmic {
+ 			compatible = "ti,tps659038-pmic";

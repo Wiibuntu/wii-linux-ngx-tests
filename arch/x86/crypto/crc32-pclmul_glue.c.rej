@@ -1,0 +1,11 @@
+--- arch/x86/crypto/crc32-pclmul_glue.c
++++ arch/x86/crypto/crc32-pclmul_glue.c
+@@ -33,7 +33,7 @@
+ #include <linux/crc32.h>
+ #include <crypto/internal/hash.h>
+ 
+-#include <asm/cpufeature.h>
++#include <asm/cpufeatures.h>
+ #include <asm/cpu_device_id.h>
+ #include <asm/fpu/api.h>
+ 

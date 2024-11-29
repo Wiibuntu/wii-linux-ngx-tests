@@ -1,0 +1,47 @@
+--- fs/ocfs2/aops.c
++++ fs/ocfs2/aops.c
+@@ -956,6 +956,7 @@ clean_orphan:
+ 		tmp_ret = ocfs2_del_inode_from_orphan(osb, inode, di_bh,
+ 				update_isize, end);
+ 		if (tmp_ret < 0) {
++			ocfs2_inode_unlock(inode, 1);
+ 			ret = tmp_ret;
+ 			mlog_errno(ret);
+ 			brelse(di_bh);
+@@ -1102,7 +1103,7 @@ int ocfs2_map_page_blocks(struct page *page, u64 *p_blkno,
+ 	int ret = 0;
+ 	struct buffer_head *head, *bh, *wait[2], **wait_bh = wait;
+ 	unsigned int block_end, block_start;
+-	unsigned int bsize = 1 << inode->i_blkbits;
++	unsigned int bsize = i_blocksize(inode);
+ 
+ 	if (!page_has_buffers(page))
+ 		create_empty_buffers(page, bsize, 0);
+@@ -2389,11 +2390,25 @@ int ocfs2_write_end_nolock(struct address_space *mapping,
+ 	}
+ 
+ 	if (unlikely(copied < len)) {
++		loff_t new_isize;
++
+ 		if (!PageUptodate(wc->w_target_page))
+ 			copied = 0;
+ 
+-		ocfs2_zero_new_buffers(wc->w_target_page, start+copied,
+-				       start+len);
++		new_isize = max_t(loff_t, i_size_read(inode), pos + copied);
++		if (new_isize > page_offset(wc->w_target_page))
++			ocfs2_zero_new_buffers(wc->w_target_page, start+copied,
++					       start+len);
++		else {
++			/*
++			 * When page is fully beyond new isize (data copy
++			 * failed), do not bother zeroing the page. Invalidate
++			 * it instead so that writeback does not get confused
++			 * put page & buffer dirty bits into inconsistent
++			 * state.
++			 */
++			block_invalidatepage(wc->w_target_page, 0, PAGE_SIZE);
++		}
+ 	}
+ 	flush_dcache_page(wc->w_target_page);
+ 

@@ -1,0 +1,56 @@
+--- drivers/cpufreq/cpufreq.c
++++ drivers/cpufreq/cpufreq.c
+@@ -628,9 +630,11 @@ static ssize_t show_cpuinfo_cur_freq(struct cpufreq_policy *policy,
+ 					char *buf)
+ {
+ 	unsigned int cur_freq = __cpufreq_get(policy);
+-	if (!cur_freq)
+-		return sprintf(buf, "<unknown>");
+-	return sprintf(buf, "%u\n", cur_freq);
++
++	if (cur_freq)
++		return sprintf(buf, "%u\n", cur_freq);
++
++	return sprintf(buf, "<unknown>\n");
+ }
+ 
+ /**
+@@ -841,6 +848,9 @@ static ssize_t store(struct kobject *kobj, struct attribute *attr,
+ 	struct freq_attr *fattr = to_attr(attr);
+ 	ssize_t ret = -EINVAL;
+ 
++	if (!fattr->store)
++		return -EIO;
++
+ 	get_online_cpus();
+ 
+ 	if (!cpu_online(policy->cpu))
+@@ -2166,10 +2182,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
+ 			return ret;
+ 		}
+ 
+-		up_write(&policy->rwsem);
+ 		ret = __cpufreq_governor(policy, CPUFREQ_GOV_POLICY_EXIT);
+-		down_write(&policy->rwsem);
+-
+ 		if (ret) {
+ 			pr_err("%s: Failed to Exit Governor: %s (%d)\n",
+ 			       __func__, old_gov->name, ret);
+@@ -2185,9 +2198,7 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
+ 		if (!ret)
+ 			goto out;
+ 
+-		up_write(&policy->rwsem);
+ 		__cpufreq_governor(policy, CPUFREQ_GOV_POLICY_EXIT);
+-		down_write(&policy->rwsem);
+ 	}
+ 
+ 	/* new governor failed, so re-start old one */
+@@ -2464,6 +2482,7 @@ int cpufreq_register_driver(struct cpufreq_driver *driver_data)
+ 	if (!(cpufreq_driver->flags & CPUFREQ_STICKY) &&
+ 	    list_empty(&cpufreq_policy_list)) {
+ 		/* if all ->init() calls failed, unregister */
++		ret = -ENODEV;
+ 		pr_debug("%s: No CPU initialized for driver %s\n", __func__,
+ 			 driver_data->name);
+ 		goto err_if_unreg;

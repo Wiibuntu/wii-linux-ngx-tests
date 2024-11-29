@@ -257,6 +257,19 @@ struct ccp_rsa_req_ctx {
 #define	CCP_RSA_MAXMOD	(4 * 1024 / 8)
 #define	CCP5_RSA_MAXMOD	(16 * 1024 / 8)
 
+struct ccp_sha_exp_ctx {
+	enum ccp_sha_type type;
+
+	u64 msg_bits;
+
+	unsigned int first;
+
+	u8 ctx[MAX_SHA_CONTEXT_SIZE];
+
+	unsigned int buf_count;
+	u8 buf[MAX_SHA_BLOCK_SIZE];
+};
+
 /***** Common Context Structure *****/
 struct ccp_ctx {
 	int (*complete)(struct crypto_async_request *req, int ret);

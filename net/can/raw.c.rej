@@ -1,0 +1,84 @@
+--- net/can/raw.c
++++ net/can/raw.c
+@@ -194,7 +198,7 @@ static int raw_enable_filters(struct net_device *dev, struct sock *sk,
+ 	for (i = 0; i < count; i++) {
+ 		err = can_rx_register(dev, filter[i].can_id,
+ 				      filter[i].can_mask,
+-				      raw_rcv, sk, "raw");
++				      raw_rcv, sk, "raw", sk);
+ 		if (err) {
+ 			/* clean up successfully registered filters */
+ 			while (--i >= 0)
+@@ -215,7 +219,7 @@ static int raw_enable_errfilter(struct net_device *dev, struct sock *sk,
+ 
+ 	if (err_mask)
+ 		err = can_rx_register(dev, 0, err_mask | CAN_ERR_FLAG,
+-				      raw_rcv, sk, "raw");
++				      raw_rcv, sk, "raw", sk);
+ 
+ 	return err;
+ }
+@@ -264,21 +268,16 @@ static int raw_enable_allfilters(struct net_device *dev, struct sock *sk)
+ 	return err;
+ }
+ 
+-static int raw_notifier(struct notifier_block *nb,
+-			unsigned long msg, void *ptr)
++static void raw_notify(struct raw_sock *ro, unsigned long msg,
++		       struct net_device *dev)
+ {
+-	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+-	struct raw_sock *ro = container_of(nb, struct raw_sock, notifier);
+ 	struct sock *sk = &ro->sk;
+ 
+ 	if (!net_eq(dev_net(dev), &init_net))
+-		return NOTIFY_DONE;
+-
+-	if (dev->type != ARPHRD_CAN)
+-		return NOTIFY_DONE;
++		return;
+ 
+ 	if (ro->ifindex != dev->ifindex)
+-		return NOTIFY_DONE;
++		return;
+ 
+ 	switch (msg) {
+ 
+@@ -546,10 +576,18 @@ static int raw_setsockopt(struct socket *sock, int level, int optname,
+ 				return -EFAULT;
+ 		}
+ 
++		rtnl_lock();
+ 		lock_sock(sk);
+ 
+-		if (ro->bound && ro->ifindex)
++		if (ro->bound && ro->ifindex) {
+ 			dev = dev_get_by_index(&init_net, ro->ifindex);
++			if (!dev) {
++				if (count > 1)
++					kfree(filter);
++				err = -ENODEV;
++				goto out_fil;
++			}
++		}
+ 
+ 		if (ro->bound) {
+ 			/* (try to) register the new filters */
+@@ -599,10 +638,16 @@ static int raw_setsockopt(struct socket *sock, int level, int optname,
+ 
+ 		err_mask &= CAN_ERR_MASK;
+ 
++		rtnl_lock();
+ 		lock_sock(sk);
+ 
+-		if (ro->bound && ro->ifindex)
++		if (ro->bound && ro->ifindex) {
+ 			dev = dev_get_by_index(&init_net, ro->ifindex);
++			if (!dev) {
++				err = -ENODEV;
++				goto out_err;
++			}
++		}
+ 
+ 		/* remove current error mask */
+ 		if (ro->bound) {

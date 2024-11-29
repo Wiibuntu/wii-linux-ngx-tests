@@ -890,6 +890,7 @@ struct netns_ipvs {
 	struct delayed_work	defense_work;   /* Work handler */
 	int			drop_rate;
 	int			drop_counter;
+	int			old_secure_tcp;
 	atomic_t		dropentry;
 	/* locks in ctl.c */
 	spinlock_t		dropentry_lock;  /* drop entry handling */
@@ -1616,6 +1617,23 @@ static inline bool ip_vs_conn_uses_conntrack(struct ip_vs_conn *cp,
 		return false;
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct)
+		return true;
+#endif
+	return false;
+}
+
+/* Really using conntrack? */
+static inline bool ip_vs_conn_uses_conntrack(struct ip_vs_conn *cp,
+					     struct sk_buff *skb)
+{
+#ifdef CONFIG_IP_VS_NFCT
+	enum ip_conntrack_info ctinfo;
+	struct nf_conn *ct;
+
+	if (!(cp->flags & IP_VS_CONN_F_NFCT))
+		return false;
+	ct = nf_ct_get(skb, &ctinfo);
+	if (ct && !nf_ct_is_untracked(ct))
 		return true;
 #endif
 	return false;

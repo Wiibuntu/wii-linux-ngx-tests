@@ -1,0 +1,122 @@
+--- fs/btrfs/ctree.c
++++ fs/btrfs/ctree.c
+@@ -386,29 +364,27 @@ void btrfs_put_tree_mod_seq(struct btrfs_fs_info *fs_info,
+ 				 * blocker with lower sequence number exists, we
+ 				 * cannot remove anything from the log
+ 				 */
+-				spin_unlock(&fs_info->tree_mod_seq_lock);
++				write_unlock(&fs_info->tree_mod_log_lock);
+ 				return;
+ 			}
+ 			min_seq = cur_elem->seq;
+ 		}
+ 	}
+-	spin_unlock(&fs_info->tree_mod_seq_lock);
+ 
+ 	/*
+ 	 * anything that's lower than the lowest existing (read: blocked)
+ 	 * sequence number can be removed from the tree.
+ 	 */
+-	tree_mod_log_write_lock(fs_info);
+ 	tm_root = &fs_info->tree_mod_log;
+ 	for (node = rb_first(tm_root); node; node = next) {
+ 		next = rb_next(node);
+ 		tm = container_of(node, struct tree_mod_elem, node);
+-		if (tm->seq > min_seq)
++		if (tm->seq >= min_seq)
+ 			continue;
+ 		rb_erase(node, tm_root);
+ 		kfree(tm);
+ 	}
+-	tree_mod_log_write_unlock(fs_info);
++	write_unlock(&fs_info->tree_mod_log_lock);
+ }
+ 
+ /*
+@@ -1131,6 +1107,8 @@ static noinline int __btrfs_cow_block(struct btrfs_trans_handle *trans,
+ 
+ 	ret = update_ref_for_cow(trans, root, buf, cow, &last_ref);
+ 	if (ret) {
++		btrfs_tree_unlock(cow);
++		free_extent_buffer(cow);
+ 		btrfs_abort_transaction(trans, root, ret);
+ 		return ret;
+ 	}
+@@ -1138,6 +1116,8 @@ static noinline int __btrfs_cow_block(struct btrfs_trans_handle *trans,
+ 	if (test_bit(BTRFS_ROOT_REF_COWS, &root->state)) {
+ 		ret = btrfs_reloc_cow_block(trans, root, buf, cow);
+ 		if (ret) {
++			btrfs_tree_unlock(cow);
++			free_extent_buffer(cow);
+ 			btrfs_abort_transaction(trans, root, ret);
+ 			return ret;
+ 		}
+@@ -1176,6 +1156,8 @@ static noinline int __btrfs_cow_block(struct btrfs_trans_handle *trans,
+ 		if (last_ref) {
+ 			ret = tree_mod_log_free_eb(root->fs_info, buf);
+ 			if (ret) {
++				btrfs_tree_unlock(cow);
++				free_extent_buffer(cow);
+ 				btrfs_abort_transaction(trans, root, ret);
+ 				return ret;
+ 			}
+@@ -1535,6 +1523,7 @@ noinline int btrfs_cow_block(struct btrfs_trans_handle *trans,
+ 		       trans->transid, root->fs_info->generation);
+ 
+ 	if (!should_cow_block(trans, root, buf)) {
++		trans->dirty = true;
+ 		*cow_ret = buf;
+ 		return 0;
+ 	}
+@@ -1709,20 +1698,6 @@ int btrfs_realloc_node(struct btrfs_trans_handle *trans,
+ 	return err;
+ }
+ 
+-/*
+- * The leaf data grows from end-to-front in the node.
+- * this returns the address of the start of the last item,
+- * which is the stop of the leaf data stack
+- */
+-static inline unsigned int leaf_data_end(struct btrfs_root *root,
+-					 struct extent_buffer *leaf)
+-{
+-	u32 nr = btrfs_header_nritems(leaf);
+-	if (nr == 0)
+-		return BTRFS_LEAF_DATA_SIZE(root);
+-	return btrfs_item_offset_nr(leaf, nr - 1);
+-}
+-
+ 
+ /*
+  * search for key in the extent_buffer.  The items start at offset p,
+@@ -2480,10 +2455,8 @@ read_block_for_search(struct btrfs_trans_handle *trans,
+ 	if (p->reada)
+ 		reada_for_search(root, p, level, slot, key->objectid);
+ 
+-	btrfs_release_path(p);
+-
+ 	ret = -EAGAIN;
+-	tmp = read_tree_block(root, blocknr, 0);
++	tmp = read_tree_block(root, blocknr, gen);
+ 	if (!IS_ERR(tmp)) {
+ 		/*
+ 		 * If the read above didn't mark this buffer up to date,
+@@ -2754,13 +2729,17 @@ again:
+ 		 * contention with the cow code
+ 		 */
+ 		if (cow) {
++			bool last_level = (level == (BTRFS_MAX_LEVEL - 1));
++
+ 			/*
+ 			 * if we don't really need to cow this block
+ 			 * then we don't want to set the path blocking,
+ 			 * so we test it here
+ 			 */
+-			if (!should_cow_block(trans, root, b))
++			if (!should_cow_block(trans, root, b)) {
++				trans->dirty = true;
+ 				goto cow_done;
++			}
+ 
+ 			/*
+ 			 * must have write locks on this node and the

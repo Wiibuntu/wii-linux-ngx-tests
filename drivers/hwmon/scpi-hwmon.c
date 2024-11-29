@@ -123,6 +123,7 @@ scpi_show_label(struct device *dev, struct device_attribute *attr, char *buf)
 static const struct thermal_zone_of_device_ops scpi_sensor_ops = {
 	.get_temp = scpi_read_temp,
 };
+MODULE_DEVICE_TABLE(of, scpi_of_match);
 
 static const struct of_device_id scpi_of_match[] = {
 	{.compatible = "arm,scpi-sensors", .data = &scpi_scale},

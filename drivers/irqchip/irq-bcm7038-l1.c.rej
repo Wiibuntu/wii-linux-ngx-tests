@@ -1,0 +1,12 @@
+--- drivers/irqchip/irq-bcm7038-l1.c
++++ drivers/irqchip/irq-bcm7038-l1.c
+@@ -298,6 +329,9 @@ static struct irq_chip bcm7038_l1_irq_chip = {
+ 	.irq_mask		= bcm7038_l1_mask,
+ 	.irq_unmask		= bcm7038_l1_unmask,
+ 	.irq_set_affinity	= bcm7038_l1_set_affinity,
++#ifdef CONFIG_SMP
++	.irq_cpu_offline	= bcm7038_l1_cpu_offline,
++#endif
+ };
+ 
+ static int bcm7038_l1_map(struct irq_domain *d, unsigned int virq,

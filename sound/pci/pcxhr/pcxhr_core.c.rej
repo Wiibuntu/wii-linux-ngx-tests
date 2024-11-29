@@ -1,0 +1,9 @@
+--- sound/pci/pcxhr/pcxhr_core.c
++++ sound/pci/pcxhr/pcxhr_core.c
+@@ -1341,5 +1341,6 @@ irqreturn_t pcxhr_threaded_irq(int irq, void *dev_id)
+ 	}
+ 
+ 	pcxhr_msg_thread(mgr);
++	mutex_unlock(&mgr->lock);
+ 	return IRQ_HANDLED;
+ }

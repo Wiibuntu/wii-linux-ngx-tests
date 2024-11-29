@@ -85,13 +85,13 @@ wait:
 	return status;
 }
 
-static void alarm_handler(int signum)
+static void sig_handler(int signum)
 {
-	/* Jut wake us up from waitpid */
+	/* Just wake us up from waitpid */
 }
 
-static struct sigaction alarm_action = {
-	.sa_handler = alarm_handler,
+static struct sigaction sig_action = {
+	.sa_handler = sig_handler,
 };
 
 void test_harness_set_timeout(uint64_t time)

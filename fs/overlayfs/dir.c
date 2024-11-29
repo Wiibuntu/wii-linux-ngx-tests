@@ -338,6 +338,7 @@ static int ovl_set_upper_acl(struct dentry *upperdentry, const char *name,
 	void *buffer;
 	size_t size;
 	int err;
+	int flags = 0;
 
 	if (!IS_ENABLED(CONFIG_FS_POSIX_ACL) || !acl)
 		return 0;

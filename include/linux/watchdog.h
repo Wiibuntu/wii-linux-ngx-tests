@@ -140,6 +140,15 @@ static inline bool watchdog_hw_running(struct watchdog_device *wdd)
 	return test_bit(WDOG_HW_RUNNING, &wdd->status);
 }
 
+/*
+ * Use the following function to check whether or not the hardware watchdog
+ * is running
+ */
+static inline bool watchdog_hw_running(struct watchdog_device *wdd)
+{
+	return test_bit(WDOG_HW_RUNNING, &wdd->status);
+}
+
 /* Use the following function to set the nowayout feature */
 static inline void watchdog_set_nowayout(struct watchdog_device *wdd, bool nowayout)
 {

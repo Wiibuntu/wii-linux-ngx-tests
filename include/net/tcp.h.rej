@@ -1,0 +1,113 @@
+--- include/net/tcp.h
++++ include/net/tcp.h
+@@ -452,7 +455,7 @@ const u8 *tcp_parse_md5sig_option(const struct tcphdr *th);
+ 
+ void tcp_v4_send_check(struct sock *sk, struct sk_buff *skb);
+ void tcp_v4_mtu_reduced(struct sock *sk);
+-void tcp_req_err(struct sock *sk, u32 seq);
++void tcp_req_err(struct sock *sk, u32 seq, bool abort);
+ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb);
+ struct sock *tcp_create_openreq_child(const struct sock *sk,
+ 				      struct request_sock *req,
+@@ -659,7 +671,7 @@ static inline void tcp_fast_path_check(struct sock *sk)
+ {
+ 	struct tcp_sock *tp = tcp_sk(sk);
+ 
+-	if (skb_queue_empty(&tp->out_of_order_queue) &&
++	if (RB_EMPTY_ROOT(&tp->out_of_order_queue) &&
+ 	    tp->rcv_wnd &&
+ 	    atomic_read(&sk->sk_rmem_alloc) < sk->sk_rcvbuf &&
+ 	    !tp->urg_data)
+@@ -1169,6 +1182,7 @@ static inline void tcp_prequeue_init(struct tcp_sock *tp)
+ }
+ 
+ bool tcp_prequeue(struct sock *sk, struct sk_buff *skb);
++int tcp_filter(struct sock *sk, struct sk_buff *skb);
+ 
+ #undef STATE_TRACE
+ 
+@@ -1211,9 +1225,11 @@ void tcp_select_initial_window(int __space, __u32 mss, __u32 *rcv_wnd,
+ 
+ static inline int tcp_win_from_space(int space)
+ {
+-	return sysctl_tcp_adv_win_scale<=0 ?
+-		(space>>(-sysctl_tcp_adv_win_scale)) :
+-		space - (space>>sysctl_tcp_adv_win_scale);
++	int tcp_adv_win_scale = sysctl_tcp_adv_win_scale;
++
++	return tcp_adv_win_scale <= 0 ?
++		(space>>(-tcp_adv_win_scale)) :
++		space - (space>>tcp_adv_win_scale);
+ }
+ 
+ /* Note: caller must be prepared to deal with negative returns */
+@@ -1472,6 +1493,8 @@ static inline void tcp_write_queue_purge(struct sock *sk)
+ 		sk_wmem_free_skb(sk, skb);
+ 	sk_mem_reclaim(sk);
+ 	tcp_clear_all_retrans_hints(tcp_sk(sk));
++	tcp_init_send_head(sk);
++	inet_csk(sk)->icsk_backoff = 0;
+ }
+ 
+ static inline struct sk_buff *tcp_write_queue_head(const struct sock *sk)
+@@ -1528,11 +1551,29 @@ static inline void tcp_check_send_head(struct sock *sk, struct sk_buff *skb_unli
+ {
+ 	if (sk->sk_send_head == skb_unlinked)
+ 		sk->sk_send_head = NULL;
++	if (tcp_sk(sk)->highest_sack == skb_unlinked)
++		tcp_sk(sk)->highest_sack = NULL;
+ }
+ 
+-static inline void tcp_init_send_head(struct sock *sk)
++static inline struct sk_buff *tcp_rtx_queue_head(const struct sock *sk)
+ {
+-	sk->sk_send_head = NULL;
++	struct sk_buff *skb = tcp_write_queue_head(sk);
++
++	if (skb == tcp_send_head(sk))
++		skb = NULL;
++
++	return skb;
++}
++
++static inline struct sk_buff *tcp_rtx_queue_tail(const struct sock *sk)
++{
++	struct sk_buff *skb = tcp_send_head(sk);
++
++	/* empty retransmit queue, for example due to zero window */
++	if (skb == tcp_write_queue_head(sk))
++		return NULL;
++
++	return skb ? tcp_write_queue_prev(sk, skb) : tcp_write_queue_tail(sk);
+ }
+ 
+ static inline void __tcp_add_write_queue_tail(struct sock *sk, struct sk_buff *skb)
+@@ -1627,12 +1668,12 @@ static inline void tcp_highest_sack_reset(struct sock *sk)
+ 	tcp_sk(sk)->highest_sack = tcp_write_queue_head(sk);
+ }
+ 
+-/* Called when old skb is about to be deleted (to be combined with new skb) */
+-static inline void tcp_highest_sack_combine(struct sock *sk,
++/* Called when old skb is about to be deleted and replaced by new skb */
++static inline void tcp_highest_sack_replace(struct sock *sk,
+ 					    struct sk_buff *old,
+ 					    struct sk_buff *new)
+ {
+-	if (tcp_sk(sk)->sacked_out && (old == tcp_sk(sk)->highest_sack))
++	if (old == tcp_highest_sack(sk))
+ 		tcp_sk(sk)->highest_sack = new;
+ }
+ 
+@@ -1685,7 +1726,11 @@ void __tcp_v4_send_check(struct sk_buff *skb, __be32 saddr, __be32 daddr);
+ 
+ static inline u32 tcp_notsent_lowat(const struct tcp_sock *tp)
+ {
+-	return tp->notsent_lowat ?: sysctl_tcp_notsent_lowat;
++	u32 val;
++
++	val = READ_ONCE(tp->notsent_lowat);
++
++	return val ?: READ_ONCE(sysctl_tcp_notsent_lowat);
+ }
+ 
+ static inline bool tcp_stream_memory_free(const struct sock *sk)

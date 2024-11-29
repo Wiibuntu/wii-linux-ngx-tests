@@ -198,6 +198,9 @@ static int restore_msa_extcontext(void __user *buf, unsigned int size)
 	if (!IS_ENABLED(CONFIG_CPU_HAS_MSA))
 		return SIGSYS;
 
+	if (!config_enabled(CONFIG_CPU_HAS_MSA))
+		return SIGSYS;
+
 	if (size != sizeof(*msa))
 		return -EINVAL;
 

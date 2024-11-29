@@ -98,6 +98,8 @@ struct sock *dccp_create_openreq_child(const struct sock *sk,
 		newdp->dccps_role	    = DCCP_ROLE_SERVER;
 		newdp->dccps_hc_rx_ackvec   = NULL;
 		newdp->dccps_service_list   = NULL;
+		newdp->dccps_hc_rx_ccid     = NULL;
+		newdp->dccps_hc_tx_ccid     = NULL;
 		newdp->dccps_service	    = dreq->dreq_service;
 		newdp->dccps_timestamp_echo = dreq->dreq_timestamp_echo;
 		newdp->dccps_timestamp_time = dreq->dreq_timestamp_time;
@@ -147,6 +149,13 @@ struct sock *dccp_check_req(struct sock *sk, struct sk_buff *skb,
 	struct sock *child = NULL;
 	struct dccp_request_sock *dreq = dccp_rsk(req);
 	bool own_req;
+
+	/* TCP/DCCP listeners became lockless.
+	 * DCCP stores complex state in its request_sock, so we need
+	 * a protection for them, now this code runs without being protected
+	 * by the parent (listener) lock.
+	 */
+	spin_lock_bh(&dreq->dreq_lock);
 
 	/* TCP/DCCP listeners became lockless.
 	 * DCCP stores complex state in its request_sock, so we need

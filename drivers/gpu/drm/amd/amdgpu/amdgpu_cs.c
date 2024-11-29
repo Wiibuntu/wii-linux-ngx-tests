@@ -508,6 +508,13 @@ static int amdgpu_cs_list_validate(struct amdgpu_cs_parser *p,
 			lobj->user_pages = NULL;
 		}
 	}
+
+	if (!(*out_ring && (*out_ring)->adev)) {
+		DRM_ERROR("Ring %d is not initialized on IP %d\n",
+			  ring, ip_type);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 

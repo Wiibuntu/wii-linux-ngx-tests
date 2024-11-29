@@ -123,6 +123,11 @@ static void reg_r(struct gspca_dev *gspca_dev, u16 value, u16 index)
 	if (ret < 0) {
 		pr_err("reg_r err %d\n", ret);
 		gspca_dev->usb_err = ret;
+		/*
+		 * Make sure the buffer is zeroed to avoid uninitialized
+		 * values.
+		 */
+		memset(gspca_dev->usb_buf, 0, 2);
 	}
 }
 
@@ -183,6 +188,9 @@ static int sd_start(struct gspca_dev *gspca_dev)
 		pr_err("Couldn't get altsetting\n");
 		return -EIO;
 	}
+
+	if (alt->desc.bNumEndpoints < 2)
+		return -ENODEV;
 
 	if (alt->desc.bNumEndpoints < 2)
 		return -ENODEV;

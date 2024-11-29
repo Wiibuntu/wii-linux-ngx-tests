@@ -855,6 +855,7 @@ static int compat_drm_wait_vblank(struct file *file, unsigned int cmd,
 
 	return 0;
 }
+#endif
 
 #if defined(CONFIG_X86)
 typedef struct drm_mode_fb_cmd232 {

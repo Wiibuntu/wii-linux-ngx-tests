@@ -445,6 +445,9 @@ EXPORT_SYMBOL_GPL(tpm_chip_register);
  * Once this function returns the driver call backs in 'op's will not be
  * running and will no longer start.
  *
+ * Once this function returns the driver call backs in 'op's will not be
+ * running and will no longer start.
+ *
  * NOTE: This function should be only called before deinitializing chip
  * resources.
  */

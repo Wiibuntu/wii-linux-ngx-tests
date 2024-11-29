@@ -51,6 +51,17 @@ void fsnotify_group_stop_queueing(struct fsnotify_group *group)
 }
 
 /*
+ * Stop queueing new events for this group. Once this function returns
+ * fsnotify_add_event() will not add any new events to the group's queue.
+ */
+void fsnotify_group_stop_queueing(struct fsnotify_group *group)
+{
+	mutex_lock(&group->notification_mutex);
+	group->shutdown = true;
+	mutex_unlock(&group->notification_mutex);
+}
+
+/*
  * Trying to get rid of a group. Remove all marks, flush all events and release
  * the group reference.
  * Note that another thread calling fsnotify_clear_marks_by_group() may still

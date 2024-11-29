@@ -1,0 +1,44 @@
+--- drivers/hwtracing/coresight/coresight.c
++++ drivers/hwtracing/coresight/coresight.c
+@@ -484,6 +487,8 @@ static void coresight_device_release(struct device *dev)
+ {
+ 	struct coresight_device *csdev = to_coresight_device(dev);
+ 
++	kfree(csdev->conns);
++	kfree(csdev->refcnt);
+ 	kfree(csdev);
+ }
+ 
+@@ -551,7 +556,7 @@ static int coresight_name_match(struct device *dev, void *data)
+ 	to_match = data;
+ 	i_csdev = to_coresight_device(dev);
+ 
+-	if (!strcmp(to_match, dev_name(&i_csdev->dev)))
++	if (to_match && !strcmp(to_match, dev_name(&i_csdev->dev)))
+ 		return 1;
+ 
+ 	return 0;
+@@ -571,6 +576,8 @@ static void coresight_fixup_device_conns(struct coresight_device *csdev)
+ 
+ 		if (dev) {
+ 			conn->child_dev = to_coresight_device(dev);
++			/* and put reference from 'bus_find_device()' */
++			put_device(dev);
+ 		} else {
+ 			csdev->orphan = true;
+ 			conn->child_dev = NULL;
+@@ -760,12 +811,9 @@ EXPORT_SYMBOL_GPL(coresight_register);
+ 
+ void coresight_unregister(struct coresight_device *csdev)
+ {
+-	mutex_lock(&coresight_mutex);
+-
+-	kfree(csdev->conns);
++	/* Remove references of that device in the topology */
++	coresight_remove_conns(csdev);
+ 	device_unregister(&csdev->dev);
+-
+-	mutex_unlock(&coresight_mutex);
+ }
+ EXPORT_SYMBOL_GPL(coresight_unregister);
+ 

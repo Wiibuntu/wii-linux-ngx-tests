@@ -1070,7 +1070,7 @@ static bool tipc_data_input(struct tipc_link *l, struct sk_buff *skb,
 	default:
 		pr_warn("Dropping received illegal msg type\n");
 		kfree_skb(skb);
-		return false;
+		return true;
 	};
 }
 
@@ -1470,6 +1470,10 @@ static int tipc_link_proto_rcv(struct tipc_link *l, struct sk_buff *skb,
 		/* fall thru' */
 
 	case ACTIVATE_MSG:
+		if (skb_linearize(skb))
+			goto exit;
+
+		hdr = buf_msg(skb);
 
 		/* Complete own link name with peer's interface name */
 		if_name =  strrchr(l->name, ':') + 1;

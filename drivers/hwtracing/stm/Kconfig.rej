@@ -1,0 +1,25 @@
+--- drivers/hwtracing/stm/Kconfig
++++ drivers/hwtracing/stm/Kconfig
+@@ -1,6 +1,7 @@
+ config STM
+ 	tristate "System Trace Module devices"
+ 	select CONFIGFS_FS
++	select SRCU
+ 	help
+ 	  A System Trace Module (STM) is a device exporting data in System
+ 	  Trace Protocol (STP) format as defined by MIPI STP standards.
+@@ -8,6 +9,8 @@ config STM
+ 
+ 	  Say Y here to enable System Trace Module device support.
+ 
++if STM
++
+ config STM_DUMMY
+ 	tristate "Dummy STM driver"
+ 	help
+@@ -24,3 +27,5 @@ config STM_SOURCE_CONSOLE
+ 
+ 	  If you want to send kernel console messages over STM devices,
+ 	  say Y.
++
++endif

@@ -1,0 +1,76 @@
+--- drivers/net/ethernet/amd/xgbe/xgbe-dev.c
++++ drivers/net/ethernet/amd/xgbe/xgbe-dev.c
+@@ -527,17 +536,15 @@ static int xgbe_disable_tx_flow_control(struct xgbe_prv_data *pdata)
+ 
+ static int xgbe_enable_tx_flow_control(struct xgbe_prv_data *pdata)
+ {
+-	unsigned int max_q_count, q_count;
+ 	unsigned int reg, reg_val;
+-	unsigned int i;
++	unsigned int i, q_count;
+ 
+ 	/* Set MTL flow control */
+ 	for (i = 0; i < pdata->rx_q_count; i++)
+ 		XGMAC_MTL_IOWRITE_BITS(pdata, i, MTL_Q_RQOMR, EHFC, 1);
+ 
+ 	/* Set MAC flow control */
+-	max_q_count = XGMAC_MAX_FLOW_CONTROL_QUEUES;
+-	q_count = min_t(unsigned int, pdata->tx_q_count, max_q_count);
++	q_count = xgbe_get_fc_queue_count(pdata);
+ 	reg = MAC_Q0TFCR;
+ 	for (i = 0; i < q_count; i++) {
+ 		reg_val = XGMAC_IOREAD(pdata, reg);
+@@ -1667,10 +1674,15 @@ static int xgbe_dev_read(struct xgbe_channel *channel)
+ 
+ 	/* Get the header length */
+ 	if (XGMAC_GET_BITS_LE(rdesc->desc3, RX_NORMAL_DESC3, FD)) {
++		XGMAC_SET_BITS(packet->attributes, RX_PACKET_ATTRIBUTES,
++			       FIRST, 1);
+ 		rdata->rx.hdr_len = XGMAC_GET_BITS_LE(rdesc->desc2,
+ 						      RX_NORMAL_DESC2, HL);
+ 		if (rdata->rx.hdr_len)
+ 			pdata->ext_stats.rx_split_header_packets++;
++	} else {
++		XGMAC_SET_BITS(packet->attributes, RX_PACKET_ATTRIBUTES,
++			       FIRST, 0);
+ 	}
+ 
+ 	/* Get the RSS hash */
+@@ -1693,19 +1705,16 @@ static int xgbe_dev_read(struct xgbe_channel *channel)
+ 		}
+ 	}
+ 
+-	/* Get the packet length */
+-	rdata->rx.len = XGMAC_GET_BITS_LE(rdesc->desc3, RX_NORMAL_DESC3, PL);
+-
+-	if (!XGMAC_GET_BITS_LE(rdesc->desc3, RX_NORMAL_DESC3, LD)) {
+-		/* Not all the data has been transferred for this packet */
+-		XGMAC_SET_BITS(packet->attributes, RX_PACKET_ATTRIBUTES,
+-			       INCOMPLETE, 1);
++	/* Not all the data has been transferred for this packet */
++	if (!XGMAC_GET_BITS_LE(rdesc->desc3, RX_NORMAL_DESC3, LD))
+ 		return 0;
+-	}
+ 
+ 	/* This is the last of the data for this packet */
+ 	XGMAC_SET_BITS(packet->attributes, RX_PACKET_ATTRIBUTES,
+-		       INCOMPLETE, 0);
++		       LAST, 1);
++
++	/* Get the packet length */
++	rdata->rx.len = XGMAC_GET_BITS_LE(rdesc->desc3, RX_NORMAL_DESC3, PL);
+ 
+ 	/* Set checksum done indicator as appropriate */
+ 	if (netdev->features & NETIF_F_RXCSUM)
+@@ -2739,8 +2748,10 @@ static int xgbe_init(struct xgbe_prv_data *pdata)
+ 
+ 	/* Flush Tx queues */
+ 	ret = xgbe_flush_tx_queues(pdata);
+-	if (ret)
++	if (ret) {
++		netdev_err(pdata->netdev, "error flushing TX queues\n");
+ 		return ret;
++	}
+ 
+ 	/*
+ 	 * Initialize DMA related features

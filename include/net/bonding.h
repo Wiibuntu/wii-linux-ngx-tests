@@ -182,6 +182,9 @@ struct bond_up_slave {
 	struct slave	*arr[0];
 };
 
+#ifndef __long_aligned
+#define __long_aligned __attribute__((aligned((sizeof(long)))))
+#endif
 /*
  * Link pseudo-state only used internally by monitors
  */
@@ -717,6 +720,9 @@ extern struct bond_parm_tbl ad_select_tbl[];
 
 /* exported from bond_netlink.c */
 extern struct rtnl_link_ops bond_link_ops;
+
+/* exported from bond_sysfs_slave.c */
+extern const struct sysfs_ops slave_sysfs_ops;
 
 static inline void bond_tx_drop(struct net_device *dev, struct sk_buff *skb)
 {

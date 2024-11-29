@@ -1,0 +1,10 @@
+--- arch/x86/kernel/i8259.c
++++ arch/x86/kernel/i8259.c
+@@ -419,6 +420,7 @@ struct legacy_pic default_legacy_pic = {
+ };
+ 
+ struct legacy_pic *legacy_pic = &default_legacy_pic;
++EXPORT_SYMBOL(legacy_pic);
+ 
+ static int __init i8259A_init_ops(void)
+ {

@@ -1,0 +1,94 @@
+--- drivers/dma/imx-sdma.c
++++ drivers/dma/imx-sdma.c
+@@ -1730,17 +1753,24 @@ static int sdma_probe(struct platform_device *pdev)
+ 	if (IS_ERR(sdma->clk_ahb))
+ 		return PTR_ERR(sdma->clk_ahb);
+ 
+-	clk_prepare(sdma->clk_ipg);
+-	clk_prepare(sdma->clk_ahb);
++	ret = clk_prepare(sdma->clk_ipg);
++	if (ret)
++		return ret;
++
++	ret = clk_prepare(sdma->clk_ahb);
++	if (ret)
++		goto err_clk;
+ 
+ 	ret = devm_request_irq(&pdev->dev, irq, sdma_int_handler, 0, "sdma",
+ 			       sdma);
+ 	if (ret)
+-		return ret;
++		goto err_irq;
+ 
+ 	sdma->script_addrs = kzalloc(sizeof(*sdma->script_addrs), GFP_KERNEL);
+-	if (!sdma->script_addrs)
+-		return -ENOMEM;
++	if (!sdma->script_addrs) {
++		ret = -ENOMEM;
++		goto err_irq;
++	}
+ 
+ 	/* initially no scripts available */
+ 	saddr_arr = (s32 *)sdma->script_addrs;
+@@ -1795,7 +1804,7 @@ static int sdma_probe(struct platform_device *pdev)
+ 	sdma->dma_device.device_prep_slave_sg = sdma_prep_slave_sg;
+ 	sdma->dma_device.device_prep_dma_cyclic = sdma_prep_dma_cyclic;
+ 	sdma->dma_device.device_config = sdma_config;
+-	sdma->dma_device.device_terminate_all = sdma_disable_channel;
++	sdma->dma_device.device_terminate_all = sdma_disable_channel_with_delay;
+ 	sdma->dma_device.src_addr_widths = BIT(DMA_SLAVE_BUSWIDTH_4_BYTES);
+ 	sdma->dma_device.dst_addr_widths = BIT(DMA_SLAVE_BUSWIDTH_4_BYTES);
+ 	sdma->dma_device.directions = BIT(DMA_DEV_TO_MEM) | BIT(DMA_MEM_TO_DEV);
+@@ -1828,12 +1837,43 @@ static int sdma_probe(struct platform_device *pdev)
+ 		of_node_put(spba_bus);
+ 	}
+ 
++	/*
++	 * Kick off firmware loading as the very last step:
++	 * attempt to load firmware only if we're not on the error path, because
++	 * the firmware callback requires a fully functional and allocated sdma
++	 * instance.
++	 */
++	if (pdata) {
++		ret = sdma_get_firmware(sdma, pdata->fw_name);
++		if (ret)
++			dev_warn(&pdev->dev, "failed to get firmware from platform data\n");
++	} else {
++		/*
++		 * Because that device tree does not encode ROM script address,
++		 * the RAM script in firmware is mandatory for device tree
++		 * probe, otherwise it fails.
++		 */
++		ret = of_property_read_string(np, "fsl,sdma-ram-script-name",
++					      &fw_name);
++		if (ret) {
++			dev_warn(&pdev->dev, "failed to get firmware name\n");
++		} else {
++			ret = sdma_get_firmware(sdma, fw_name);
++			if (ret)
++				dev_warn(&pdev->dev, "failed to get firmware from device tree\n");
++		}
++	}
++
+ 	return 0;
+ 
+ err_register:
+ 	dma_async_device_unregister(&sdma->dma_device);
+ err_init:
+ 	kfree(sdma->script_addrs);
++err_irq:
++	clk_unprepare(sdma->clk_ahb);
++err_clk:
++	clk_unprepare(sdma->clk_ipg);
+ 	return ret;
+ }
+ 
+@@ -1844,6 +1884,8 @@ static int sdma_remove(struct platform_device *pdev)
+ 
+ 	dma_async_device_unregister(&sdma->dma_device);
+ 	kfree(sdma->script_addrs);
++	clk_unprepare(sdma->clk_ahb);
++	clk_unprepare(sdma->clk_ipg);
+ 	/* Kill the tasklet */
+ 	for (i = 0; i < MAX_DMA_CHANNELS; i++) {
+ 		struct sdma_channel *sdmac = &sdma->channel[i];

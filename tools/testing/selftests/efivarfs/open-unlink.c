@@ -48,6 +48,18 @@ static int get_immutable(const char *path)
 	int rc;
 	int error;
 
+	rc = get_immutable(path);
+	if (rc < 0) {
+		perror("ioctl(FS_IOC_GETFLAGS)");
+		return EXIT_FAILURE;
+	} else if (rc) {
+		rc = set_immutable(path, 0);
+		if (rc < 0) {
+			perror("ioctl(FS_IOC_SETFLAGS)");
+			return EXIT_FAILURE;
+		}
+	}
+
 	fd = open(path, O_RDONLY);
 	if (fd < 0)
 		return fd;

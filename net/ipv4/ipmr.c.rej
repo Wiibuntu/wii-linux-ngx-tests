@@ -1,0 +1,39 @@
+--- net/ipv4/ipmr.c
++++ net/ipv4/ipmr.c
+@@ -66,6 +66,7 @@
+ #include <net/netlink.h>
+ #include <net/fib_rules.h>
+ #include <linux/netconf.h>
++#include <linux/nospec.h>
+ 
+ #if defined(CONFIG_IP_PIMSM_V1) || defined(CONFIG_IP_PIMSM_V2)
+ #define CONFIG_IP_PIMSM	1
+@@ -884,8 +887,10 @@ static struct mfc_cache *ipmr_cache_alloc(void)
+ {
+ 	struct mfc_cache *c = kmem_cache_zalloc(mrt_cachep, GFP_KERNEL);
+ 
+-	if (c)
++	if (c) {
++		c->mfc_un.res.last_assert = jiffies - MFC_ASSERT_THRESH - 1;
+ 		c->mfc_un.res.minvif = MAXVIFS;
++	}
+ 	return c;
+ }
+ 
+@@ -2193,7 +2199,7 @@ static int __ipmr_fill_mroute(struct mr_table *mrt, struct sk_buff *skb,
+ 
+ int ipmr_get_route(struct net *net, struct sk_buff *skb,
+ 		   __be32 saddr, __be32 daddr,
+-		   struct rtmsg *rtm, int nowait)
++		   struct rtmsg *rtm, int nowait, u32 portid)
+ {
+ 	struct mfc_cache *cache;
+ 	struct mr_table *mrt;
+@@ -2238,6 +2244,7 @@ int ipmr_get_route(struct net *net, struct sk_buff *skb,
+ 			return -ENOMEM;
+ 		}
+ 
++		NETLINK_CB(skb2).portid = portid;
+ 		skb_push(skb2, sizeof(struct iphdr));
+ 		skb_reset_network_header(skb2);
+ 		iph = ip_hdr(skb2);

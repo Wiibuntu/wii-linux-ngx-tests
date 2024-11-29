@@ -130,4 +130,9 @@ static inline bool ebt_invalid_target(int target)
 	return (target < -NUM_STANDARD_TARGETS || target >= 0);
 }
 
+static inline bool ebt_invalid_target(int target)
+{
+	return (target < -NUM_STANDARD_TARGETS || target >= 0);
+}
+
 #endif

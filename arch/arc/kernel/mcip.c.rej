@@ -1,0 +1,23 @@
+--- arch/arc/kernel/mcip.c
++++ arch/arc/kernel/mcip.c
+@@ -11,9 +11,12 @@
+ #include <linux/smp.h>
+ #include <linux/irq.h>
+ #include <linux/spinlock.h>
++#include <asm/irqflags-arcv2.h>
+ #include <asm/mcip.h>
+ #include <asm/setup.h>
+ 
++#define SOFTIRQ_IRQ	21
++
+ static char smp_cpuinfo_buf[128];
+ static int idu_detected;
+ 
+@@ -22,6 +25,7 @@ static DEFINE_RAW_SPINLOCK(mcip_lock);
+ static void mcip_setup_per_cpu(int cpu)
+ {
+ 	smp_ipi_irq_setup(cpu, IPI_IRQ);
++	smp_ipi_irq_setup(cpu, SOFTIRQ_IRQ);
+ }
+ 
+ static void mcip_ipi_send(int cpu)

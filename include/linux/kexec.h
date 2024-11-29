@@ -6,12 +6,14 @@
 #define IND_INDIRECTION_BIT 1
 #define IND_DONE_BIT        2
 #define IND_SOURCE_BIT      3
+#define IND_NOALLOC_BIT     4
 
 #define IND_DESTINATION  (1 << IND_DESTINATION_BIT)
 #define IND_INDIRECTION  (1 << IND_INDIRECTION_BIT)
 #define IND_DONE         (1 << IND_DONE_BIT)
 #define IND_SOURCE       (1 << IND_SOURCE_BIT)
-#define IND_FLAGS (IND_DESTINATION | IND_INDIRECTION | IND_DONE | IND_SOURCE)
+#define IND_NOALLOC      (1 << IND_NOALLOC_BIT) /* special case for memory preserving code */
+#define IND_FLAGS (IND_DESTINATION | IND_INDIRECTION | IND_DONE | IND_SOURCE | IND_NOALLOC)
 
 #if !defined(__ASSEMBLY__)
 
@@ -169,6 +171,8 @@ struct kimage {
 	kimage_entry_t head;
 	kimage_entry_t *entry;
 	kimage_entry_t *last_entry;
+
+	unsigned long destination;
 
 	unsigned long start;
 	struct page *control_code_page;

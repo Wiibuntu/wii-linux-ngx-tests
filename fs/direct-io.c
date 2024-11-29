@@ -768,6 +768,7 @@ static inline int dio_send_cur_page(struct dio *dio, struct dio_submit *sdio,
 		struct buffer_head *map_bh)
 {
 	int ret = 0;
+	int boundary = sdio->boundary;	/* dio_send_cur_page may clear it */
 
 	if (sdio->bio) {
 		loff_t cur_offset = sdio->cur_page_fs_offset;

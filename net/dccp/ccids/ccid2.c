@@ -143,6 +143,9 @@ static void ccid2_hc_tx_rto_expire(struct timer_list *t)
 	if (sk->sk_state == DCCP_CLOSED)
 		goto out;
 
+	if (sk->sk_state == DCCP_CLOSED)
+		goto out;
+
 	/* back-off timer */
 	hc->tx_rto <<= 1;
 	if (hc->tx_rto > DCCP_RTO_MAX)
@@ -166,7 +169,7 @@ static void ccid2_hc_tx_rto_expire(struct timer_list *t)
 
 	/* if we were blocked before, we may now send cwnd=1 packet */
 	if (sender_was_blocked)
-		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
+		dccp_tasklet_schedule(sk);
 	/* restart backed-off timer */
 	sk_reset_timer(sk, &hc->tx_rtotimer, jiffies + hc->tx_rto);
 out:
@@ -218,14 +221,16 @@ static void ccid2_cwnd_restart(struct sock *sk, const u32 now)
 	struct ccid2_hc_tx_sock *hc = ccid2_hc_tx_sk(sk);
 	u32 cwnd = hc->tx_cwnd, restart_cwnd,
 	    iwnd = rfc3390_bytes_to_packets(dccp_sk(sk)->dccps_mss_cache);
+	s32 delta = now - hc->tx_lsndtime;
 
 	hc->tx_ssthresh = max(hc->tx_ssthresh, (cwnd >> 1) + (cwnd >> 2));
 
 	/* don't reduce cwnd below the initial window (IW) */
 	restart_cwnd = min(cwnd, iwnd);
-	cwnd >>= (now - hc->tx_lsndtime) / hc->tx_rto;
-	hc->tx_cwnd = max(cwnd, restart_cwnd);
 
+	while ((delta -= hc->tx_rto) >= 0 && cwnd > restart_cwnd)
+		cwnd >>= 1;
+	hc->tx_cwnd = max(cwnd, restart_cwnd);
 	hc->tx_cwnd_stamp = now;
 	hc->tx_cwnd_used  = 0;
 
@@ -706,7 +711,7 @@ static void ccid2_hc_tx_packet_recv(struct sock *sk, struct sk_buff *skb)
 done:
 	/* check if incoming Acks allow pending packets to be sent */
 	if (sender_was_blocked && !ccid2_cwnd_network_limited(hc))
-		tasklet_schedule(&dccp_sk(sk)->dccps_xmitlet);
+		dccp_tasklet_schedule(sk);
 	dccp_ackvec_parsed_cleanup(&hc->tx_av_chunks);
 }
 

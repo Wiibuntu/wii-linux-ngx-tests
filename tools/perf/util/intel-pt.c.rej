@@ -1,0 +1,30 @@
+--- tools/perf/util/intel-pt.c
++++ tools/perf/util/intel-pt.c
+@@ -242,7 +246,7 @@ static int intel_pt_get_trace(struct intel_pt_buffer *b, void *data)
+ 	}
+ 
+ 	queue = &ptq->pt->queues.queue_array[ptq->queue_nr];
+-
++next:
+ 	buffer = auxtrace_buffer__next(queue, buffer);
+ 	if (!buffer) {
+ 		if (old_buffer)
+@@ -265,9 +269,6 @@ static int intel_pt_get_trace(struct intel_pt_buffer *b, void *data)
+ 	    intel_pt_do_fix_overlap(ptq->pt, old_buffer, buffer))
+ 		return -ENOMEM;
+ 
+-	if (old_buffer)
+-		auxtrace_buffer__drop_data(old_buffer);
+-
+ 	if (buffer->use_data) {
+ 		b->len = buffer->use_size;
+ 		b->buf = buffer->use_data;
+@@ -1149,7 +1168,7 @@ static int intel_pt_synth_transaction_sample(struct intel_pt_queue *ptq)
+ 		pr_err("Intel Processor Trace: failed to deliver transaction event, error %d\n",
+ 		       ret);
+ 
+-	if (pt->synth_opts.callchain)
++	if (pt->synth_opts.last_branch)
+ 		intel_pt_reset_last_branch_rb(ptq);
+ 
+ 	return ret;

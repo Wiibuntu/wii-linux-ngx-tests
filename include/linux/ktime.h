@@ -61,6 +61,13 @@ static inline ktime_t ktime_set(const s64 secs, const unsigned long nsecs)
 #define ktime_add_ns(kt, nsval)		((kt) + (nsval))
 
 /*
+ * Same as ktime_add(), but avoids undefined behaviour on overflow; however,
+ * this means that you must check the result for overflow yourself.
+ */
+#define ktime_add_unsafe(lhs, rhs) \
+		({ (ktime_t){ .tv64 = (u64) (lhs).tv64 + (rhs).tv64 }; })
+
+/*
  * Subtract a scalar nanosecod from a ktime_t variable
  * res = kt - nsval:
  */

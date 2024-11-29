@@ -838,6 +838,7 @@ static int intel_crt_get_modes(struct drm_connector *connector)
 	struct intel_encoder *intel_encoder = &crt->base;
 	int ret;
 	struct i2c_adapter *i2c;
+	bool ret = false;
 
 	intel_display_power_get(dev_priv, intel_encoder->power_domain);
 

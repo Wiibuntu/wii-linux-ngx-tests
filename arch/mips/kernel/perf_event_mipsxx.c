@@ -823,6 +823,16 @@ static const struct mips_perf_event i6x00_event_map[PERF_COUNT_HW_MAX] = {
 	[PERF_COUNT_HW_BRANCH_MISSES]       = { 0x16, CNTR_EVEN | CNTR_ODD },
 };
 
+static const struct mips_perf_event i6400_event_map[PERF_COUNT_HW_MAX] = {
+	[PERF_COUNT_HW_CPU_CYCLES]          = { 0x00, CNTR_EVEN | CNTR_ODD },
+	[PERF_COUNT_HW_INSTRUCTIONS]        = { 0x01, CNTR_EVEN | CNTR_ODD },
+	/* These only count dcache, not icache */
+	[PERF_COUNT_HW_CACHE_REFERENCES]    = { 0x45, CNTR_EVEN | CNTR_ODD },
+	[PERF_COUNT_HW_CACHE_MISSES]        = { 0x48, CNTR_EVEN | CNTR_ODD },
+	[PERF_COUNT_HW_BRANCH_INSTRUCTIONS] = { 0x15, CNTR_EVEN | CNTR_ODD },
+	[PERF_COUNT_HW_BRANCH_MISSES]       = { 0x16, CNTR_EVEN | CNTR_ODD },
+};
+
 static const struct mips_perf_event loongson3_event_map[PERF_COUNT_HW_MAX] = {
 	[PERF_COUNT_HW_CPU_CYCLES] = { 0x00, CNTR_EVEN },
 	[PERF_COUNT_HW_INSTRUCTIONS] = { 0x00, CNTR_ODD },
@@ -1014,6 +1024,46 @@ static const struct mips_perf_event mipsxxcore_cache_map2
 };
 
 static const struct mips_perf_event i6x00_cache_map
+				[PERF_COUNT_HW_CACHE_MAX]
+				[PERF_COUNT_HW_CACHE_OP_MAX]
+				[PERF_COUNT_HW_CACHE_RESULT_MAX] = {
+[C(L1D)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x46, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x49, CNTR_EVEN | CNTR_ODD },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0x47, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x4a, CNTR_EVEN | CNTR_ODD },
+	},
+},
+[C(L1I)] = {
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x84, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x85, CNTR_EVEN | CNTR_ODD },
+	},
+},
+[C(DTLB)] = {
+	/* Can't distinguish read & write */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x40, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x41, CNTR_EVEN | CNTR_ODD },
+	},
+	[C(OP_WRITE)] = {
+		[C(RESULT_ACCESS)]	= { 0x40, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x41, CNTR_EVEN | CNTR_ODD },
+	},
+},
+[C(BPU)] = {
+	/* Conditional branches / mispredicted */
+	[C(OP_READ)] = {
+		[C(RESULT_ACCESS)]	= { 0x15, CNTR_EVEN | CNTR_ODD },
+		[C(RESULT_MISS)]	= { 0x16, CNTR_EVEN | CNTR_ODD },
+	},
+},
+};
+
+static const struct mips_perf_event i6400_cache_map
 				[PERF_COUNT_HW_CACHE_MAX]
 				[PERF_COUNT_HW_CACHE_OP_MAX]
 				[PERF_COUNT_HW_CACHE_RESULT_MAX] = {
@@ -1610,6 +1660,11 @@ static const struct mips_perf_event *mipsxx_pmu_map_raw_event(u64 config)
 		break;
 	case CPU_I6400:
 	case CPU_I6500:
+		/* 8-bit event numbers */
+		base_id = config & 0xff;
+		raw_event.cntr_mask = CNTR_EVEN | CNTR_ODD;
+		break;
+	case CPU_I6400:
 		/* 8-bit event numbers */
 		base_id = config & 0xff;
 		raw_event.cntr_mask = CNTR_EVEN | CNTR_ODD;

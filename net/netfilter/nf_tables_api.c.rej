@@ -1,0 +1,116 @@
+--- net/netfilter/nf_tables_api.c
++++ net/netfilter/nf_tables_api.c
+@@ -1997,7 +1998,7 @@ static void nf_tables_rule_destroy(const struct nft_ctx *ctx,
+ 	 * is called on error from nf_tables_newrule().
+ 	 */
+ 	expr = nft_expr_first(rule);
+-	while (expr->ops && expr != nft_expr_last(rule)) {
++	while (expr != nft_expr_last(rule) && expr->ops) {
+ 		nf_tables_expr_destroy(ctx, expr);
+ 		expr = nft_expr_next(expr);
+ 	}
+@@ -2370,7 +2371,7 @@ static int nft_ctx_init_from_setattr(struct nft_ctx *ctx, struct net *net,
+ 	return 0;
+ }
+ 
+-struct nft_set *nf_tables_set_lookup(const struct nft_table *table,
++static struct nft_set *nf_tables_set_lookup(const struct nft_table *table,
+ 				     const struct nlattr *nla)
+ {
+ 	struct nft_set *set;
+@@ -2385,20 +2386,42 @@ struct nft_set *nf_tables_set_lookup(const struct nft_table *table,
+ 	return ERR_PTR(-ENOENT);
+ }
+ 
+-struct nft_set *nf_tables_set_lookup_byid(const struct net *net,
++static struct nft_set *nf_tables_set_lookup_byid(const struct net *net,
++					  const struct nft_table *table,
+ 					  const struct nlattr *nla)
+ {
+ 	struct nft_trans *trans;
+ 	u32 id = ntohl(nla_get_be32(nla));
+ 
+ 	list_for_each_entry(trans, &net->nft.commit_list, list) {
++		struct nft_set *set = nft_trans_set(trans);
++
+ 		if (trans->msg_type == NFT_MSG_NEWSET &&
+-		    id == nft_trans_set_id(trans))
+-			return nft_trans_set(trans);
++		    id == nft_trans_set_id(trans) &&
++		    set->table == table)
++			return set;
+ 	}
+ 	return ERR_PTR(-ENOENT);
+ }
+ 
++struct nft_set *nft_set_lookup(const struct net *net,
++			       const struct nft_table *table,
++			       const struct nlattr *nla_set_name,
++			       const struct nlattr *nla_set_id)
++{
++	struct nft_set *set;
++
++	set = nf_tables_set_lookup(table, nla_set_name);
++	if (IS_ERR(set)) {
++		if (!nla_set_id)
++			return set;
++
++		set = nf_tables_set_lookup_byid(net, table, nla_set_id);
++	}
++	return set;
++}
++EXPORT_SYMBOL_GPL(nft_set_lookup);
++
+ static int nf_tables_set_alloc_name(struct nft_ctx *ctx, struct nft_set *set,
+ 				    const char *name)
+ {
+@@ -2833,6 +2856,7 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
+ 
+ 	INIT_LIST_HEAD(&set->bindings);
+ 	write_pnet(&set->pnet, net);
++	set->table = table;
+ 	set->ops   = ops;
+ 	set->ktype = ktype;
+ 	set->klen  = desc.klen;
+@@ -2850,12 +2874,14 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
+ 
+ 	err = nft_trans_set_add(&ctx, NFT_MSG_NEWSET, set);
+ 	if (err < 0)
+-		goto err2;
++		goto err3;
+ 
+ 	list_add_tail_rcu(&set->list, &table->sets);
+ 	table->use++;
+ 	return 0;
+ 
++err3:
++	ops->destroy(set);
+ err2:
+ 	kfree(set);
+ err1:
+@@ -3453,6 +3479,7 @@ static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
+ 		dreg = nft_type_to_reg(set->dtype);
+ 		list_for_each_entry(binding, &set->bindings, list) {
+ 			struct nft_ctx bind_ctx = {
++				.net	= ctx->net,
+ 				.afi	= ctx->afi,
+ 				.table	= ctx->table,
+ 				.chain	= (struct nft_chain *)binding->chain,
+@@ -3543,14 +3570,15 @@ static int nf_tables_newsetelem(struct net *net, struct sock *nlsk,
+ 	set = nf_tables_set_lookup(ctx.table, nla[NFTA_SET_ELEM_LIST_SET]);
+ 	if (IS_ERR(set)) {
+ 		if (nla[NFTA_SET_ELEM_LIST_SET_ID]) {
+-			set = nf_tables_set_lookup_byid(net,
++			set = nf_tables_set_lookup_byid(net, ctx.table,
+ 					nla[NFTA_SET_ELEM_LIST_SET_ID]);
+ 		}
+ 		if (IS_ERR(set))
+ 			return PTR_ERR(set);
+ 	}
+ 
+-	if (!list_empty(&set->bindings) && set->flags & NFT_SET_CONSTANT)
++	if (!list_empty(&set->bindings) &&
++	    (set->flags & (NFT_SET_CONSTANT | NFT_SET_ANONYMOUS)))
+ 		return -EBUSY;
+ 
+ 	nla_for_each_nested(attr, nla[NFTA_SET_ELEM_LIST_ELEMENTS], rem) {

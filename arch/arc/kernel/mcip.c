@@ -41,6 +41,12 @@ static void mcip_ipi_send(int cpu)
 
 	raw_spin_lock_irqsave(&mcip_lock, flags);
 
+	/* ARConnect can only send IPI to others */
+	if (unlikely(cpu == raw_smp_processor_id())) {
+		arc_softirq_trigger(SOFTIRQ_IRQ);
+		return;
+	}
+
 	/*
 	 * If receiver already has a pending interrupt, elide sending this one.
 	 * Linux cross core calling works well with concurrent IPIs
@@ -59,6 +65,11 @@ static void mcip_ipi_clear(int irq)
 {
 	unsigned int cpu, c;
 	unsigned long flags;
+
+	if (unlikely(irq == SOFTIRQ_IRQ)) {
+		arc_softirq_clear(irq);
+		return;
+	}
 
 	if (unlikely(irq == SOFTIRQ_IRQ)) {
 		arc_softirq_clear(irq);

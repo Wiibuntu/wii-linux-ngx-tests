@@ -1,0 +1,24 @@
+--- arch/sparc/include/asm/ttable.h
++++ arch/sparc/include/asm/ttable.h
+@@ -589,8 +589,8 @@ user_rtt_fill_64bit:					\
+ 	 restored;					\
+ 	nop; nop; nop; nop; nop; nop;			\
+ 	nop; nop; nop; nop; nop;			\
+-	ba,a,pt	%xcc, user_rtt_fill_fixup;		\
+-	ba,a,pt	%xcc, user_rtt_fill_fixup;		\
++	ba,a,pt	%xcc, user_rtt_fill_fixup_dax;		\
++	ba,a,pt	%xcc, user_rtt_fill_fixup_mna;		\
+ 	ba,a,pt	%xcc, user_rtt_fill_fixup;
+ 
+ 
+@@ -652,8 +652,8 @@ user_rtt_fill_32bit:					\
+ 	 restored;					\
+ 	nop; nop; nop; nop; nop;			\
+ 	nop; nop; nop;					\
+-	ba,a,pt	%xcc, user_rtt_fill_fixup;		\
+-	ba,a,pt	%xcc, user_rtt_fill_fixup;		\
++	ba,a,pt	%xcc, user_rtt_fill_fixup_dax;		\
++	ba,a,pt	%xcc, user_rtt_fill_fixup_mna;		\
+ 	ba,a,pt	%xcc, user_rtt_fill_fixup;
+ 
+ 

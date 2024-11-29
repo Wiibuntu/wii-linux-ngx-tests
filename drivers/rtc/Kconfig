@@ -446,6 +446,15 @@ config RTC_DRV_PCF85363
 	  The nvmem interface will be named pcf85363-#, where # is the
 	  zero-based instance number.
 
+config RTC_DRV_PCF85363
+	tristate "NXP PCF85363"
+	select REGMAP_I2C
+	help
+	  If you say yes here you get support for the PCF85363 RTC chip.
+
+	  This driver can also be built as a module. If so, the module
+	  will be called rtc-pcf85363.
+
 config RTC_DRV_PCF8563
 	tristate "Philips PCF8563/Epson RTC8564"
 	help
@@ -1229,6 +1238,16 @@ config RTC_DRV_AB8500
 	help
 	  Select this to enable the ST-Ericsson AB8500 power management IC RTC
 	  support. This chip contains a battery- and capacitor-backed RTC.
+
+config RTC_DRV_GCN
+	bool "Nintendo GameCube/Wii Real Time Clock and SRAM"
+	depends on GAMECUBE_EXI
+	default y
+	help
+	  If you say yes to this option, support will be included for the
+	  Real Time Clock and SRAM of the Nintendo GameCube/Wii.
+
+	  If in doubt, say Y here.
 
 config RTC_DRV_NUC900
 	tristate "NUC910/NUC920 RTC driver"

@@ -178,6 +178,7 @@ enum {
 	IF_LINK_MODE_DEFAULT,
 	IF_LINK_MODE_DORMANT,	/* limit upward transition to dormant */
 };
+#endif /* __UAPI_DEF_IF_IFMAP */
 
 /*
  *	Device mapping structure. I'd just gone off and designed a 
@@ -218,6 +219,7 @@ struct if_settings {
 		te1_settings		__user *te1;
 	} ifs_ifsu;
 };
+#endif /* __UAPI_DEF_IF_IFREQ */
 
 /*
  * Interface request structure used for socket

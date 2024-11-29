@@ -1,0 +1,11 @@
+--- drivers/scsi/megaraid/megaraid_sas.h
++++ drivers/scsi/megaraid/megaraid_sas.h
+@@ -1923,7 +1925,7 @@ struct megasas_instance_template {
+ };
+ 
+ #define MEGASAS_IS_LOGICAL(scp)						\
+-	(scp->device->channel < MEGASAS_MAX_PD_CHANNELS) ? 0 : 1
++	((scp->device->channel < MEGASAS_MAX_PD_CHANNELS) ? 0 : 1)
+ 
+ #define MEGASAS_DEV_INDEX(scp)						\
+ 	(((scp->device->channel % 2) * MEGASAS_MAX_DEV_PER_CHANNEL) +	\

@@ -1,0 +1,266 @@
+--- mm/hugetlb.c
++++ mm/hugetlb.c
+@@ -1444,14 +1474,36 @@ static int free_pool_huge_page(struct hstate *h, nodemask_t *nodes_allowed,
+  */
+ static void dissolve_free_huge_page(struct page *page)
+ {
++retry:
+ 	spin_lock(&hugetlb_lock);
+ 	if (PageHuge(page) && !page_count(page)) {
+-		struct hstate *h = page_hstate(page);
+-		int nid = page_to_nid(page);
+-		list_del(&page->lru);
++		struct page *head = compound_head(page);
++		struct hstate *h = page_hstate(head);
++		int nid = page_to_nid(head);
++
++		/*
++		 * We should make sure that the page is already on the free list
++		 * when it is dissolved.
++		 */
++		if (unlikely(!PageHugeFreed(head))) {
++			spin_unlock(&hugetlb_lock);
++			cond_resched();
++
++			/*
++			 * Theoretically, we should return -EBUSY when we
++			 * encounter this race. In fact, we have a chance
++			 * to successfully dissolve the page if we do a
++			 * retry. Because the race window is quite small.
++			 * If we seize this opportunity, it is an optimization
++			 * for increasing the success rate of dissolving page.
++			 */
++			goto retry;
++		}
++
++		list_del(&head->lru);
+ 		h->free_huge_pages--;
+ 		h->free_huge_pages_node[nid]--;
+-		update_and_free_page(h, page);
++		update_and_free_page(h, head);
+ 	}
+ 	spin_unlock(&hugetlb_lock);
+ }
+@@ -1459,7 +1511,8 @@ static void dissolve_free_huge_page(struct page *page)
+ /*
+  * Dissolve free hugepages in a given pfn range. Used by memory hotplug to
+  * make specified memory blocks removable from the system.
+- * Note that start_pfn should aligned with (minimum) hugepage size.
++ * Note that this will dissolve a free gigantic hugepage completely, if any
++ * part of it lies within the given range.
+  */
+ void dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
+ {
+@@ -1468,7 +1521,6 @@ void dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
+ 	if (!hugepages_supported())
+ 		return;
+ 
+-	VM_BUG_ON(!IS_ALIGNED(start_pfn, 1 << minimum_order));
+ 	for (pfn = start_pfn; pfn < end_pfn; pfn += 1 << minimum_order)
+ 		dissolve_free_huge_page(pfn_to_page(pfn));
+ }
+@@ -1752,23 +1804,32 @@ free:
+ }
+ 
+ /*
+- * When releasing a hugetlb pool reservation, any surplus pages that were
+- * allocated to satisfy the reservation must be explicitly freed if they were
+- * never used.
+- * Called with hugetlb_lock held.
++ * This routine has two main purposes:
++ * 1) Decrement the reservation count (resv_huge_pages) by the value passed
++ *    in unused_resv_pages.  This corresponds to the prior adjustments made
++ *    to the associated reservation map.
++ * 2) Free any unused surplus pages that may have been allocated to satisfy
++ *    the reservation.  As many as unused_resv_pages may be freed.
++ *
++ * Called with hugetlb_lock held.  However, the lock could be dropped (and
++ * reacquired) during calls to cond_resched_lock.  Whenever dropping the lock,
++ * we must make sure nobody else can claim pages we are in the process of
++ * freeing.  Do this by ensuring resv_huge_page always is greater than the
++ * number of huge pages we plan to free when dropping the lock.
+  */
+ static void return_unused_surplus_pages(struct hstate *h,
+ 					unsigned long unused_resv_pages)
+ {
+ 	unsigned long nr_pages;
+ 
+-	/* Uncommit the reservation */
+-	h->resv_huge_pages -= unused_resv_pages;
+-
+ 	/* Cannot return gigantic pages currently */
+ 	if (hstate_is_gigantic(h))
+-		return;
++		goto out;
+ 
++	/*
++	 * Part (or even all) of the reservation could have been backed
++	 * by pre-allocated pages. Only free surplus pages.
++	 */
+ 	nr_pages = min(unused_resv_pages, h->surplus_huge_pages);
+ 
+ 	/*
+@@ -1778,12 +1839,22 @@ static void return_unused_surplus_pages(struct hstate *h,
+ 	 * when the nodes with surplus pages have no free pages.
+ 	 * free_pool_huge_page() will balance the the freed pages across the
+ 	 * on-line nodes with memory and will handle the hstate accounting.
++	 *
++	 * Note that we decrement resv_huge_pages as we free the pages.  If
++	 * we drop the lock, resv_huge_pages will still be sufficiently large
++	 * to cover subsequent pages we may free.
+ 	 */
+ 	while (nr_pages--) {
++		h->resv_huge_pages--;
++		unused_resv_pages--;
+ 		if (!free_pool_huge_page(h, &node_states[N_MEMORY], 1))
+-			break;
++			goto out;
+ 		cond_resched_lock(&hugetlb_lock);
+ 	}
++
++out:
++	/* Fully uncommit the reservation */
++	h->resv_huge_pages -= unused_resv_pages;
+ }
+ 
+ 
+@@ -2201,6 +2273,10 @@ static unsigned long set_max_huge_pages(struct hstate *h, unsigned long count,
+ 		 * and reducing the surplus.
+ 		 */
+ 		spin_unlock(&hugetlb_lock);
++
++		/* yield cpu to avoid soft lockup */
++		cond_resched();
++
+ 		if (hstate_is_gigantic(h))
+ 			ret = alloc_fresh_gigantic_page(h, nodes_allowed);
+ 		else
+@@ -3228,14 +3335,19 @@ void __unmap_hugepage_range(struct mmu_gather *tlb, struct vm_area_struct *vma,
+ 	struct page *page;
+ 	struct hstate *h = hstate_vma(vma);
+ 	unsigned long sz = huge_page_size(h);
+-	const unsigned long mmun_start = start;	/* For mmu_notifiers */
+-	const unsigned long mmun_end   = end;	/* For mmu_notifiers */
++	unsigned long mmun_start = start;	/* For mmu_notifiers */
++	unsigned long mmun_end   = end;		/* For mmu_notifiers */
+ 
+ 	WARN_ON(!is_vm_hugetlb_page(vma));
+ 	BUG_ON(start & ~huge_page_mask(h));
+ 	BUG_ON(end & ~huge_page_mask(h));
+ 
+ 	tlb_start_vma(tlb, vma);
++
++	/*
++	 * If sharing possible, alert mmu notifiers of worst case.
++	 */
++	adjust_range_if_pmd_sharing_possible(vma, &mmun_start, &mmun_end);
+ 	mmu_notifier_invalidate_range_start(mm, mmun_start, mmun_end);
+ 	address = start;
+ again:
+@@ -3245,8 +3357,11 @@ again:
+ 			continue;
+ 
+ 		ptl = huge_pte_lock(h, mm, ptep);
+-		if (huge_pmd_unshare(mm, &address, ptep))
++		if (huge_pmd_unshare(mm, &address, ptep)) {
++			tlb_flush_pmd_range(tlb, address & PUD_MASK, PUD_SIZE);
++			force_flush = 1;
+ 			goto unlock;
++		}
+ 
+ 		pte = huge_ptep_get(ptep);
+ 		if (huge_pte_none(pte))
+@@ -3908,6 +4041,7 @@ long follow_hugetlb_page(struct mm_struct *mm, struct vm_area_struct *vma,
+ 	unsigned long vaddr = *position;
+ 	unsigned long remainder = *nr_pages;
+ 	struct hstate *h = hstate_vma(vma);
++	int err = -EFAULT;
+ 
+ 	while (vaddr < vma->vm_end && remainder) {
+ 		pte_t *pte;
+@@ -4018,7 +4165,7 @@ same_page:
+ 	*nr_pages = remainder;
+ 	*position = vaddr;
+ 
+-	return i ? i : -EFAULT;
++	return i ? i : err;
+ }
+ 
+ unsigned long hugetlb_change_protection(struct vm_area_struct *vma,
+@@ -4090,12 +4248,18 @@ unsigned long hugetlb_change_protection(struct vm_area_struct *vma,
+ 	 * Must flush TLB before releasing i_mmap_rwsem: x86's huge_pmd_unshare
+ 	 * may have cleared our pud entry and done put_page on the page table:
+ 	 * once we release i_mmap_rwsem, another task can do the final put_page
+-	 * and that page table be reused and filled with junk.
++	 * and that page table be reused and filled with junk.  If we actually
++	 * did unshare a page of pmds, flush the range corresponding to the pud.
+ 	 */
+-	flush_tlb_range(vma, start, end);
+-	mmu_notifier_invalidate_range(mm, start, end);
++	if (shared_pmd) {
++		flush_tlb_range(vma, f_start, f_end);
++		mmu_notifier_invalidate_range(mm, f_start, f_end);
++	} else {
++		flush_tlb_range(vma, start, end);
++		mmu_notifier_invalidate_range(mm, start, end);
++	}
+ 	i_mmap_unlock_write(vma->vm_file->f_mapping);
+-	mmu_notifier_invalidate_range_end(mm, start, end);
++	mmu_notifier_invalidate_range_end(mm, f_start, f_end);
+ 
+ 	return pages << h->order;
+ }
+@@ -4208,7 +4380,9 @@ int hugetlb_reserve_pages(struct inode *inode,
+ 	return 0;
+ out_err:
+ 	if (!vma || vma->vm_flags & VM_MAYSHARE)
+-		region_abort(resv_map, from, to);
++		/* Don't call region_abort if region_chg failed */
++		if (chg >= 0)
++			region_abort(resv_map, from, to);
+ 	if (vma && is_vma_resv_set(vma, HPAGE_RESV_OWNER))
+ 		kref_put(&resv_map->refs, resv_map_release);
+ 	return ret;
+@@ -4348,7 +4549,6 @@ pte_t *huge_pmd_share(struct mm_struct *mm, unsigned long addr, pud_t *pud)
+ 		if (saddr) {
+ 			spte = huge_pte_offset(svma->vm_mm, saddr);
+ 			if (spte) {
+-				mm_inc_nr_pmds(mm);
+ 				get_page(virt_to_page(spte));
+ 				break;
+ 			}
+@@ -4363,9 +4563,9 @@ pte_t *huge_pmd_share(struct mm_struct *mm, unsigned long addr, pud_t *pud)
+ 	if (pud_none(*pud)) {
+ 		pud_populate(mm, pud,
+ 				(pmd_t *)((unsigned long)spte & PAGE_MASK));
++		mm_inc_nr_pmds(mm);
+ 	} else {
+ 		put_page(virt_to_page(spte));
+-		mm_inc_nr_pmds(mm);
+ 	}
+ 	spin_unlock(ptl);
+ out:
+@@ -4490,6 +4702,7 @@ follow_huge_pmd(struct mm_struct *mm, unsigned long address,
+ {
+ 	struct page *page = NULL;
+ 	spinlock_t *ptl;
++	pte_t pte;
+ retry:
+ 	ptl = pmd_lockptr(mm, pmd);
+ 	spin_lock(ptl);
+@@ -4499,12 +4712,13 @@ retry:
+ 	 */
+ 	if (!pmd_huge(*pmd))
+ 		goto out;
+-	if (pmd_present(*pmd)) {
++	pte = huge_ptep_get((pte_t *)pmd);
++	if (pte_present(pte)) {
+ 		page = pmd_page(*pmd) + ((address & ~PMD_MASK) >> PAGE_SHIFT);
+ 		if (flags & FOLL_GET)
+ 			get_page(page);
+ 	} else {
+-		if (is_hugetlb_entry_migration(huge_ptep_get((pte_t *)pmd))) {
++		if (is_hugetlb_entry_migration(pte)) {
+ 			spin_unlock(ptl);
+ 			__migration_entry_wait(mm, (pte_t *)pmd, ptl);
+ 			goto retry;

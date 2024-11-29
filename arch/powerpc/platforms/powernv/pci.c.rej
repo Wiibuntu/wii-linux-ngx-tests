@@ -1,0 +1,23 @@
+--- arch/powerpc/platforms/powernv/pci.c
++++ arch/powerpc/platforms/powernv/pci.c
+@@ -197,8 +197,8 @@ static void pnv_pci_dump_p7ioc_diag_data(struct pci_controller *hose,
+ 			be64_to_cpu(data->dma1ErrorLog1));
+ 
+ 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++) {
+-		if ((data->pestA[i] >> 63) == 0 &&
+-		    (data->pestB[i] >> 63) == 0)
++		if ((be64_to_cpu(data->pestA[i]) >> 63) == 0 &&
++		    (be64_to_cpu(data->pestB[i]) >> 63) == 0)
+ 			continue;
+ 
+ 		pr_info("PE[%3d] A/B: %016llx %016llx\n",
+@@ -625,6 +628,9 @@ int pnv_tce_xchg(struct iommu_table *tbl, long index,
+ 
+ 	BUG_ON(*hpa & ~IOMMU_PAGE_MASK(tbl));
+ 
++	if (newtce & TCE_PCI_WRITE)
++		newtce |= TCE_PCI_READ;
++
+ 	oldtce = xchg(pnv_tce(tbl, idx), cpu_to_be64(newtce));
+ 	*hpa = be64_to_cpu(oldtce) & ~(TCE_PCI_READ | TCE_PCI_WRITE);
+ 	*direction = iommu_tce_direction(oldtce);

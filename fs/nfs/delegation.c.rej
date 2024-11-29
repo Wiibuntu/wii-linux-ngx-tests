@@ -1,0 +1,21 @@
+--- fs/nfs/delegation.c
++++ fs/nfs/delegation.c
+@@ -71,8 +92,7 @@ nfs4_do_check_delegation(struct inode *inode, fmode_t flags, bool mark)
+ 	flags &= FMODE_READ|FMODE_WRITE;
+ 	rcu_read_lock();
+ 	delegation = rcu_dereference(NFS_I(inode)->delegation);
+-	if (delegation != NULL && (delegation->type & flags) == flags &&
+-	    !test_bit(NFS_DELEGATION_RETURNING, &delegation->flags)) {
++	if (nfs4_is_valid_delegation(delegation, flags)) {
+ 		if (mark)
+ 			nfs_mark_delegation_referenced(delegation);
+ 		ret = 1;
+@@ -913,7 +933,7 @@ bool nfs4_copy_delegation_stateid(nfs4_stateid *dst, struct inode *inode,
+ 	flags &= FMODE_READ|FMODE_WRITE;
+ 	rcu_read_lock();
+ 	delegation = rcu_dereference(nfsi->delegation);
+-	ret = (delegation != NULL && (delegation->type & flags) == flags);
++	ret = nfs4_is_valid_delegation(delegation, flags);
+ 	if (ret) {
+ 		nfs4_stateid_copy(dst, &delegation->stateid);
+ 		nfs_mark_delegation_referenced(delegation);

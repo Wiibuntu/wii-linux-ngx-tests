@@ -1,0 +1,20 @@
+--- include/linux/pstore_ram.h
++++ include/linux/pstore_ram.h
+@@ -46,6 +53,8 @@ struct persistent_ram_zone {
+ 	void *vaddr;
+ 	struct persistent_ram_buffer *buffer;
+ 	size_t buffer_size;
++	u32 flags;
++	raw_spinlock_t buffer_lock;
+ 
+ 	/* ECC correction */
+ 	char *par_buffer;
+@@ -61,7 +70,7 @@ struct persistent_ram_zone {
+ 
+ struct persistent_ram_zone *persistent_ram_new(phys_addr_t start, size_t size,
+ 			u32 sig, struct persistent_ram_ecc_info *ecc_info,
+-			unsigned int memtype);
++			unsigned int memtype, u32 flags);
+ void persistent_ram_free(struct persistent_ram_zone *prz);
+ void persistent_ram_zap(struct persistent_ram_zone *prz);
+ 

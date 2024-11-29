@@ -1,0 +1,8 @@
+--- tools/testing/selftests/net/run_netsocktests
++++ tools/testing/selftests/net/run_netsocktests
+@@ -1,4 +1,4 @@
+-#!/bin/bash
++#!/bin/sh
+ 
+ echo "--------------------"
+ echo "running socket test"

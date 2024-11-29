@@ -51,6 +51,8 @@
 #include <rdma/ib.h>
 #include <rdma/uverbs_std_types.h>
 
+#include <rdma/ib.h>
+
 #include "uverbs.h"
 #include "core_priv.h"
 #include "rdma_core.h"
@@ -664,6 +666,9 @@ static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 			    task_tgid_vnr(current), current->comm);
 		return -EACCES;
 	}
+
+	if (WARN_ON_ONCE(!ib_safe_file_access(filp)))
+		return -EACCES;
 
 	if (count < sizeof hdr)
 		return -EINVAL;

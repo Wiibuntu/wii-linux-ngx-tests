@@ -989,6 +989,7 @@ struct proto raw_prot = {
 #ifdef CONFIG_PROC_FS
 static struct sock *raw_get_first(struct seq_file *seq)
 {
+	int dif = inet_iif(skb);
 	struct sock *sk;
 	struct raw_iter_state *state = raw_seq_private(seq);
 

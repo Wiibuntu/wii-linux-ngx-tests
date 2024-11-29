@@ -1,0 +1,66 @@
+--- fs/btrfs/send.c
++++ fs/btrfs/send.c
+@@ -34,6 +34,7 @@
+ #include "disk-io.h"
+ #include "btrfs_inode.h"
+ #include "transaction.h"
++#include "xattr.h"
+ 
+ static int g_verbose = 0;
+ 
+@@ -1469,7 +1470,21 @@ static int read_symlink(struct btrfs_root *root,
+ 	ret = btrfs_search_slot(NULL, root, &key, path, 0, 0);
+ 	if (ret < 0)
+ 		goto out;
+-	BUG_ON(ret);
++	if (ret) {
++		/*
++		 * An empty symlink inode. Can happen in rare error paths when
++		 * creating a symlink (transaction committed before the inode
++		 * eviction handler removed the symlink inode items and a crash
++		 * happened in between or the subvol was snapshoted in between).
++		 * Print an informative message to dmesg/syslog so that the user
++		 * can delete the symlink.
++		 */
++		btrfs_err(root->fs_info,
++			  "Found empty symlink inode %llu at root %llu",
++			  ino, root->root_key.objectid);
++		ret = -EIO;
++		goto out;
++	}
+ 
+ 	ei = btrfs_item_ptr(path->nodes[0], path->slots[0],
+ 			struct btrfs_file_extent_item);
+@@ -1822,7 +1840,7 @@ static int will_overwrite_ref(struct send_ctx *sctx, u64 dir, u64 dir_gen,
+ 	 * not delted and then re-created, if it was then we have no overwrite
+ 	 * and we can just unlink this entry.
+ 	 */
+-	if (sctx->parent_root) {
++	if (sctx->parent_root && dir != BTRFS_FIRST_FREE_OBJECTID) {
+ 		ret = get_inode_info(sctx->parent_root, dir, NULL, &gen, NULL,
+ 				     NULL, NULL, NULL);
+ 		if (ret < 0 && ret != -ENOENT)
+@@ -5064,15 +5152,18 @@ static int is_extent_unchanged(struct send_ctx *sctx,
+ 	while (key.offset < ekey->offset + left_len) {
+ 		ei = btrfs_item_ptr(eb, slot, struct btrfs_file_extent_item);
+ 		right_type = btrfs_file_extent_type(eb, ei);
+-		if (right_type != BTRFS_FILE_EXTENT_REG) {
++		if (right_type != BTRFS_FILE_EXTENT_REG &&
++		    right_type != BTRFS_FILE_EXTENT_INLINE) {
+ 			ret = 0;
+ 			goto out;
+ 		}
+ 
+-		right_disknr = btrfs_file_extent_disk_bytenr(eb, ei);
+-		right_len = btrfs_file_extent_num_bytes(eb, ei);
+-		right_offset = btrfs_file_extent_offset(eb, ei);
+-		right_gen = btrfs_file_extent_generation(eb, ei);
++		if (right_type == BTRFS_FILE_EXTENT_INLINE) {
++			right_len = btrfs_file_extent_inline_len(eb, slot, ei);
++			right_len = PAGE_ALIGN(right_len);
++		} else {
++			right_len = btrfs_file_extent_num_bytes(eb, ei);
++		}
+ 
+ 		/*
+ 		 * Are we at extent 8? If yes, we know the extent is changed.

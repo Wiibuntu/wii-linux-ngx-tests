@@ -10,23 +10,15 @@
 #include <net/secure_seq.h>
 #include <linux/netfilter.h>
 
-static u32 __ipv6_select_ident(struct net *net, u32 hashrnd,
+static u32 __ipv6_select_ident(struct net *net,
 			       const struct in6_addr *dst,
 			       const struct in6_addr *src)
 {
-	u32 hash, id;
+	u32 id;
 
-	hash = __ipv6_addr_jhash(dst, hashrnd);
-	hash = __ipv6_addr_jhash(src, hash);
-	hash ^= net_hash_mix(net);
-
-	/* Treat id of 0 as unset and if we get 0 back from ip_idents_reserve,
-	 * set the hight order instead thus minimizing possible future
-	 * collisions.
-	 */
-	id = ip_idents_reserve(hash, 1);
-	if (unlikely(!id))
-		id = 1 << 31;
+	do {
+		id = prandom_u32();
+	} while (!id);
 
 	return id;
 }
@@ -41,7 +33,6 @@ static u32 __ipv6_select_ident(struct net *net, u32 hashrnd,
  */
 __be32 ipv6_proxy_select_ident(struct net *net, struct sk_buff *skb)
 {
-	static u32 ip6_proxy_idents_hashrnd __read_mostly;
 	struct in6_addr buf[2];
 	struct in6_addr *addrs;
 	u32 id;
@@ -158,6 +149,8 @@ int __ip6_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 	skb = l3mdev_ip6_out(sk, skb);
 	if (unlikely(!skb))
 		return 0;
+
+	skb->protocol = htons(ETH_P_IPV6);
 
 	skb->protocol = htons(ETH_P_IPV6);
 

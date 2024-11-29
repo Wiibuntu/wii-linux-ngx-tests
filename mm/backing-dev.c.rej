@@ -1,0 +1,84 @@
+--- mm/backing-dev.c
++++ mm/backing-dev.c
+@@ -670,6 +671,7 @@ static int cgwb_bdi_init(struct backing_dev_info *bdi)
+ 	INIT_RADIX_TREE(&bdi->cgwb_tree, GFP_ATOMIC);
+ 	bdi->cgwb_congested_tree = RB_ROOT;
+ 	atomic_set(&bdi->usage_cnt, 1);
++	init_rwsem(&bdi->wb_switch_rwsem);
+ 
+ 	ret = wb_init(&bdi->wb, bdi, 1, GFP_KERNEL);
+ 	if (!ret) {
+@@ -758,15 +760,20 @@ static int cgwb_bdi_init(struct backing_dev_info *bdi)
+ 	if (!bdi->wb_congested)
+ 		return -ENOMEM;
+ 
++	atomic_set(&bdi->wb_congested->refcnt, 1);
++
+ 	err = wb_init(&bdi->wb, bdi, 1, GFP_KERNEL);
+ 	if (err) {
+-		kfree(bdi->wb_congested);
++		wb_congested_put(bdi->wb_congested);
+ 		return err;
+ 	}
+ 	return 0;
+ }
+ 
+-static void cgwb_bdi_destroy(struct backing_dev_info *bdi) { }
++static void cgwb_bdi_destroy(struct backing_dev_info *bdi)
++{
++	wb_congested_put(bdi->wb_congested);
++}
+ 
+ #endif	/* CONFIG_CGROUP_WRITEBACK */
+ 
+@@ -859,11 +880,23 @@ void bdi_unregister(struct backing_dev_info *bdi)
+ 	wb_shutdown(&bdi->wb);
+ 	cgwb_bdi_destroy(bdi);
+ 
++	/*
++	 * If this BDI's min ratio has been set, use bdi_set_min_ratio() to
++	 * update the global bdi_min_ratio.
++	 */
++	if (bdi->min_ratio)
++		bdi_set_min_ratio(bdi, 0);
++
+ 	if (bdi->dev) {
+ 		bdi_debug_unregister(bdi);
+ 		device_unregister(bdi->dev);
+ 		bdi->dev = NULL;
+ 	}
++
++	if (bdi->owner) {
++		put_device(bdi->owner);
++		bdi->owner = NULL;
++	}
+ }
+ 
+ void bdi_exit(struct backing_dev_info *bdi)
+@@ -913,7 +946,7 @@ static atomic_t nr_wb_congested[2];
+ void clear_wb_congested(struct bdi_writeback_congested *congested, int sync)
+ {
+ 	wait_queue_head_t *wqh = &congestion_wqh[sync];
+-	enum wb_state bit;
++	enum wb_congested_state bit;
+ 
+ 	bit = sync ? WB_sync_congested : WB_async_congested;
+ 	if (test_and_clear_bit(bit, &congested->state))
+@@ -926,7 +959,7 @@ EXPORT_SYMBOL(clear_wb_congested);
+ 
+ void set_wb_congested(struct bdi_writeback_congested *congested, int sync)
+ {
+-	enum wb_state bit;
++	enum wb_congested_state bit;
+ 
+ 	bit = sync ? WB_sync_congested : WB_async_congested;
+ 	if (!test_and_set_bit(bit, &congested->state))
+@@ -1004,7 +1037,7 @@ long wait_iff_congested(struct zone *zone, int sync, long timeout)
+ 		 * here rather than calling cond_resched().
+ 		 */
+ 		if (current->flags & PF_WQ_WORKER)
+-			schedule_timeout(1);
++			schedule_timeout_uninterruptible(1);
+ 		else
+ 			cond_resched();
+ 

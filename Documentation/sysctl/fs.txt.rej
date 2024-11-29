@@ -1,0 +1,14 @@
+--- Documentation/sysctl/fs.txt
++++ Documentation/sysctl/fs.txt
+@@ -32,7 +32,11 @@ Currently, these files are in /proc/sys/fs:
+ - nr_open
+ - overflowuid
+ - overflowgid
++- pipe-user-pages-hard
++- pipe-user-pages-soft
++- protected_fifos
+ - protected_hardlinks
++- protected_regular
+ - protected_symlinks
+ - suid_dumpable
+ - super-max

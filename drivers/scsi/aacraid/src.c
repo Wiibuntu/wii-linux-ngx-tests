@@ -327,6 +327,12 @@ static int src_sync_cmd(struct aac_dev *dev, u32 command,
 	 */
 	aac_adapter_enable_int(dev);
 	return 0;
+
+err_out:
+	return -1;
+
+err_blink:
+	return (status >> 16) & 0xFF;
 }
 
 /**

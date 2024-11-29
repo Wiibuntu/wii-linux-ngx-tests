@@ -1,0 +1,11 @@
+--- arch/x86/boot/cpuflags.h
++++ arch/x86/boot/cpuflags.h
+@@ -1,7 +1,7 @@
+ #ifndef BOOT_CPUFLAGS_H
+ #define BOOT_CPUFLAGS_H
+ 
+-#include <asm/cpufeature.h>
++#include <asm/cpufeatures.h>
+ #include <asm/processor-flags.h>
+ 
+ struct cpu_features {

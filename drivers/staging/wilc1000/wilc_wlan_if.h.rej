@@ -1,0 +1,10 @@
+--- drivers/staging/wilc1000/wilc_wlan_if.h
++++ drivers/staging/wilc1000/wilc_wlan_if.h
+@@ -12,6 +12,7 @@
+ 
+ #include <linux/semaphore.h>
+ #include "linux_wlan_common.h"
++#include <linux/netdevice.h>
+ 
+ /********************************************
+  *

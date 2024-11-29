@@ -1719,6 +1719,7 @@ static void radeon_legacy_atom_fixup(struct drm_crtc *crtc)
 static u32 radeon_get_pll_use_mask(struct drm_crtc *crtc)
 {
 	struct drm_device *dev = crtc->dev;
+	struct radeon_device *rdev = dev->dev_private;
 	struct drm_crtc *test_crtc;
 	struct radeon_crtc *test_radeon_crtc;
 	u32 pll_in_use = 0;

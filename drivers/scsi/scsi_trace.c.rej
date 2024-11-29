@@ -1,0 +1,15 @@
+--- drivers/scsi/scsi_trace.c
++++ drivers/scsi/scsi_trace.c
+@@ -17,10 +17,11 @@
+  */
+ #include <linux/kernel.h>
+ #include <linux/trace_seq.h>
++#include <asm/unaligned.h>
+ #include <trace/events/scsi.h>
+ 
+ #define SERVICE_ACTION16(cdb) (cdb[1] & 0x1f)
+-#define SERVICE_ACTION32(cdb) ((cdb[8] << 8) | cdb[9])
++#define SERVICE_ACTION32(cdb) (get_unaligned_be16(&cdb[8]))
+ 
+ static const char *
+ scsi_trace_misc(struct trace_seq *, unsigned char *, int);

@@ -193,6 +193,11 @@ static inline int static_key_count(struct static_key *key)
 	return atomic_read(&key->enabled);
 }
 
+static inline int static_key_count(struct static_key *key)
+{
+	return atomic_read(&key->enabled);
+}
+
 static __always_inline void jump_label_init(void)
 {
 	static_key_initialized = true;

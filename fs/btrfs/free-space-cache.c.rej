@@ -1,0 +1,18 @@
+--- fs/btrfs/free-space-cache.c
++++ fs/btrfs/free-space-cache.c
+@@ -1361,6 +1371,7 @@ out_nospc_locked:
+ out_nospc:
+ 	cleanup_write_cache_enospc(inode, io_ctl, &cached_state, &bitmap_list);
+ 
++out_unlock:
+ 	if (block_group && (block_group->flags & BTRFS_BLOCK_GROUP_DATA))
+ 		up_write(&block_group->data_rwsem);
+ 
+@@ -2488,6 +2511,7 @@ void btrfs_dump_free_space(struct btrfs_block_group_cache *block_group,
+ 			   info->offset, info->bytes,
+ 		       (info->bitmap) ? "yes" : "no");
+ 	}
++	spin_unlock(&ctl->tree_lock);
+ 	btrfs_info(block_group->fs_info, "block group has cluster?: %s",
+ 	       list_empty(&block_group->cluster_list) ? "no" : "yes");
+ 	btrfs_info(block_group->fs_info,

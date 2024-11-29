@@ -1,0 +1,11 @@
+--- arch/arm/boot/dts/exynos4210-trats.dts
++++ arch/arm/boot/dts/exynos4210-trats.dts
+@@ -298,6 +298,8 @@
+ 		compatible = "maxim,max8997-pmic";
+ 
+ 		reg = <0x66>;
++		interrupt-parent = <&gpx0>;
++		interrupts = <7 0>;
+ 
+ 		max8997,pmic-buck1-uses-gpio-dvs;
+ 		max8997,pmic-buck2-uses-gpio-dvs;

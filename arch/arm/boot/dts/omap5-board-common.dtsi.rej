@@ -1,0 +1,11 @@
+--- arch/arm/boot/dts/omap5-board-common.dtsi
++++ arch/arm/boot/dts/omap5-board-common.dtsi
+@@ -368,6 +391,8 @@
+ 		interrupt-controller;
+ 		#interrupt-cells = <2>;
+ 		ti,system-power-controller;
++		pinctrl-names = "default";
++		pinctrl-0 = <&palmas_sys_nirq_pins &palmas_msecure_pins>;
+ 
+ 		extcon_usb3: palmas_usb {
+ 			compatible = "ti,palmas-usb-vid";

@@ -737,7 +737,7 @@ int proc_soft_watchdog(struct ctl_table *table, int write,
 int proc_watchdog_thresh(struct ctl_table *table, int write,
 			 void __user *buffer, size_t *lenp, loff_t *ppos)
 {
-	int err, old;
+	int err, old, new;
 
 	mutex_lock(&watchdog_mutex);
 

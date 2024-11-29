@@ -198,6 +198,18 @@ static int map_vdso(const struct vdso_image *image, unsigned long addr)
 		current->mm->context.vdso_image = image;
 	}
 
+	pvti = pvclock_pvti_cpu0_va();
+	if (pvti && image->sym_pvclock_page) {
+		ret = remap_pfn_range(vma,
+				      text_start + image->sym_pvclock_page,
+				      __pa(pvti) >> PAGE_SHIFT,
+				      PAGE_SIZE,
+				      PAGE_READONLY);
+
+		if (ret)
+			goto up_fail;
+	}
+
 up_fail:
 	up_write(&mm->mmap_sem);
 	return ret;

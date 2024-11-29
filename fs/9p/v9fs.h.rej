@@ -1,0 +1,11 @@
+--- fs/9p/v9fs.h
++++ fs/9p/v9fs.h
+@@ -124,7 +125,7 @@ struct v9fs_session_info {
+ 
+ struct v9fs_inode {
+ #ifdef CONFIG_9P_FSCACHE
+-	spinlock_t fscache_lock;
++	struct mutex fscache_lock;
+ 	struct fscache_cookie *fscache;
+ #endif
+ 	struct p9_qid qid;

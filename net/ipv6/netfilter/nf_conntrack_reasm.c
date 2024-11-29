@@ -63,7 +63,6 @@ struct nf_ct_frag6_skb_cb
 static struct inet_frags nf_frags;
 
 #ifdef CONFIG_SYSCTL
-static int zero;
 
 static struct ctl_table nf_ct_frag6_sysctl_table[] = {
 	{
@@ -76,18 +75,17 @@ static struct ctl_table nf_ct_frag6_sysctl_table[] = {
 	{
 		.procname	= "nf_conntrack_frag6_low_thresh",
 		.data		= &init_net.nf_frag.frags.low_thresh,
-		.maxlen		= sizeof(unsigned int),
+		.maxlen		= sizeof(unsigned long),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
-		.extra1		= &zero,
+		.proc_handler	= proc_doulongvec_minmax,
 		.extra2		= &init_net.nf_frag.frags.high_thresh
 	},
 	{
 		.procname	= "nf_conntrack_frag6_high_thresh",
 		.data		= &init_net.nf_frag.frags.high_thresh,
-		.maxlen		= sizeof(unsigned int),
+		.maxlen		= sizeof(unsigned long),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= proc_doulongvec_minmax,
 		.extra1		= &init_net.nf_frag.frags.low_thresh
 	},
 	{ }
@@ -117,7 +115,7 @@ static int nf_ct_frag6_sysctl_register(struct net *net)
 	if (hdr == NULL)
 		goto err_reg;
 
-	net->nf_frag.sysctl.frags_hdr = hdr;
+	net->nf_frag_frags_hdr = hdr;
 	return 0;
 
 err_reg:
@@ -131,8 +129,8 @@ static void __net_exit nf_ct_frags6_sysctl_unregister(struct net *net)
 {
 	struct ctl_table *table;
 
-	table = net->nf_frag.sysctl.frags_hdr->ctl_table_arg;
-	unregister_net_sysctl_table(net->nf_frag.sysctl.frags_hdr);
+	table = net->nf_frag_frags_hdr->ctl_table_arg;
+	unregister_net_sysctl_table(net->nf_frag_frags_hdr);
 	if (!net_eq(net, &init_net))
 		kfree(table);
 }
@@ -178,34 +176,26 @@ static void nf_ct_frag6_expire(struct timer_list *t)
 	fq = container_of(frag, struct frag_queue, q);
 	net = container_of(fq->q.net, struct net, nf_frag.frags);
 
-	ip6_expire_frag_queue(net, fq, &nf_frags);
+	ip6_expire_frag_queue(net, fq);
 }
 
 /* Creation primitives. */
-static inline struct frag_queue *fq_find(struct net *net, __be32 id,
-					 u32 user, struct in6_addr *src,
-					 struct in6_addr *dst, int iif, u8 ecn)
+static struct frag_queue *fq_find(struct net *net, __be32 id, u32 user,
+				  const struct ipv6hdr *hdr, int iif)
 {
+	struct frag_v6_compare_key key = {
+		.id = id,
+		.saddr = hdr->saddr,
+		.daddr = hdr->daddr,
+		.user = user,
+		.iif = iif,
+	};
 	struct inet_frag_queue *q;
-	struct ip6_create_arg arg;
-	unsigned int hash;
 
-	arg.id = id;
-	arg.user = user;
-	arg.src = src;
-	arg.dst = dst;
-	arg.iif = iif;
-	arg.ecn = ecn;
-
-	local_bh_disable();
-	hash = nf_hash_frag(id, src, dst);
-
-	q = inet_frag_find(&net->nf_frag.frags, &nf_frags, &arg, hash);
-	local_bh_enable();
-	if (IS_ERR_OR_NULL(q)) {
-		inet_frag_maybe_warn_overflow(q, pr_fmt());
+	q = inet_frag_find(&net->nf_frag.frags, &key);
+	if (!q)
 		return NULL;
-	}
+
 	return container_of(q, struct frag_queue, q);
 }
 
@@ -356,7 +346,7 @@ found:
 	return 0;
 
 discard_fq:
-	inet_frag_kill(&fq->q, &nf_frags);
+	inet_frag_kill(&fq->q);
 err:
 	return -1;
 }
@@ -378,7 +368,7 @@ nf_ct_frag6_reasm(struct frag_queue *fq, struct sk_buff *prev,  struct net_devic
 	int    payload_len;
 	u8 ecn;
 
-	inet_frag_kill(&fq->q, &nf_frags);
+	inet_frag_kill(&fq->q);
 
 	WARN_ON(head == NULL);
 	WARN_ON(NFCT_FRAG6_CB(head)->offset != 0);
@@ -479,6 +469,7 @@ nf_ct_frag6_reasm(struct frag_queue *fq, struct sk_buff *prev,  struct net_devic
 		else if (head->ip_summed == CHECKSUM_COMPLETE)
 			head->csum = csum_add(head->csum, fp->csum);
 		head->truesize += fp->truesize;
+		fp->sk = NULL;
 	}
 	sub_frag_mem_limit(fq->q.net, head->truesize);
 
@@ -497,6 +488,7 @@ nf_ct_frag6_reasm(struct frag_queue *fq, struct sk_buff *prev,  struct net_devic
 					  head->csum);
 
 	fq->q.fragments = NULL;
+	fq->q.rb_fragments = RB_ROOT;
 	fq->q.fragments_tail = NULL;
 
 	return true;

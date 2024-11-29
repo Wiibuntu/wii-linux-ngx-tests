@@ -1321,6 +1321,19 @@ static u32 *gen9_init_indirectctx_bb(struct intel_engine_cs *engine, u32 *batch)
 
 	*batch++ = MI_ARB_ON_OFF | MI_ARB_ENABLE;
 
+	/* WaClearSlmSpaceAtContextSwitch:skl,bxt,kbl,glk,cfl */
+	/* Actual scratch location is at 128 bytes offset */
+	scratch_addr = ring->scratch.gtt_offset + 2 * CACHELINE_BYTES;
+	wa_ctx_emit(batch, index, GFX_OP_PIPE_CONTROL(6));
+	wa_ctx_emit(batch, index, (PIPE_CONTROL_FLUSH_L3 |
+				   PIPE_CONTROL_GLOBAL_GTT_IVB |
+				   PIPE_CONTROL_CS_STALL |
+				   PIPE_CONTROL_QW_WRITE));
+	wa_ctx_emit(batch, index, scratch_addr);
+	wa_ctx_emit(batch, index, 0);
+	wa_ctx_emit(batch, index, 0);
+	wa_ctx_emit(batch, index, 0);
+
 	/* Pad to end of cacheline */
 	while ((unsigned long)batch % CACHELINE_BYTES)
 		*batch++ = MI_NOOP;

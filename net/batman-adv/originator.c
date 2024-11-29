@@ -630,6 +630,8 @@ batadv_neigh_node_create(struct batadv_orig_node *orig_node,
 
 	spin_lock_bh(&orig_node->neigh_list_lock);
 
+	spin_lock_bh(&orig_node->neigh_list_lock);
+
 	neigh_node = batadv_neigh_node_get(orig_node, hard_iface, neigh_addr);
 	if (neigh_node)
 		goto out;
@@ -1500,7 +1502,7 @@ int batadv_orig_dump(struct sk_buff *msg, struct netlink_callback *cb)
 }
 
 int batadv_orig_hash_add_if(struct batadv_hard_iface *hard_iface,
-			    int max_if_num)
+			    unsigned int max_if_num)
 {
 	struct batadv_priv *bat_priv = netdev_priv(hard_iface->soft_iface);
 	struct batadv_algo_ops *bao = bat_priv->algo_ops;
@@ -1535,7 +1537,7 @@ err:
 }
 
 int batadv_orig_hash_del_if(struct batadv_hard_iface *hard_iface,
-			    int max_if_num)
+			    unsigned int max_if_num)
 {
 	struct batadv_priv *bat_priv = netdev_priv(hard_iface->soft_iface);
 	struct batadv_hashtable *hash = bat_priv->orig_hash;

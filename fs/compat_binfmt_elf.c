@@ -54,6 +54,7 @@
 #undef ns_to_timeval
 #define ns_to_timeval ns_to_compat_timeval
 
+#ifdef CONFIG_ELF_CORE
 /*
  * To use this file, asm/elf.h must define compat_elf_check_arch.
  * The other following macros can be defined if the compat versions

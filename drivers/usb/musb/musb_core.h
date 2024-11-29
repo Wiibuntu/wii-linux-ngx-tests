@@ -643,4 +643,10 @@ static inline void musb_platform_clear_ep_rxintr(struct musb *musb, int epnum)
  */
 extern enum musb_mode musb_get_mode(struct device *dev);
 
+static inline void musb_platform_clear_ep_rxintr(struct musb *musb, int epnum)
+{
+	if (musb->ops->clear_ep_rxintr)
+		musb->ops->clear_ep_rxintr(musb, epnum);
+}
+
 #endif	/* __MUSB_CORE_H__ */

@@ -99,6 +99,9 @@ enum {
 #define IC3_VERSION		BIT(0)
 #define IC6_VERSION		BIT(1)
 
+#define MIN_BUF_SIZE		64
+#define PACKET_TIMEOUT		10000	/* ms */
+
 enum vmk80xx_model {
 	VMK8055_MODEL,
 	VMK8061_MODEL
@@ -676,6 +679,9 @@ static int vmk80xx_find_usb_endpoints(struct comedi_device *dev)
 	if (!devpriv->ep_rx || !devpriv->ep_tx)
 		return -ENODEV;
 
+	if (!usb_endpoint_maxp(devpriv->ep_rx) || !usb_endpoint_maxp(devpriv->ep_tx))
+		return -EINVAL;
+
 	return 0;
 }
 
@@ -809,6 +815,8 @@ static int vmk80xx_auto_attach(struct comedi_device *dev,
 
 	devpriv->model = board->model;
 
+	sema_init(&devpriv->limit_sem, 8);
+
 	ret = vmk80xx_find_usb_endpoints(dev);
 	if (ret)
 		return ret;
@@ -816,8 +824,6 @@ static int vmk80xx_auto_attach(struct comedi_device *dev,
 	ret = vmk80xx_alloc_usb_buffers(dev);
 	if (ret)
 		return ret;
-
-	sema_init(&devpriv->limit_sem, 8);
 
 	usb_set_intfdata(intf, devpriv);
 

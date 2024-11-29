@@ -35,7 +35,7 @@ Required Properties:
   - #gpio-cells: Should be 2. The first cell is the GPIO number and the second
     cell specifies GPIO flags, as defined in <dt-bindings/gpio/gpio.h>. Only the
     GPIO_ACTIVE_HIGH and GPIO_ACTIVE_LOW flags are supported.
-  - gpio-ranges: Range of pins managed by the GPIO controller.
+  - gpio-ranges: See gpio.txt.
 
 Optional properties:
 

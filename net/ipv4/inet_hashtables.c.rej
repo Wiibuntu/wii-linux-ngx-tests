@@ -1,0 +1,55 @@
+--- net/ipv4/inet_hashtables.c
++++ net/ipv4/inet_hashtables.c
+@@ -528,10 +542,15 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 
+ 	if (!snum) {
+ 		int i, remaining, low, high, port;
+-		static u32 hint;
+-		u32 offset = hint + port_offset;
++		u32 index;
++		u32 offset;
+ 		struct inet_timewait_sock *tw = NULL;
+ 
++		net_get_random_once(table_perturb,
++				    INET_TABLE_PERTURB_SIZE * sizeof(*table_perturb));
++		index = port_offset & (INET_TABLE_PERTURB_SIZE - 1);
++		offset = READ_ONCE(table_perturb[index]) + (port_offset >> 32);
++
+ 		inet_get_local_port_range(net, &low, &high);
+ 		remaining = (high - low) + 1;
+ 
+@@ -586,8 +605,14 @@ int __inet_hash_connect(struct inet_timewait_death_row *death_row,
+ 		return -EADDRNOTAVAIL;
+ 
+ ok:
+-		hint += (i + 2) & ~1;
+-
++		/* Here we want to add a little bit of randomness to the next source
++		 * port that will be chosen. We use a max() with a random here so that
++		 * on low contention the randomness is maximal and on high contention
++		 * it may be inexistent.
++		 */
++		i = max_t(int, i, (prandom_u32() & 7) * 2);
++		WRITE_ONCE(table_perturb[index], (READ_ONCE(table_perturb[index]) + i + 2) & ~1);
++		
+ 		/* Head lock still held and bh's disabled */
+ 		inet_bind_hash(sk, tb, port);
+ 		if (sk_unhashed(sk)) {
+@@ -645,7 +670,16 @@ void inet_hashinfo_init(struct inet_hashinfo *h)
+ 		spin_lock_init(&h->listening_hash[i].lock);
+ 		INIT_HLIST_NULLS_HEAD(&h->listening_hash[i].head,
+ 				      i + LISTENING_NULLS_BASE);
+-		}
++	}
++
++	if (table_perturb)
++		return;
++
++	/* this one is used for source ports of outgoing connections */
++	table_perturb = kmalloc_array(INET_TABLE_PERTURB_SIZE,
++				      sizeof(*table_perturb), GFP_KERNEL);
++	if (!table_perturb)
++		panic("TCP: failed to alloc table_perturb");
+ }
+ EXPORT_SYMBOL_GPL(inet_hashinfo_init);
+ 

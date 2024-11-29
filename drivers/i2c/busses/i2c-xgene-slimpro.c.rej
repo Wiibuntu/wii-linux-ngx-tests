@@ -1,0 +1,21 @@
+--- drivers/i2c/busses/i2c-xgene-slimpro.c
++++ drivers/i2c/busses/i2c-xgene-slimpro.c
+@@ -105,7 +105,7 @@ struct slimpro_i2c_dev {
+ 	struct mbox_chan *mbox_chan;
+ 	struct mbox_client mbox_client;
+ 	struct completion rd_complete;
+-	u8 dma_buffer[I2C_SMBUS_BLOCK_MAX];
++	u8 dma_buffer[I2C_SMBUS_BLOCK_MAX + 1]; /* dma_buffer[0] is used for length */
+ 	u32 *resp_msg;
+ };
+ 
+@@ -238,6 +238,9 @@ static int slimpro_i2c_blkwr(struct slimpro_i2c_dev *ctx, u32 chip,
+ 	u32 msg[3];
+ 	int rc;
+ 
++	if (writelen > I2C_SMBUS_BLOCK_MAX)
++		return -EINVAL;
++
+ 	memcpy(ctx->dma_buffer, data, writelen);
+ 	paddr = dma_map_single(ctx->dev, ctx->dma_buffer, writelen,
+ 			       DMA_TO_DEVICE);

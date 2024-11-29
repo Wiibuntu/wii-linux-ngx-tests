@@ -94,6 +94,42 @@ static inline u32 __raw_readl(const volatile void __iomem *addr)
 	return w;
 }
 
+/*
+ * {read,write}s{b,w,l}() repeatedly access the same IO address in
+ * native endianness in 8-, 16-, 32-bit chunks {into,from} memory,
+ * @count times
+ */
+#define __raw_readsx(t,f) \
+static inline void __raw_reads##f(const volatile void __iomem *addr,	\
+				  void *ptr, unsigned int count)	\
+{									\
+	bool is_aligned = ((unsigned long)ptr % ((t) / 8)) == 0;	\
+	u##t *buf = ptr;						\
+									\
+	if (!count)							\
+		return;							\
+									\
+	/* Some ARC CPU's don't support unaligned accesses */		\
+	if (is_aligned) {						\
+		do {							\
+			u##t x = __raw_read##f(addr);			\
+			*buf++ = x;					\
+		} while (--count);					\
+	} else {							\
+		do {							\
+			u##t x = __raw_read##f(addr);			\
+			put_unaligned(x, buf++);			\
+		} while (--count);					\
+	}								\
+}
+
+#define __raw_readsb __raw_readsb
+__raw_readsx(8, b)
+#define __raw_readsw __raw_readsw
+__raw_readsx(16, w)
+#define __raw_readsl __raw_readsl
+__raw_readsx(32, l)
+
 #define __raw_writeb __raw_writeb
 static inline void __raw_writeb(u8 b, volatile void __iomem *addr)
 {

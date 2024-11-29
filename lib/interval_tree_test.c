@@ -74,6 +74,16 @@ static int interval_tree_test_init(void)
 		return -ENOMEM;
 	}
 
+	nodes = kmalloc(nnodes * sizeof(struct interval_tree_node), GFP_KERNEL);
+	if (!nodes)
+		return -ENOMEM;
+
+	queries = kmalloc(nsearches * sizeof(int), GFP_KERNEL);
+	if (!queries) {
+		kfree(nodes);
+		return -ENOMEM;
+	}
+
 	printk(KERN_ALERT "interval tree insert/remove");
 
 	prandom_seed_state(&rnd, 3141592653589793238ULL);

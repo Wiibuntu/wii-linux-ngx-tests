@@ -1,0 +1,7 @@
+--- sound/soc/pxa/brownstone.c
++++ sound/soc/pxa/brownstone.c
+@@ -136,3 +136,4 @@ module_platform_driver(mmp_driver);
+ MODULE_AUTHOR("Leo Yan <leoy@marvell.com>");
+ MODULE_DESCRIPTION("ALSA SoC Brownstone");
+ MODULE_LICENSE("GPL");
++MODULE_ALIAS("platform:brownstone-audio");

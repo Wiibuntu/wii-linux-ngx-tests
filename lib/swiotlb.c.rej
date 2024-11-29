@@ -1,0 +1,35 @@
+--- lib/swiotlb.c
++++ lib/swiotlb.c
+@@ -454,11 +456,11 @@ phys_addr_t swiotlb_tbl_map_single(struct device *hwdev,
+ 		    : 1UL << (BITS_PER_LONG - IO_TLB_SHIFT);
+ 
+ 	/*
+-	 * For mappings greater than a page, we limit the stride (and
+-	 * hence alignment) to a page size.
++	 * For mappings greater than or equal to a page, we limit the stride
++	 * (and hence alignment) to a page size.
+ 	 */
+ 	nslots = ALIGN(size, 1 << IO_TLB_SHIFT) >> IO_TLB_SHIFT;
+-	if (size > PAGE_SIZE)
++	if (size >= PAGE_SIZE)
+ 		stride = (1 << (PAGE_SHIFT - IO_TLB_SHIFT));
+ 	else
+ 		stride = 1;
+@@ -528,9 +530,15 @@ found:
+ 	 */
+ 	for (i = 0; i < nslots; i++)
+ 		io_tlb_orig_addr[index+i] = orig_addr + (i << IO_TLB_SHIFT);
+-	if (dir == DMA_TO_DEVICE || dir == DMA_BIDIRECTIONAL)
++	/*
++	 * When dir == DMA_FROM_DEVICE we could omit the copy from the orig
++	 * to the tlb buffer, if we knew for sure the device will
++	 * overwirte the entire current content. But we don't. Thus
++	 * unconditional bounce may prevent leaking swiotlb content (i.e.
++	 * kernel memory) to user-space.
++	 */
++	if (orig_addr)
+ 		swiotlb_bounce(orig_addr, tlb_addr, size, DMA_TO_DEVICE);
+-
+ 	return tlb_addr;
+ }
+ EXPORT_SYMBOL_GPL(swiotlb_tbl_map_single);

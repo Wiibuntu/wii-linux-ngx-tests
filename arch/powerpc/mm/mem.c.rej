@@ -1,0 +1,10 @@
+--- arch/powerpc/mm/mem.c
++++ arch/powerpc/mm/mem.c
+@@ -390,6 +399,7 @@ void __init mem_init(void)
+ void free_initmem(void)
+ {
+ 	ppc_md.progress = ppc_printk_progress;
++	init_mem_is_free = true;
+ 	free_initmem_default(POISON_FREE_INITMEM);
+ }
+ 

@@ -126,6 +126,7 @@ void set_groups(struct cred *new, struct group_info *group_info)
 	get_group_info(group_info);
 	new->group_info = group_info;
 }
+EXPORT_SYMBOL(groups_sort);
 
 EXPORT_SYMBOL(set_groups);
 

@@ -1,0 +1,66 @@
+--- fs/ext4/page-io.c
++++ fs/ext4/page-io.c
+@@ -23,6 +23,7 @@
+ #include <linux/kernel.h>
+ #include <linux/slab.h>
+ #include <linux/mm.h>
++#include <linux/backing-dev.h>
+ 
+ #include "ext4_jbd2.h"
+ #include "xattr.h"
+@@ -391,7 +392,8 @@ static int io_submit_init_bio(struct ext4_io_submit *io,
+ 
+ static int io_submit_add_bh(struct ext4_io_submit *io,
+ 			    struct inode *inode,
+-			    struct page *page,
++			    struct page *pagecache_page,
++			    struct page *bounce_page,
+ 			    struct buffer_head *bh)
+ {
+ 	int ret;
+@@ -405,10 +407,11 @@ submit_and_retry:
+ 		if (ret)
+ 			return ret;
+ 	}
+-	ret = bio_add_page(io->io_bio, page, bh->b_size, bh_offset(bh));
++	ret = bio_add_page(io->io_bio, bounce_page ?: pagecache_page,
++			   bh->b_size, bh_offset(bh));
+ 	if (ret != bh->b_size)
+ 		goto submit_and_retry;
+-	wbc_account_io(io->io_wbc, page, bh->b_size);
++	wbc_account_io(io->io_wbc, pagecache_page, bh->b_size);
+ 	io->io_next_block++;
+ 	return 0;
+ }
+@@ -485,9 +488,20 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
+ 
+ 	if (ext4_encrypted_inode(inode) && S_ISREG(inode->i_mode) &&
+ 	    nr_to_submit) {
+-		data_page = ext4_encrypt(inode, page);
++		gfp_t gfp_flags = GFP_NOFS;
++
++	retry_encrypt:
++		data_page = ext4_encrypt(inode, page, gfp_flags);
+ 		if (IS_ERR(data_page)) {
+ 			ret = PTR_ERR(data_page);
++			if (ret == -ENOMEM && wbc->sync_mode == WB_SYNC_ALL) {
++				if (io->io_bio) {
++					ext4_io_submit(io);
++					congestion_wait(BLK_RW_ASYNC, HZ/50);
++				}
++				gfp_flags |= __GFP_NOFAIL;
++				goto retry_encrypt;
++			}
+ 			data_page = NULL;
+ 			goto out;
+ 		}
+@@ -497,8 +511,7 @@ int ext4_bio_write_page(struct ext4_io_submit *io,
+ 	do {
+ 		if (!buffer_async_write(bh))
+ 			continue;
+-		ret = io_submit_add_bh(io, inode,
+-				       data_page ? data_page : page, bh);
++		ret = io_submit_add_bh(io, inode, page, data_page, bh);
+ 		if (ret) {
+ 			/*
+ 			 * We only get here on ENOMEM.  Not much else

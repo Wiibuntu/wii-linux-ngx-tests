@@ -1,0 +1,10 @@
+--- drivers/net/ethernet/qlogic/qed/qed_main.c
++++ drivers/net/ethernet/qlogic/qed/qed_main.c
+@@ -22,6 +22,7 @@
+ #include <linux/etherdevice.h>
+ #include <linux/vmalloc.h>
+ #include <linux/qed/qed_if.h>
++#include <linux/crash_dump.h>
+ 
+ #include "qed.h"
+ #include "qed_sp.h"

@@ -412,18 +412,12 @@ static int xcopy_pt_get_cmd_state(struct se_cmd *se_cmd)
 
 static void xcopy_pt_undepend_remotedev(struct xcopy_op *xop)
 {
-	struct se_device *remote_dev;
-
 	if (xop->op_origin == XCOL_SOURCE_RECV_OP)
-		remote_dev = xop->dst_dev;
+		pr_debug("putting dst lun_ref for %p\n", xop->dst_dev);
 	else
-		remote_dev = xop->src_dev;
+		pr_debug("putting src lun_ref for %p\n", xop->src_dev);
 
-	pr_debug("Calling configfs_undepend_item for"
-		  " remote_dev: %p remote_dev->dev_group: %p\n",
-		  remote_dev, &remote_dev->dev_group.cg_item);
-
-	target_undepend_item(&remote_dev->dev_group.cg_item);
+	percpu_ref_put(xop->remote_lun_ref);
 }
 
 static void xcopy_pt_release_cmd(struct se_cmd *se_cmd)

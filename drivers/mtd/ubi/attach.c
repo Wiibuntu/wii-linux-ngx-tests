@@ -326,6 +326,40 @@ static int add_fastmap(struct ubi_attach_info *ai, int pnum,
 }
 
 /**
+ * add_fastmap - add a Fastmap related physical eraseblock.
+ * @ai: attaching information
+ * @pnum: physical eraseblock number the VID header came from
+ * @vid_hdr: the volume identifier header
+ * @ec: erase counter of the physical eraseblock
+ *
+ * This function allocates a 'struct ubi_ainf_peb' object for a Fastamp
+ * physical eraseblock @pnum and adds it to the 'fastmap' list.
+ * Such blocks can be Fastmap super and data blocks from both the most
+ * recent Fastmap we're attaching from or from old Fastmaps which will
+ * be erased.
+ */
+static int add_fastmap(struct ubi_attach_info *ai, int pnum,
+		       struct ubi_vid_hdr *vid_hdr, int ec)
+{
+	struct ubi_ainf_peb *aeb;
+
+	aeb = kmem_cache_alloc(ai->aeb_slab_cache, GFP_KERNEL);
+	if (!aeb)
+		return -ENOMEM;
+
+	aeb->pnum = pnum;
+	aeb->vol_id = be32_to_cpu(vidh->vol_id);
+	aeb->sqnum = be64_to_cpu(vidh->sqnum);
+	aeb->ec = ec;
+	list_add(&aeb->u.list, &ai->fastmap);
+
+	dbg_bld("add to fastmap list: PEB %d, vol_id %d, sqnum: %llu", pnum,
+		aeb->vol_id, aeb->sqnum);
+
+	return 0;
+}
+
+/**
  * validate_vid_hdr - check volume identifier header.
  * @ubi: UBI device description object
  * @vid_hdr: the volume identifier header to check
@@ -1345,6 +1379,10 @@ static void destroy_ai(struct ubi_attach_info *ai)
 	list_for_each_entry_safe(aeb, aeb_tmp, &ai->fastmap, u.list) {
 		list_del(&aeb->u.list);
 		ubi_free_aeb(ai, aeb);
+	}
+	list_for_each_entry_safe(aeb, aeb_tmp, &ai->fastmap, u.list) {
+		list_del(&aeb->u.list);
+		kmem_cache_free(ai->aeb_slab_cache, aeb);
 	}
 
 	/* Destroy the volume RB-tree */

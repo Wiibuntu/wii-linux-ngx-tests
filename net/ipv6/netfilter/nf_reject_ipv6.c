@@ -183,6 +183,8 @@ void nf_send_reset6(struct net *net, struct sk_buff *oldskb, int hook)
 
 	nskb->mark = fl6.flowi6_mark;
 
+	nskb->mark = fl6.flowi6_mark;
+
 	skb_reserve(nskb, hh_len + dst->header_len);
 	ip6h = nf_reject_ip6hdr_put(nskb, oldskb, IPPROTO_TCP,
 				    ip6_dst_hoplimit(dst));

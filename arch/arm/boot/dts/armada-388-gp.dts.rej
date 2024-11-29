@@ -1,0 +1,37 @@
+--- arch/arm/boot/dts/armada-388-gp.dts
++++ arch/arm/boot/dts/armada-388-gp.dts
+@@ -89,7 +89,7 @@
+ 					pinctrl-names = "default";
+ 					pinctrl-0 = <&pca0_pins>;
+ 					interrupt-parent = <&gpio0>;
+-					interrupts = <18 IRQ_TYPE_EDGE_FALLING>;
++					interrupts = <18 IRQ_TYPE_LEVEL_LOW>;
+ 					gpio-controller;
+ 					#gpio-cells = <2>;
+ 					interrupt-controller;
+@@ -101,7 +101,7 @@
+ 					compatible = "nxp,pca9555";
+ 					pinctrl-names = "default";
+ 					interrupt-parent = <&gpio0>;
+-					interrupts = <18 IRQ_TYPE_EDGE_FALLING>;
++					interrupts = <18 IRQ_TYPE_LEVEL_LOW>;
+ 					gpio-controller;
+ 					#gpio-cells = <2>;
+ 					interrupt-controller;
+@@ -303,16 +303,6 @@
+ 		gpio = <&expander0 4 GPIO_ACTIVE_HIGH>;
+ 	};
+ 
+-	reg_usb2_1_vbus: v5-vbus1 {
+-		compatible = "regulator-fixed";
+-		regulator-name = "v5.0-vbus1";
+-		regulator-min-microvolt = <5000000>;
+-		regulator-max-microvolt = <5000000>;
+-		enable-active-high;
+-		regulator-always-on;
+-		gpio = <&expander0 4 GPIO_ACTIVE_HIGH>;
+-	};
+-
+ 	reg_sata0: pwr-sata0 {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "pwr_en_sata0";

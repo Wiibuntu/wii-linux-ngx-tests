@@ -1,0 +1,23 @@
+--- drivers/net/ethernet/hisilicon/hns/hnae.c
++++ drivers/net/ethernet/hisilicon/hns/hnae.c
+@@ -331,8 +333,10 @@ struct hnae_handle *hnae_get_handle(struct device *owner_dev,
+ 		return ERR_PTR(-ENODEV);
+ 
+ 	handle = dev->ops->get_handle(dev, port_id);
+-	if (IS_ERR(handle))
++	if (IS_ERR(handle)) {
++		put_device(&dev->cls_dev);
+ 		return handle;
++	}
+ 
+ 	handle->dev = dev;
+ 	handle->owner_dev = owner_dev;
+@@ -378,6 +384,8 @@ void hnae_put_handle(struct hnae_handle *h)
+ 		dev->ops->put_handle(h);
+ 
+ 	module_put(dev->owner);
++
++	put_device(&dev->cls_dev);
+ }
+ EXPORT_SYMBOL(hnae_put_handle);
+ 

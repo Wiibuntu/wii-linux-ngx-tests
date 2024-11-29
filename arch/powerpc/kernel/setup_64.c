@@ -37,6 +37,7 @@
 #include <linux/memblock.h>
 #include <linux/memory.h>
 #include <linux/nmi.h>
+#include <linux/debugfs.h>
 
 #include <asm/debugfs.h>
 #include <asm/io.h>
@@ -223,6 +224,15 @@ static void __init configure_exceptions(void)
 
 		/* AIL on native is done in cpu_ready_for_interrupts() */
 	}
+
+	/*
+	 * Fixup HFSCR:TM based on CPU features. The bit is set by our
+	 * early asm init because at that point we haven't updated our
+	 * CPU features from firmware and device-tree. Here we have,
+	 * so let's do it.
+	 */
+	if (cpu_has_feature(CPU_FTR_HVMODE) && !cpu_has_feature(CPU_FTR_TM_COMP))
+		mtspr(SPRN_HFSCR, mfspr(SPRN_HFSCR) & ~HFSCR_TM);
 }
 
 static void cpu_ready_for_interrupts(void)

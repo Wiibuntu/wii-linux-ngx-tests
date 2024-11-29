@@ -1,0 +1,10 @@
+--- drivers/usb/misc/chaoskey.c
++++ drivers/usb/misc/chaoskey.c
+@@ -96,6 +96,7 @@ static void chaoskey_free(struct chaoskey *dev)
+ 	usb_dbg(dev->interface, "free");
+ 	kfree(dev->name);
+ 	kfree(dev->buf);
++	usb_put_intf(dev->interface);
+ 	kfree(dev);
+ }
+ 

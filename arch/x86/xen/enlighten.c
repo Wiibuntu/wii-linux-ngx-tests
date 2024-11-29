@@ -347,6 +347,12 @@ void __init arch_xen_balloon_init(struct resource *hostmem_resource)
 	const struct e820_entry *entry;
 	struct resource *res;
 
+	/*
+	 * Xen PV would need some work to support PCID: CR3 handling as well
+	 * as xen_flush_tlb_others() would need updating.
+	 */
+	cpuid_leaf1_ecx_mask &= ~(1 << (X86_FEATURE_PCID % 32));  /* disable PCID */
+
 	if (!xen_initial_domain())
 		return;
 

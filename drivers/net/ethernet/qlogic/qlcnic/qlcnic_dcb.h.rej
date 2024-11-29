@@ -1,0 +1,22 @@
+--- drivers/net/ethernet/qlogic/qlcnic/qlcnic_dcb.h
++++ drivers/net/ethernet/qlogic/qlcnic/qlcnic_dcb.h
+@@ -42,18 +42,12 @@ struct qlcnic_dcb {
+ 	unsigned long			state;
+ };
+ 
+-static inline void qlcnic_clear_dcb_ops(struct qlcnic_dcb *dcb)
+-{
+-	kfree(dcb);
+-	dcb = NULL;
+-}
+-
+ static inline int qlcnic_dcb_get_hw_capability(struct qlcnic_dcb *dcb)
+ {
+ 	if (dcb && dcb->ops->get_hw_capability)
+ 		return dcb->ops->get_hw_capability(dcb);
+ 
+-	return 0;
++	return -EOPNOTSUPP;
+ }
+ 
+ static inline void qlcnic_dcb_free(struct qlcnic_dcb *dcb)

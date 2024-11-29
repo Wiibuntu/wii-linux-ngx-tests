@@ -507,7 +507,8 @@ struct intel_engine_cs {
 
 	struct intel_engine_hangcheck hangcheck;
 
-	bool needs_cmd_parser;
+	bool using_cmd_parser;
+	bool requires_cmd_parser;
 
 	/*
 	 * Table of commands the command parser needs to know about

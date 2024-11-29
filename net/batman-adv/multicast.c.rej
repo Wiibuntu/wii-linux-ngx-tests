@@ -1,0 +1,12 @@
+--- net/batman-adv/multicast.c
++++ net/batman-adv/multicast.c
+@@ -44,7 +44,9 @@
+ #include <net/addrconf.h>
+ #include <net/ipv6.h>
+ 
++#include "bridge_loop_avoidance.h"
+ #include "packet.h"
++#include "send.h"
+ #include "translation-table.h"
+ 
+ /**
