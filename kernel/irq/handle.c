@@ -142,7 +142,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 
 	record_irq_time(desc);
 
-	for_each_action_of_desc(desc, action) {
+	do {
 		irqreturn_t res;
 
 		trace_irq_handler_entry(irq, action);
@@ -176,7 +176,8 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 		}
 
 		retval |= res;
-	}
+		action = action->next;
+	} while (action);
 
 	return retval;
 }

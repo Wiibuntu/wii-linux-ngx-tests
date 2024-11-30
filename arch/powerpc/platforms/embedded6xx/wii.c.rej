@@ -1,0 +1,48 @@
+--- arch/powerpc/platforms/embedded6xx/wii.c
++++ arch/powerpc/platforms/embedded6xx/wii.c
+@@ -373,25 +525,45 @@ define_machine(wii) {
+ 	.probe			= wii_probe,
+ 	.setup_arch		= wii_setup_arch,
+ 	.restart		= wii_restart,
++	.show_cpuinfo		= wii_show_cpuinfo,
+ 	.halt			= wii_halt,
+ 	.init_IRQ		= wii_pic_probe,
+ 	.get_irq		= flipper_pic_get_irq,
+ 	.calibrate_decr		= generic_calibrate_decr,
+ 	.progress		= udbg_progress,
+ 	.machine_shutdown	= wii_shutdown,
++#ifdef CONFIG_KEXEC	/* REMOVE THIS (as of 2.6.39)? */
++	.machine_kexec_prepare	= wii_machine_kexec_prepare,
++	.machine_kexec		= wii_machine_kexec,
++#endif
+ };
+ 
+ static const struct of_device_id wii_of_bus[] = {
+ 	{ .compatible = "nintendo,hollywood", },
++#ifdef CONFIG_STARLET_IOS
++	{ .compatible = "nintendo,starlet-ios-ipc", },
++#endif
++#ifdef CONFIG_STARLET_MINI
++	{ .compatible = "twiizers,starlet-mini-ipc", },
++#endif
+ 	{ },
+ };
+ 
+ static int __init wii_device_probe(void)
+ {
++	struct device_node *np;
++
+ 	if (!machine_is(wii))
+ 		return 0;
+ 
+ 	of_platform_bus_probe(NULL, wii_of_bus, NULL);
++
++	np = of_find_compatible_node(NULL, NULL, "nintendo,hollywood-mem2");
++	if (np) {
++		of_platform_device_create(np, NULL, NULL);
++		of_node_put(np);
++	}
++
+ 	return 0;
+ }
+ device_initcall(wii_device_probe);

@@ -16,12 +16,13 @@
 	#size-cells = <1>;
 
 	chosen {
-		bootargs = "root=/dev/gcnsda2 rootwait udbg-immortal";
+		bootargs = "root=/dev/nfs nfsroot=192.168.001.253:/nfsroot/cube,nfsvers=3,udp ip=on video=gcn-vifb:tv=auto force_keyboard_port=4";
 	};
 
 	memory {
 		device_type = "memory";
-		reg = <0x00000000 0x01800000>;
+		/* 24M minus framebuffer memory area (640*576*2*2) */
+		reg = <0x00000000 0x01698000>;
 	};
 
 	cpus {

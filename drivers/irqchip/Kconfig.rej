@@ -1,0 +1,97 @@
+--- drivers/irqchip/Kconfig
++++ drivers/irqchip/Kconfig
+@@ -27,13 +21,18 @@ config ARM_GIC_V3
+ 	select IRQ_DOMAIN
+ 	select MULTI_IRQ_HANDLER
+ 	select IRQ_DOMAIN_HIERARCHY
+-	select PARTITION_PERCPU
+ 
+ config ARM_GIC_V3_ITS
+ 	bool
+-	depends on PCI
+-	depends on PCI_MSI
+-	select ACPI_IORT if ACPI
++	select PCI_MSI_IRQ_DOMAIN
++
++config HISILICON_IRQ_MBIGEN
++	bool "Support mbigen interrupt controller"
++	default n
++	depends on ARM_GIC_V3 && ARM_GIC_V3_ITS && GENERIC_MSI_IRQ_DOMAIN
++	help
++	 Enable the mbigen interrupt controller used on
++	 Hisilicon platform.
+ 
+ config ARM_NVIC
+ 	bool
+@@ -55,17 +54,6 @@ config ARM_VIC_NR
+ 	  The maximum number of VICs available in the system, for
+ 	  power management.
+ 
+-config ARMADA_370_XP_IRQ
+-	bool
+-	select GENERIC_IRQ_CHIP
+-	select PCI_MSI if PCI
+-
+-config ALPINE_MSI
+-	bool
+-	depends on PCI
+-	select PCI_MSI
+-	select GENERIC_IRQ_CHIP
+-
+ config ATMEL_AIC_IRQ
+ 	bool
+ 	select GENERIC_IRQ_CHIP
+@@ -84,11 +72,6 @@ config I8259
+ 	bool
+ 	select IRQ_DOMAIN
+ 
+-config BCM6345_L1_IRQ
+-	bool
+-	select GENERIC_IRQ_CHIP
+-	select IRQ_DOMAIN
+-
+ config BCM7038_L1_IRQ
+ 	bool
+ 	select GENERIC_IRQ_CHIP
+@@ -146,13 +124,6 @@ config PIC32_EVIC
+ 	select GENERIC_IRQ_CHIP
+ 	select IRQ_DOMAIN
+ 
+-config JCORE_AIC
+-	bool "J-Core integrated AIC" if COMPILE_TEST
+-	depends on OF
+-	select IRQ_DOMAIN
+-	help
+-	  Support for the J-Core integrated AIC.
+-
+ config RENESAS_INTC_IRQPIN
+ 	bool
+ 	select IRQ_DOMAIN
+@@ -235,27 +197,3 @@ config IRQ_MXS
+ 	def_bool y if MACH_ASM9260 || ARCH_MXS
+ 	select IRQ_DOMAIN
+ 	select STMP_DEVICE
+-
+-config MVEBU_ODMI
+-	bool
+-
+-config MVEBU_PIC
+-	bool
+-
+-config LS_SCFG_MSI
+-	def_bool y if SOC_LS1021A || ARCH_LAYERSCAPE
+-	depends on PCI && PCI_MSI
+-
+-config PARTITION_PERCPU
+-	bool
+-
+-config EZNPS_GIC
+-	bool "NPS400 Global Interrupt Manager (GIM)"
+-	depends on ARC || (COMPILE_TEST && !64BIT)
+-	select IRQ_DOMAIN
+-	help
+-	  Support the EZchip NPS400 global interrupt controller
+-
+-config STM32_EXTI
+-	bool
+-	select IRQ_DOMAIN

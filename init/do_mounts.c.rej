@@ -1,0 +1,14 @@
+--- init/do_mounts.c
++++ init/do_mounts.c
+@@ -490,7 +490,10 @@ void __init change_floppy(char *fmt, ...)
+ 	va_start(args, fmt);
+ 	vsprintf(buf, fmt, args);
+ 	va_end(args);
+-	fd = sys_open("/dev/root", O_RDWR | O_NDELAY, 0);
++	if (saved_root_name[0])
++		fd = sys_open(saved_root_name, O_RDWR | O_NDELAY, 0);
++	else
++		fd = sys_open("/dev/root", O_RDWR | O_NDELAY, 0);
+ 	if (fd >= 0) {
+ 		sys_ioctl(fd, FDEJECT, 0);
+ 		sys_close(fd);

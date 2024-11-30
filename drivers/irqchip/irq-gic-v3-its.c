@@ -1549,7 +1549,7 @@ static int free_lpi_range(u32 base, u32 nr_lpis)
 	return 0;
 }
 
-static int __init its_lpi_init(u32 id_bits)
+static int its_lpi_init(u32 id_bits)
 {
 	u32 lpis = (1UL << id_bits) - 8192;
 	u32 numlpis;
@@ -2548,11 +2548,6 @@ static int its_irq_gic_domain_alloc(struct irq_domain *domain,
 		fwspec.param[0] = GIC_IRQ_TYPE_LPI;
 		fwspec.param[1] = hwirq;
 		fwspec.param[2] = IRQ_TYPE_EDGE_RISING;
-	} else if (is_fwnode_irqchip(domain->parent->fwnode)) {
-		fwspec.fwnode = domain->parent->fwnode;
-		fwspec.param_count = 2;
-		fwspec.param[0] = hwirq;
-		fwspec.param[1] = IRQ_TYPE_EDGE_RISING;
 	} else {
 		return -EINVAL;
 	}
@@ -3170,12 +3165,7 @@ static int its_force_quiescent(void __iomem *base)
 	u32 val;
 
 	val = readl_relaxed(base + GITS_CTLR);
-	/*
-	 * GIC architecture specification requires the ITS to be both
-	 * disabled and quiescent for writes to GITS_BASER<n> or
-	 * GITS_CBASER to not have UNPREDICTABLE results.
-	 */
-	if ((val & GITS_CTLR_QUIESCENT) && !(val & GITS_CTLR_ENABLE))
+	if (val & GITS_CTLR_QUIESCENT)
 		return 0;
 
 	/* Disable the generation of all interrupts to this ITS */
@@ -3285,14 +3275,6 @@ static const struct gic_quirk its_quirks[] = {
 		.iidr	= 0xa100034c,	/* ThunderX pass 1.x */
 		.mask	= 0xffff0fff,
 		.init	= its_enable_quirk_cavium_22375,
-	},
-#endif
-#ifdef CONFIG_CAVIUM_ERRATUM_23144
-	{
-		.desc	= "ITS: Cavium erratum 23144",
-		.iidr	= 0xa100034c,	/* ThunderX pass 1.x */
-		.mask	= 0xffff0fff,
-		.init	= its_enable_quirk_cavium_23144,
 	},
 #endif
 #ifdef CONFIG_QCOM_QDF2400_ERRATUM_0065
@@ -3624,7 +3606,7 @@ static int __init its_probe_one(struct resource *res,
 
 	its_enable_quirks(its);
 
-	err = its_alloc_tables(its);
+	err = its_alloc_tables(node->full_name, its);
 	if (err)
 		goto out_free_cmd;
 
@@ -3667,9 +3649,28 @@ static int __init its_probe_one(struct resource *res,
 	if (GITS_TYPER_HCC(typer))
 		its->flags |= ITS_FLAGS_SAVE_SUSPEND_STATE;
 
-	err = its_init_domain(handle, its);
-	if (err)
-		goto out_free_tables;
+	if (of_property_read_bool(node, "msi-controller")) {
+		struct msi_domain_info *info;
+
+		info = kzalloc(sizeof(*info), GFP_KERNEL);
+		if (!info) {
+			err = -ENOMEM;
+			goto out_free_tables;
+		}
+
+		inner_domain = irq_domain_add_tree(node, &its_domain_ops, its);
+		if (!inner_domain) {
+			err = -ENOMEM;
+			kfree(info);
+			goto out_free_tables;
+		}
+
+		inner_domain->parent = parent;
+		inner_domain->bus_token = DOMAIN_BUS_NEXUS;
+		info->ops = &its_msi_domain_ops;
+		info->data = its;
+		inner_domain->host_data = info;
+	}
 
 	raw_spin_lock(&its_lock);
 	list_add(&its->entry, &its_nodes);
@@ -3685,13 +3686,13 @@ out_free_its:
 	kfree(its);
 out_unmap:
 	iounmap(its_base);
-	pr_err("ITS@%pa: failed probing (%d)\n", &res->start, err);
+	pr_err("ITS: failed probing %s (%d)\n", node->full_name, err);
 	return err;
 }
 
 static bool gic_rdists_supports_plpis(void)
 {
-	return !!(gic_read_typer(gic_data_rdist_rd_base() + GICR_TYPER) & GICR_TYPER_PLPIS);
+	return !!(readl_relaxed(gic_data_rdist_rd_base() + GICR_TYPER) & GICR_TYPER_PLPIS);
 }
 
 static int redist_disable_lpis(void)
