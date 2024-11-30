@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0-only
 config B43
 	tristate "Broadcom 43xx wireless support (mac80211 stack)"
 	depends on (BCMA_POSSIBLE || SSB_POSSIBLE) && MAC80211 && HAS_DMA
 	select BCMA if B43_BCMA
 	select SSB if B43_SSB
 	select FW_LOADER
+	select CORDIC
 	---help---
 	  b43 is a driver for the Broadcom 43xx series wireless devices.
 
@@ -87,16 +89,6 @@ config B43_SDIO
 	  It's safe to select Y here, even if you don't have a B43 SDIO device.
 
 	  If unsure, say N.
-
-config B43_DEFAULT_QOS_OFF
-	bool "Start with QoS disabled"
-	depends on B43
-	---help---
-	  This will start the driver with Quality Of Service disabled.
-
-	  Say Y if you are using an OpenFWWF firmware without QoS support
-	  and building the b43 driver in-kernel.
-	  Otherwise, say N.
 
 #Data transfers to the device via PIO. We want it as a fallback even
 # if we can do DMA.

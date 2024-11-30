@@ -1,22 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Generic pwmlib implementation
  *
  * Copyright (C) 2011 Sascha Hauer <s.hauer@pengutronix.de>
  * Copyright (C) 2011-2012 Avionic Design GmbH
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2, or (at your option)
- *  any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; see the file COPYING.  If not, write to
- *  the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/module.h>
@@ -137,7 +124,12 @@ of_pwm_xlate_with_flags(struct pwm_chip *pc, const struct of_phandle_args *args)
 {
 	struct pwm_device *pwm;
 
+	/* check, whether the driver supports a third cell for flags */
 	if (pc->of_pwm_n_cells < 3)
+		return ERR_PTR(-EINVAL);
+
+	/* flags in the third cell are optional */
+	if (args->args_count < 2)
 		return ERR_PTR(-EINVAL);
 
 	if (args->args[0] >= pc->npwm)
@@ -148,11 +140,10 @@ of_pwm_xlate_with_flags(struct pwm_chip *pc, const struct of_phandle_args *args)
 		return pwm;
 
 	pwm->args.period = args->args[1];
+	pwm->args.polarity = PWM_POLARITY_NORMAL;
 
-	if (args->args[2] & PWM_POLARITY_INVERTED)
+	if (args->args_count > 2 && args->args[2] & PWM_POLARITY_INVERTED)
 		pwm->args.polarity = PWM_POLARITY_INVERSED;
-	else
-		pwm->args.polarity = PWM_POLARITY_NORMAL;
 
 	return pwm;
 }
@@ -163,7 +154,12 @@ of_pwm_simple_xlate(struct pwm_chip *pc, const struct of_phandle_args *args)
 {
 	struct pwm_device *pwm;
 
+	/* sanity check driver support */
 	if (pc->of_pwm_n_cells < 2)
+		return ERR_PTR(-EINVAL);
+
+	/* all cells are required */
+	if (args->args_count != pc->of_pwm_n_cells)
 		return ERR_PTR(-EINVAL);
 
 	if (args->args[0] >= pc->npwm)
@@ -302,10 +298,12 @@ int pwmchip_add_with_polarity(struct pwm_chip *chip,
 	if (IS_ENABLED(CONFIG_OF))
 		of_pwmchip_add(chip);
 
-	pwmchip_sysfs_export(chip);
-
 out:
 	mutex_unlock(&pwm_lock);
+
+	if (!ret)
+		pwmchip_sysfs_export(chip);
+
 	return ret;
 }
 EXPORT_SYMBOL_GPL(pwmchip_add_with_polarity);
@@ -339,7 +337,7 @@ int pwmchip_remove(struct pwm_chip *chip)
 	unsigned int i;
 	int ret = 0;
 
-	pwmchip_sysfs_unexport_children(chip);
+	pwmchip_sysfs_unexport(chip);
 
 	mutex_lock(&pwm_lock);
 
@@ -358,8 +356,6 @@ int pwmchip_remove(struct pwm_chip *chip)
 		of_pwmchip_remove(chip);
 
 	free_pwms(chip);
-
-	pwmchip_sysfs_unexport(chip);
 
 out:
 	mutex_unlock(&pwm_lock);
@@ -463,7 +459,10 @@ int pwm_apply_state(struct pwm_device *pwm, struct pwm_state *state)
 	    state->duty_cycle > state->period)
 		return -EINVAL;
 
-	if (!memcmp(state, &pwm->state, sizeof(*state)))
+	if (state->period == pwm->state.period &&
+	    state->duty_cycle == pwm->state.duty_cycle &&
+	    state->polarity == pwm->state.polarity &&
+	    state->enabled == pwm->state.enabled)
 		return 0;
 
 	if (pwm->chip->ops->apply) {
@@ -663,21 +662,16 @@ struct pwm_device *of_pwm_get(struct device_node *np, const char *con_id)
 	err = of_parse_phandle_with_args(np, "pwms", "#pwm-cells", index,
 					 &args);
 	if (err) {
-		pr_debug("%s(): can't parse \"pwms\" property\n", __func__);
+		pr_err("%s(): can't parse \"pwms\" property\n", __func__);
 		return ERR_PTR(err);
 	}
 
 	pc = of_node_to_pwmchip(args.np);
 	if (IS_ERR(pc)) {
-		pr_debug("%s(): PWM chip not found\n", __func__);
-		pwm = ERR_CAST(pc);
-		goto put;
-	}
+		if (PTR_ERR(pc) != -EPROBE_DEFER)
+			pr_err("%s(): PWM chip not found\n", __func__);
 
-	if (args.args_count != pc->of_pwm_n_cells) {
-		pr_debug("%s: wrong #pwm-cells for %s\n", np->full_name,
-			 args.np->full_name);
-		pwm = ERR_PTR(-EINVAL);
+		pwm = ERR_CAST(pc);
 		goto put;
 	}
 
@@ -757,12 +751,13 @@ void pwm_remove_table(struct pwm_lookup *table, size_t num)
  */
 struct pwm_device *pwm_get(struct device *dev, const char *con_id)
 {
-	struct pwm_device *pwm = ERR_PTR(-EPROBE_DEFER);
 	const char *dev_id = dev ? dev_name(dev) : NULL;
-	struct pwm_chip *chip = NULL;
+	struct pwm_device *pwm;
+	struct pwm_chip *chip;
 	unsigned int best = 0;
 	struct pwm_lookup *p, *chosen = NULL;
 	unsigned int match;
+	int err;
 
 	/* look up via DT first */
 	if (IS_ENABLED(CONFIG_OF) && dev && dev->of_node)
@@ -817,24 +812,35 @@ struct pwm_device *pwm_get(struct device *dev, const char *con_id)
 		}
 	}
 
-	if (!chosen) {
-		pwm = ERR_PTR(-ENODEV);
-		goto out;
-	}
+	mutex_unlock(&pwm_lookup_lock);
+
+	if (!chosen)
+		return ERR_PTR(-ENODEV);
 
 	chip = pwmchip_find_by_name(chosen->provider);
+
+	/*
+	 * If the lookup entry specifies a module, load the module and retry
+	 * the PWM chip lookup. This can be used to work around driver load
+	 * ordering issues if driver's can't be made to properly support the
+	 * deferred probe mechanism.
+	 */
+	if (!chip && chosen->module) {
+		err = request_module(chosen->module);
+		if (err == 0)
+			chip = pwmchip_find_by_name(chosen->provider);
+	}
+
 	if (!chip)
-		goto out;
+		return ERR_PTR(-EPROBE_DEFER);
 
 	pwm = pwm_request_from_chip(chip, chosen->index, con_id ?: dev_id);
 	if (IS_ERR(pwm))
-		goto out;
+		return pwm;
 
 	pwm->args.period = chosen->period;
 	pwm->args.polarity = chosen->polarity;
 
-out:
-	mutex_unlock(&pwm_lookup_lock);
 	return pwm;
 }
 EXPORT_SYMBOL_GPL(pwm_get);
@@ -858,6 +864,7 @@ void pwm_put(struct pwm_device *pwm)
 	if (pwm->chip->ops->free)
 		pwm->chip->ops->free(pwm->chip, pwm);
 
+	pwm_set_chip_data(pwm, NULL);
 	pwm->label = NULL;
 
 	module_put(pwm->chip->ops->owner);
@@ -960,18 +967,6 @@ void devm_pwm_put(struct device *dev, struct pwm_device *pwm)
 }
 EXPORT_SYMBOL_GPL(devm_pwm_put);
 
-/**
-  * pwm_can_sleep() - report whether PWM access will sleep
-  * @pwm: PWM device
-  *
-  * Returns: True if accessing the PWM can sleep, false otherwise.
-  */
-bool pwm_can_sleep(struct pwm_device *pwm)
-{
-	return true;
-}
-EXPORT_SYMBOL_GPL(pwm_can_sleep);
-
 #ifdef CONFIG_DEBUG_FS
 static void pwm_dbg_show(struct pwm_chip *chip, struct seq_file *s)
 {
@@ -1029,10 +1024,7 @@ static int pwm_seq_show(struct seq_file *s, void *v)
 		   dev_name(chip->dev), chip->npwm,
 		   (chip->npwm != 1) ? "s" : "");
 
-	if (chip->ops->dbg_show)
-		chip->ops->dbg_show(chip, s);
-	else
-		pwm_dbg_show(chip, s);
+	pwm_dbg_show(chip, s);
 
 	return 0;
 }

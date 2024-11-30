@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Kernel module to match various things tied to sockets associated with
  * locally generated outgoing packets.
@@ -5,14 +6,12 @@
  * (C) 2000 Marc Boucher <marc@mbsi.ca>
  *
  * Copyright © CC Computer Consultants GmbH, 2007 - 2008
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 #include <linux/module.h>
 #include <linux/skbuff.h>
 #include <linux/file.h>
+#include <linux/cred.h>
+
 #include <net/sock.h>
 #include <net/inet_sock.h>
 #include <linux/netfilter/x_tables.h>
@@ -63,9 +62,9 @@ owner_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_owner_match_info *info = par->matchinfo;
 	const struct file *filp;
 	struct sock *sk = skb_to_full_sk(skb);
-	struct net *net = par->net;
+	struct net *net = xt_net(par);
 
-	if (sk == NULL || sk->sk_socket == NULL)
+	if (!sk || !sk->sk_socket || !net_eq(net, sock_net(sk)))
 		return (info->match ^ info->invert) == 0;
 	else if (info->match & info->invert & XT_OWNER_SOCKET)
 		/*

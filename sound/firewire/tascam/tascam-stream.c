@@ -1,9 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * tascam-stream.c - a part of driver for TASCAM FireWire series
  *
  * Copyright (c) 2015 Takashi Sakamoto
- *
- * Licensed under the terms of the GNU General Public License, version 2.
  */
 
 #include <linux/delay.h>
@@ -343,7 +342,7 @@ int snd_tscm_stream_init_duplex(struct snd_tscm *tscm)
 	if (err < 0)
 		amdtp_stream_destroy(&tscm->rx_stream);
 
-	return 0;
+	return err;
 }
 
 /* At bus reset, streaming is stopped and some registers are clear. */

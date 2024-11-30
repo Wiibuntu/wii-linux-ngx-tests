@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
 #ifndef _UAPI_LINUX_FB_H
 #define _UAPI_LINUX_FB_H
 
@@ -33,11 +34,6 @@
 #define FBIOGET_HWCINFO         0x4616
 #define FBIOPUT_MODEINFO        0x4617
 #define FBIOGET_DISPINFO        0x4618
-#define FBIOWAITRETRACE         0x4619
-#define FBIOWAITPEFINISH        0x4620
-#define FBIOVIRTTOPHYS          0x4621
-#define FBIOFLIP                0x4622
-#define FBIOFLIPHACK            0x4623 /* libsdl */
 #define FBIO_WAITFORVSYNC	_IOW('F', 0x20, __u32)
 
 #define FB_TYPE_PACKED_PIXELS		0	/* Packed Pixels	*/
@@ -397,11 +393,9 @@ struct fb_cursor {
 	struct fb_image	image;	/* Cursor image */
 };
 
-#ifdef CONFIG_FB_BACKLIGHT
 /* Settings for the generic backlight code */
 #define FB_BACKLIGHT_LEVELS	128
 #define FB_BACKLIGHT_MAX	0xFF
-#endif
 
 
 #endif /* _UAPI_LINUX_FB_H */

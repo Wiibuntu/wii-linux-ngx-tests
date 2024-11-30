@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 #ifndef _ASM_GENERIC_GPIO_H
 #define _ASM_GENERIC_GPIO_H
 
@@ -74,8 +75,6 @@ static inline int gpio_direction_output(unsigned gpio, int value)
 {
 	return gpiod_direction_output_raw(gpio_to_desc(gpio), value);
 }
-
-extern int gpio_direction_is_output(unsigned gpio);
 
 static inline int gpio_set_debounce(unsigned gpio, unsigned debounce)
 {

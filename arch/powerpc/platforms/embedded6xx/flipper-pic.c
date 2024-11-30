@@ -1,15 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * arch/powerpc/platforms/embedded6xx/flipper-pic.c
  *
  * Nintendo GameCube/Wii "Flipper" interrupt controller support.
  * Copyright (C) 2004-2009 The GameCube Linux Team
  * Copyright (C) 2007,2008,2009 Albert Herranz
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
  */
 #define DRV_MODULE_NAME "flipper-pic"
 #define pr_fmt(fmt) DRV_MODULE_NAME ": " fmt
@@ -108,16 +103,8 @@ static int flipper_pic_map(struct irq_domain *h, unsigned int virq,
 	return 0;
 }
 
-static int flipper_pic_match(struct irq_domain *h, struct device_node *np,
-			     enum irq_domain_bus_token bus_token)
-{
-	return 1;
-}
-
-
 static const struct irq_domain_ops flipper_irq_domain_ops = {
 	.map = flipper_pic_map,
-	.match = flipper_pic_match,
 };
 
 /*
@@ -132,19 +119,30 @@ static void __flipper_quiesce(void __iomem *io_base)
 	out_be32(io_base + FLIPPER_ICR, 0xffffffff);
 }
 
-struct irq_domain * __init flipper_pic_init(struct device_node *np)
+static struct irq_domain * __init flipper_pic_init(struct device_node *np)
 {
-	struct irq_domain *irq_domain;
+	struct device_node *pi;
+	struct irq_domain *irq_domain = NULL;
 	struct resource res;
 	void __iomem *io_base;
 	int retval;
 
-	retval = of_address_to_resource(np, 0, &res);
+	pi = of_get_parent(np);
+	if (!pi) {
+		pr_err("no parent found\n");
+		goto out;
+	}
+	if (!of_device_is_compatible(pi, "nintendo,flipper-pi")) {
+		pr_err("unexpected parent compatible\n");
+		goto out;
+	}
+
+	retval = of_address_to_resource(pi, 0, &res);
 	if (retval) {
 		pr_err("no io memory range found\n");
-		return NULL;
+		goto out;
 	}
-	io_base = ioremap(res.start, res.end - res.start + 1);
+	io_base = ioremap(res.start, resource_size(&res));
 
 	pr_info("controller at 0x%08x mapped to 0x%p\n", res.start, io_base);
 
@@ -157,6 +155,7 @@ struct irq_domain * __init flipper_pic_init(struct device_node *np)
 		return NULL;
 	}
 
+out:
 	return irq_domain;
 }
 

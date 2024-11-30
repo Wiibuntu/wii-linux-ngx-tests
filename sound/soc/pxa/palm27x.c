@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * linux/sound/soc/pxa/palm27x.c
  *
@@ -6,11 +7,6 @@
  * based on tosa.c
  *
  * Copyright (C) 2008 Marek Vasut <marek.vasut@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
  */
 
 #include <linux/module.h>
@@ -26,9 +22,6 @@
 #include <asm/mach-types.h>
 #include <mach/audio.h>
 #include <linux/platform_data/asoc-palm27x.h>
-
-#include "../codecs/wm9712.h"
-#include "pxa2xx-ac97.h"
 
 static struct snd_soc_jack hs_jack;
 

@@ -34,21 +34,6 @@
  */
 
 static const struct fb_videomode modedb[] = {
-#ifdef CONFIG_FB_MODEDB
-#ifdef CONFIG_GAMECUBE_COMMON
-	{
-		/* 640x480 @ 60 Hz, 31.5 kHz hsync */
-		NULL, 60, 640, 480, 39721, 40, 24, 32, 11, 96, 2, 0,
-		FB_VMODE_NONINTERLACED
-	},
-#else
-    /*
-     * If CONFIG_FB_MODEDB=y, the board should fill their preferrable modedb
-     * here.
-     */
-#error FB_MODEDB=y but no modedb configured.
-#endif
-#else /* !CONFIG_FB_MODEDB */
 
 	/* 640x400 @ 70 Hz, 31.5 kHz hsync */
 	{ NULL, 70, 640, 400, 39721, 40, 24, 39, 9, 96, 2, 0,
@@ -301,7 +286,6 @@ static const struct fb_videomode modedb[] = {
 	/* 864x480 @ 60 Hz, 35.15 kHz hsync */
 	{ NULL, 60, 864, 480, 27777, 1, 1, 1, 1, 0, 0,
 		0, FB_VMODE_NONINTERLACED },
-#endif /* CONFIG_FB_MODEDB */
 };
 
 #ifdef CONFIG_FB_MODE_HELPERS
@@ -644,45 +628,47 @@ static int fb_try_mode(struct fb_var_screeninfo *var, struct fb_info *info,
 }
 
 /**
- *     fb_find_mode - finds a valid video mode
- *     @var: frame buffer user defined part of display
- *     @info: frame buffer info structure
- *     @mode_option: string video mode to find
- *     @db: video mode database
- *     @dbsize: size of @db
- *     @default_mode: default video mode to fall back to
- *     @default_bpp: default color depth in bits per pixel
+ * fb_find_mode - finds a valid video mode
+ * @var: frame buffer user defined part of display
+ * @info: frame buffer info structure
+ * @mode_option: string video mode to find
+ * @db: video mode database
+ * @dbsize: size of @db
+ * @default_mode: default video mode to fall back to
+ * @default_bpp: default color depth in bits per pixel
  *
- *     Finds a suitable video mode, starting with the specified mode
- *     in @mode_option with fallback to @default_mode.  If
- *     @default_mode fails, all modes in the video mode database will
- *     be tried.
+ * Finds a suitable video mode, starting with the specified mode
+ * in @mode_option with fallback to @default_mode.  If
+ * @default_mode fails, all modes in the video mode database will
+ * be tried.
  *
- *     Valid mode specifiers for @mode_option:
+ * Valid mode specifiers for @mode_option::
  *
- *     <xres>x<yres>[M][R][-<bpp>][@<refresh>][i][m] or
+ *     <xres>x<yres>[M][R][-<bpp>][@<refresh>][i][p][m]
+ *
+ * or ::
+ *
  *     <name>[-<bpp>][@<refresh>]
  *
- *     with <xres>, <yres>, <bpp> and <refresh> decimal numbers and
- *     <name> a string.
+ * with <xres>, <yres>, <bpp> and <refresh> decimal numbers and
+ * <name> a string.
  *
- *      If 'M' is present after yres (and before refresh/bpp if present),
- *      the function will compute the timings using VESA(tm) Coordinated
- *      Video Timings (CVT).  If 'R' is present after 'M', will compute with
- *      reduced blanking (for flatpanels).  If 'i' is present, compute
- *      interlaced mode.  If 'm' is present, add margins equal to 1.8%
- *      of xres rounded down to 8 pixels, and 1.8% of yres. The char
- *      'i' and 'm' must be after 'M' and 'R'. Example:
+ * If 'M' is present after yres (and before refresh/bpp if present),
+ * the function will compute the timings using VESA(tm) Coordinated
+ * Video Timings (CVT).  If 'R' is present after 'M', will compute with
+ * reduced blanking (for flatpanels).  If 'i' or 'p' are present, compute
+ * interlaced or progressive mode.  If 'm' is present, add margins equal
+ * to 1.8% of xres rounded down to 8 pixels, and 1.8% of yres. The char
+ * 'i', 'p' and 'm' must be after 'M' and 'R'. Example::
  *
- *      1024x768MR-8@60m - Reduced blank with margins at 60Hz.
+ *     1024x768MR-8@60m - Reduced blank with margins at 60Hz.
  *
- *     NOTE: The passed struct @var is _not_ cleared!  This allows you
- *     to supply values for e.g. the grayscale and accel_flags fields.
+ * NOTE: The passed struct @var is _not_ cleared!  This allows you
+ * to supply values for e.g. the grayscale and accel_flags fields.
  *
- *     Returns zero for failure, 1 if using specified @mode_option,
- *     2 if using specified @mode_option with an ignored refresh rate,
- *     3 if default mode is used, 4 if fall back to any valid mode.
- *
+ * Returns zero for failure, 1 if using specified @mode_option,
+ * 2 if using specified @mode_option with an ignored refresh rate,
+ * 3 if default mode is used, 4 if fall back to any valid mode.
  */
 
 int fb_find_mode(struct fb_var_screeninfo *var,
@@ -713,7 +699,8 @@ int fb_find_mode(struct fb_var_screeninfo *var,
 		unsigned int namelen = strlen(name);
 		int res_specified = 0, bpp_specified = 0, refresh_specified = 0;
 		unsigned int xres = 0, yres = 0, bpp = default_bpp, refresh = 0;
-		int yres_specified = 0, cvt = 0, rb = 0, interlace = 0;
+		int yres_specified = 0, cvt = 0, rb = 0;
+		int interlace_specified = 0, interlace = 0;
 		int margins = 0;
 		u32 best, diff, tdiff;
 
@@ -764,9 +751,17 @@ int fb_find_mode(struct fb_var_screeninfo *var,
 				if (!cvt)
 					margins = 1;
 				break;
+			case 'p':
+				if (!cvt) {
+					interlace = 0;
+					interlace_specified = 1;
+				}
+				break;
 			case 'i':
-				if (!cvt)
+				if (!cvt) {
 					interlace = 1;
+					interlace_specified = 1;
+				}
 				break;
 			default:
 				goto done;
@@ -835,11 +830,21 @@ done:
 			if ((name_matches(db[i], name, namelen) ||
 			     (res_specified && res_matches(db[i], xres, yres))) &&
 			    !fb_try_mode(var, info, &db[i], bpp)) {
-				if (refresh_specified && db[i].refresh == refresh)
-					return 1;
+				const int db_interlace = (db[i].vmode &
+					FB_VMODE_INTERLACED ? 1 : 0);
+				int score = abs(db[i].refresh - refresh);
 
-				if (abs(db[i].refresh - refresh) < diff) {
-					diff = abs(db[i].refresh - refresh);
+				if (interlace_specified)
+					score += abs(db_interlace - interlace);
+
+				if (!interlace_specified ||
+				    db_interlace == interlace)
+					if (refresh_specified &&
+					    db[i].refresh == refresh)
+						return 1;
+
+				if (score < diff) {
+					diff = score;
 					best = i;
 				}
 			}
@@ -929,6 +934,9 @@ void fb_var_to_videomode(struct fb_videomode *mode,
 		vtotal /= 2;
 	if (var->vmode & FB_VMODE_DOUBLE)
 		vtotal *= 2;
+
+	if (!htotal || !vtotal)
+		return;
 
 	hfreq = pixclock/htotal;
 	mode->refresh = hfreq/vtotal;
