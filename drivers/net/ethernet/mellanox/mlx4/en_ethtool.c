@@ -47,7 +47,7 @@
 #define EN_ETHTOOL_SHORT_MASK cpu_to_be16(0xffff)
 #define EN_ETHTOOL_WORD_MASK  cpu_to_be32(0xffffffff)
 
-int mlx4_en_moderation_update(struct mlx4_en_priv *priv)
+static int mlx4_en_moderation_update(struct mlx4_en_priv *priv)
 {
 	int i, t;
 	int err = 0;
@@ -1013,22 +1013,6 @@ static int mlx4_en_set_coalesce(struct net_device *dev,
 	if (!coal->tx_max_coalesced_frames_irq)
 		return -EINVAL;
 
-	if (coal->tx_coalesce_usecs > MLX4_EN_MAX_COAL_TIME ||
-	    coal->rx_coalesce_usecs > MLX4_EN_MAX_COAL_TIME ||
-	    coal->rx_coalesce_usecs_low > MLX4_EN_MAX_COAL_TIME ||
-	    coal->rx_coalesce_usecs_high > MLX4_EN_MAX_COAL_TIME) {
-		netdev_info(dev, "%s: maximum coalesce time supported is %d usecs\n",
-			    __func__, MLX4_EN_MAX_COAL_TIME);
-		return -ERANGE;
-	}
-
-	if (coal->tx_max_coalesced_frames > MLX4_EN_MAX_COAL_PKTS ||
-	    coal->rx_max_coalesced_frames > MLX4_EN_MAX_COAL_PKTS) {
-		netdev_info(dev, "%s: maximum coalesced frames supported is %d\n",
-			    __func__, MLX4_EN_MAX_COAL_PKTS);
-		return -ERANGE;
-	}
-
 	priv->rx_frames = (coal->rx_max_coalesced_frames ==
 			   MLX4_EN_AUTO_CONF) ?
 				MLX4_EN_RX_COAL_TARGET :
@@ -1717,7 +1701,6 @@ static int mlx4_en_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *cmd,
 		err = mlx4_en_get_flow(dev, cmd, cmd->fs.location);
 		break;
 	case ETHTOOL_GRXCLSRLALL:
-		cmd->data = MAX_NUM_OF_FS_RULES;
 		while ((!err || err == -ENOENT) && priority < cmd->rule_cnt) {
 			err = mlx4_en_get_flow(dev, cmd, i);
 			if (!err)
@@ -2055,7 +2038,7 @@ static int mlx4_en_get_module_eeprom(struct net_device *dev,
 			en_err(priv,
 			       "mlx4_get_module_info i(%d) offset(%d) bytes_to_read(%d) - FAILED (0x%x)\n",
 			       i, offset, ee->len - i, ret);
-			return ret;
+			return 0;
 		}
 
 		i += ret;

@@ -332,10 +332,6 @@ static int __vb2_queue_alloc(struct vb2_queue *q, enum vb2_memory memory,
 	struct vb2_buffer *vb;
 	int ret;
 
-	/* Ensure that q->num_buffers+num_buffers is below VB2_MAX_FRAME */
-	num_buffers = min_t(unsigned int, num_buffers,
-			    VB2_MAX_FRAME - q->num_buffers);
-
 	for (buffer = 0; buffer < num_buffers; ++buffer) {
 		/* Allocate videobuf buffer structures */
 		vb = kzalloc(q->buf_struct_size, GFP_KERNEL);
@@ -1368,13 +1364,7 @@ static int vb2_start_streaming(struct vb2_queue *q)
 int vb2_core_qbuf(struct vb2_queue *q, unsigned int index, void *pb)
 {
 	struct vb2_buffer *vb;
-	enum vb2_buffer_state orig_state;
 	int ret;
-
-	if (q->error) {
-		dprintk(1, "fatal error occurred on queue\n");
-		return -EIO;
-	}
 
 	vb = q->bufs[index];
 
@@ -1398,7 +1388,6 @@ int vb2_core_qbuf(struct vb2_queue *q, unsigned int index, void *pb)
 	 * Add to the queued buffers list, a buffer will stay on it until
 	 * dequeued in dqbuf.
 	 */
-	orig_state = vb->state;
 	list_add_tail(&vb->queued_entry, &q->queued_list);
 	q->queued_count++;
 	q->waiting_for_buffers = false;
@@ -1429,17 +1418,8 @@ int vb2_core_qbuf(struct vb2_queue *q, unsigned int index, void *pb)
 	if (q->streaming && !q->start_streaming_called &&
 	    q->queued_count >= q->min_buffers_needed) {
 		ret = vb2_start_streaming(q);
-		if (ret) {
-			/*
-			 * Since vb2_core_qbuf will return with an error,
-			 * we should return it to state DEQUEUED since
-			 * the error indicates that the buffer wasn't queued.
-			 */
-			list_del(&vb->queued_entry);
-			q->queued_count--;
-			vb->state = orig_state;
+		if (ret)
 			return ret;
-		}
 	}
 
 	dprintk(2, "qbuf of buffer %d succeeded\n", vb->index);
@@ -1924,13 +1904,9 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 			return -EINVAL;
 		}
 	}
-
-	mutex_lock(&q->mmap_lock);
-
 	if (vb2_fileio_is_active(q)) {
 		dprintk(1, "mmap: file io in progress\n");
-		ret = -EBUSY;
-		goto unlock;
+		return -EBUSY;
 	}
 
 	/*
@@ -1938,7 +1914,7 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 	 */
 	ret = __find_plane_by_offset(q, off, &buffer, &plane);
 	if (ret)
-		goto unlock;
+		return ret;
 
 	vb = q->bufs[buffer];
 
@@ -1951,13 +1927,11 @@ int vb2_mmap(struct vb2_queue *q, struct vm_area_struct *vma)
 	if (length < (vma->vm_end - vma->vm_start)) {
 		dprintk(1,
 			"MMAP invalid, as it would overflow buffer length\n");
-		ret = -EINVAL;
-		goto unlock;
+		return -EINVAL;
 	}
 
+	mutex_lock(&q->mmap_lock);
 	ret = call_memop(vb, mmap, vb->planes[plane].mem_priv, vma);
-
-unlock:
 	mutex_unlock(&q->mmap_lock);
 	if (ret)
 		return ret;

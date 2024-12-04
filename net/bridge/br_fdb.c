@@ -982,7 +982,6 @@ int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 				dev->name);
 			return -EINVAL;
 		}
-		br = p->br;
 		vg = nbp_vlan_group(p);
 		br = p->br;
 	}

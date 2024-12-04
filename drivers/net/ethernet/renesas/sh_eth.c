@@ -830,7 +830,6 @@ static struct sh_eth_cpu_data sh7757_data_giga = {
 	.rpadir_value   = 2 << 16,
 	.no_trimd	= 1,
 	.no_ade		= 1,
-	.hw_crc		= 1,
 	.tsu		= 1,
 };
 
@@ -1455,10 +1454,6 @@ static void sh_eth_dev_exit(struct net_device *ndev)
 	msleep(2); /* max frame time at 10 Mbps < 1250 us */
 	sh_eth_get_stats(ndev);
 	sh_eth_reset(ndev);
-
-	/* Set the RMII mode again if required */
-	if (mdp->cd->rmiimode)
-		sh_eth_write(ndev, 0x1, RMIIMODE);
 
 	/* Set MAC address again */
 	update_mac_address(ndev);
@@ -2227,7 +2222,7 @@ static void sh_eth_get_strings(struct net_device *ndev, u32 stringset, u8 *data)
 {
 	switch (stringset) {
 	case ETH_SS_STATS:
-		memcpy(data, sh_eth_gstrings_stats,
+		memcpy(data, *sh_eth_gstrings_stats,
 		       sizeof(sh_eth_gstrings_stats));
 		break;
 	}
@@ -2472,7 +2467,6 @@ static int sh_eth_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 	else
 		txdesc->status |= cpu_to_le32(TD_TACT);
 
-	wmb(); /* cur_tx must be incremented after TACT bit was set */
 	mdp->cur_tx++;
 
 	if (!(sh_eth_read(ndev, EDTRR) & sh_eth_get_edtrr_trns(mdp)))
@@ -2553,9 +2547,9 @@ static int sh_eth_close(struct net_device *ndev)
 	/* Free all the skbuffs in the Rx queue and the DMA buffer. */
 	sh_eth_ring_free(ndev);
 
-	mdp->is_opened = 0;
+	pm_runtime_put_sync(&mdp->pdev->dev);
 
-	pm_runtime_put(&mdp->pdev->dev);
+	mdp->is_opened = 0;
 
 	return 0;
 }
@@ -3082,16 +3076,12 @@ static struct sh_eth_plat_data *sh_eth_parse_dt(struct device *dev)
 	struct device_node *np = dev->of_node;
 	struct sh_eth_plat_data *pdata;
 	const char *mac_addr;
-	int ret;
 
 	pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
 	if (!pdata)
 		return NULL;
 
-	ret = of_get_phy_mode(np);
-	if (ret < 0)
-		return NULL;
-	pdata->phy_interface = ret;
+	pdata->phy_interface = of_get_phy_mode(np);
 
 	mac_addr = of_get_mac_address(np);
 	if (mac_addr)

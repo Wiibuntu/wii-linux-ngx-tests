@@ -306,46 +306,6 @@ xfs_reinit_inode(
 }
 
 /*
- * If we are allocating a new inode, then check what was returned is
- * actually a free, empty inode. If we are not allocating an inode,
- * then check we didn't find a free inode.
- *
- * Returns:
- *	0		if the inode free state matches the lookup context
- *	-ENOENT		if the inode is free and we are not allocating
- *	-EFSCORRUPTED	if there is any state mismatch at all
- */
-static int
-xfs_iget_check_free_state(
-	struct xfs_inode	*ip,
-	int			flags)
-{
-	if (flags & XFS_IGET_CREATE) {
-		/* should be a free inode */
-		if (ip->i_d.di_mode != 0) {
-			xfs_warn(ip->i_mount,
-"Corruption detected! Free inode 0x%llx not marked free! (mode 0x%x)",
-				ip->i_ino, ip->i_d.di_mode);
-			return -EFSCORRUPTED;
-		}
-
-		if (ip->i_d.di_nblocks != 0) {
-			xfs_warn(ip->i_mount,
-"Corruption detected! Free inode 0x%llx has blocks allocated!",
-				ip->i_ino);
-			return -EFSCORRUPTED;
-		}
-		return 0;
-	}
-
-	/* should be an allocated inode */
-	if (ip->i_d.di_mode == 0)
-		return -ENOENT;
-
-	return 0;
-}
-
-/*
  * Check the validity of the inode we just found it the cache
  */
 static int
@@ -581,22 +541,6 @@ out_destroy:
 	__destroy_inode(VFS_I(ip));
 	xfs_inode_free(ip);
 	return error;
-}
-
-static void
-xfs_inew_wait(
-	struct xfs_inode	*ip)
-{
-	wait_queue_head_t *wq = bit_waitqueue(&ip->i_flags, __XFS_INEW_BIT);
-	DEFINE_WAIT_BIT(wait, &ip->i_flags, __XFS_INEW_BIT);
-
-	do {
-		prepare_to_wait(wq, &wait.wait, TASK_UNINTERRUPTIBLE);
-		if (!xfs_iflags_test(ip, XFS_INEW))
-			break;
-		schedule();
-	} while (true);
-	finish_wait(wq, &wait.wait);
 }
 
 /*
@@ -995,8 +939,7 @@ xfs_inode_ag_iterator_tag(
 					   void *args),
 	int			flags,
 	void			*args,
-	int			tag,
-	int			iter_flags)
+	int			tag)
 {
 	struct xfs_perag	*pag;
 	int			error = 0;
@@ -1363,17 +1306,6 @@ restart:
 		goto restart;
 	}
 	return last_error;
-}
-
-int
-xfs_inode_ag_iterator(
-	struct xfs_mount	*mp,
-	int			(*execute)(struct xfs_inode *ip, int flags,
-					   void *args),
-	int			flags,
-	void			*args)
-{
-	return xfs_inode_ag_iterator_flags(mp, execute, flags, args, 0);
 }
 
 int

@@ -670,20 +670,9 @@ int mtd_add_partition(struct mtd_info *parent, const char *name,
 	list_add(&new->list, &mtd_partitions);
 	mutex_unlock(&mtd_partitions_mutex);
 
-	ret = add_mtd_device(&new->mtd);
-	if (ret)
-		goto err_remove_part;
+	add_mtd_device(&new->mtd);
 
 	mtd_add_partition_attrs(new);
-
-	return 0;
-
-err_remove_part:
-	mutex_lock(&mtd_partitions_mutex);
-	list_del(&new->list);
-	mutex_unlock(&mtd_partitions_mutex);
-
-	free_partition(new);
 
 	return ret;
 }

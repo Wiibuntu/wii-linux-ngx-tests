@@ -314,23 +314,6 @@ void radeon_scratch_free(struct radeon_device *rdev, uint32_t reg)
 /*
  * GPU doorbell aperture helpers function.
  */
-
-/**
- * radeon_device_is_virtual - check if we are running is a virtual environment
- *
- * Check if the asic has been passed through to a VM (all asics).
- * Used at driver startup.
- * Returns true if virtual or false if not.
- */
-static bool radeon_device_is_virtual(void)
-{
-#ifdef CONFIG_X86
-	return boot_cpu_has(X86_FEATURE_HYPERVISOR);
-#else
-	return false;
-#endif
-}
-
 /**
  * radeon_doorbell_init - Init doorbell driver information.
  *
@@ -691,11 +674,6 @@ bool radeon_device_is_virtual(void)
 bool radeon_card_posted(struct radeon_device *rdev)
 {
 	uint32_t reg;
-
-	/* for pass through, always force asic_init for CI */
-	if (rdev->family >= CHIP_BONAIRE &&
-	    radeon_device_is_virtual())
-		return false;
 
 	/* for pass through, always force asic_init for CI */
 	if (rdev->family >= CHIP_BONAIRE &&
@@ -1063,7 +1041,6 @@ void radeon_atombios_fini(struct radeon_device *rdev)
 {
 	if (rdev->mode_info.atom_context) {
 		kfree(rdev->mode_info.atom_context->scratch);
-		kfree(rdev->mode_info.atom_context->iio);
 	}
 	kfree(rdev->mode_info.atom_context);
 	rdev->mode_info.atom_context = NULL;
@@ -1670,9 +1647,6 @@ int radeon_suspend_kms(struct drm_device *dev, bool suspend,
 		if (r) {
 			/* delay GPU reset to resume */
 			radeon_fence_driver_force_completion(rdev, i);
-		} else {
-			/* finish executing delayed work */
-			flush_delayed_work(&rdev->fence_drv[i].lockup_work);
 		}
 	}
 

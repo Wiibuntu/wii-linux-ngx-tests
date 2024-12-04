@@ -335,7 +335,6 @@ nfs3svc_decode_readargs(struct svc_rqst *rqstp, __be32 *p)
 	unsigned int len;
 	int v;
 	u32 max_blocksize = svc_max_payload(rqstp);
-	struct kvec *head = rqstp->rq_arg.head;
 
 	p = decode_fh(p, &args->fh);
 	if (!p)
@@ -847,13 +846,8 @@ compose_entry_fh(struct nfsd3_readdirres *cd, struct svc_fh *fhp,
 	if (isdotent(name, namlen)) {
 		if (namlen == 2) {
 			dchild = dget_parent(dparent);
-			/*
-			 * Don't return filehandle for ".." if we're at
-			 * the filesystem or export root:
-			 */
+			/* filesystem root - cannot return filehandle for ".." */
 			if (dchild == dparent)
-				goto out;
-			if (dparent == exp->ex_path.dentry)
 				goto out;
 		} else
 			dchild = dget(dparent);
@@ -929,7 +923,6 @@ encode_entry(struct readdir_cd *ccd, const char *name, int namlen,
 		} else {
 			xdr_encode_hyper(cd->offset, offset64);
 		}
-		cd->offset = NULL;
 	}
 
 	/*

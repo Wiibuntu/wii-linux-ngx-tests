@@ -383,20 +383,6 @@ suborder_not_supported(struct dasd_ccw_req *cqr)
 	char msg_format;
 	char msg_no;
 
-	/*
-	 * intrc values ENODEV, ENOLINK and EPERM
-	 * will be optained from sleep_on to indicate that no
-	 * IO operation can be started
-	 */
-	if (cqr->intrc == -ENODEV)
-		return 1;
-
-	if (cqr->intrc == -ENOLINK)
-		return 1;
-
-	if (cqr->intrc == -EPERM)
-		return 1;
-
 	sense = dasd_get_sense(&cqr->irb);
 	if (!sense)
 		return 0;
@@ -461,20 +447,16 @@ static int read_unit_address_configuration(struct dasd_device *device,
 	lcu->flags &= ~NEED_UAC_UPDATE;
 	spin_unlock_irqrestore(&lcu->lock, flags);
 
-	rc = dasd_sleep_on(cqr);
-	if (!rc)
-		goto out;
-
-	if (suborder_not_supported(cqr)) {
-		/* suborder not supported or device unusable for IO */
-		rc = -EOPNOTSUPP;
-	} else {
-		/* IO failed but should be retried */
+	do {
+		rc = dasd_sleep_on(cqr);
+		if (rc && suborder_not_supported(cqr))
+			return -EOPNOTSUPP;
+	} while (rc && (cqr->retries > 0));
+	if (rc) {
 		spin_lock_irqsave(&lcu->lock, flags);
 		lcu->flags |= NEED_UAC_UPDATE;
 		spin_unlock_irqrestore(&lcu->lock, flags);
 	}
-out:
 	dasd_kfree_request(cqr, cqr->memdev);
 	return rc;
 }
@@ -624,7 +606,6 @@ int dasd_alias_add_device(struct dasd_device *device)
 	}
 	if (lcu->flags & UPDATE_PENDING) {
 		list_move(&device->alias_list, &lcu->active_devices);
-		private->pavgroup = NULL;
 		_schedule_lcu_update(lcu, device);
 	}
 	spin_unlock_irqrestore(&lcu->lock, flags);

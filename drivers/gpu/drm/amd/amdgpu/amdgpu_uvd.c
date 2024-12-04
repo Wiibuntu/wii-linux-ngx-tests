@@ -306,8 +306,6 @@ int amdgpu_uvd_suspend(struct amdgpu_device *adev)
 
 	cancel_delayed_work_sync(&adev->uvd.idle_work);
 
-	cancel_delayed_work_sync(&adev->uvd.idle_work);
-
 	size = amdgpu_bo_size(adev->uvd.vcpu_bo);
 	ptr = adev->uvd.cpu_addr;
 

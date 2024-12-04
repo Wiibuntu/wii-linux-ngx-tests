@@ -56,7 +56,6 @@
 
 #include <linux/buffer_head.h>
 #include <linux/init.h>
-#include <linux/printk.h>
 #include <linux/slab.h>
 #include <linux/mbcache.h>
 #include <linux/quotaops.h>
@@ -85,8 +84,8 @@
 		printk("\n"); \
 	} while (0)
 #else
-# define ea_idebug(inode, f...)	no_printk(f)
-# define ea_bdebug(bh, f...)	no_printk(f)
+# define ea_idebug(f...)
+# define ea_bdebug(f...)
 #endif
 
 static int ext2_xattr_set2(struct inode *, struct buffer_head *,
@@ -613,9 +612,9 @@ skip_replace:
 	}
 
 cleanup:
+	brelse(bh);
 	if (!(bh && header == HDR(bh)))
 		kfree(header);
-	brelse(bh);
 	up_write(&EXT2_I(inode)->xattr_sem);
 
 	return error;
@@ -664,10 +663,10 @@ ext2_xattr_set2(struct inode *inode, struct buffer_head *old_bh,
 			/* We need to allocate a new block */
 			ext2_fsblk_t goal = ext2_group_first_block_no(sb,
 						EXT2_I(inode)->i_block_group);
-			ext2_fsblk_t block = ext2_new_block(inode, goal, &error);
+			int block = ext2_new_block(inode, goal, &error);
 			if (error)
 				goto cleanup;
-			ea_idebug(inode, "creating block %lu", block);
+			ea_idebug(inode, "creating block %d", block);
 
 			new_bh = sb_getblk(sb, block);
 			if (unlikely(!new_bh)) {

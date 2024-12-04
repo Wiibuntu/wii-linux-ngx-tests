@@ -99,7 +99,6 @@ struct inet_frags {
 	void			(*frag_expire)(struct timer_list *t);
 	struct kmem_cache	*frags_cachep;
 	const char		*frags_cache_name;
-	struct rhashtable_params rhash_params;
 };
 
 int inet_frags_init(struct inet_frags *);

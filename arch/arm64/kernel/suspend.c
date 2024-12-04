@@ -96,13 +96,6 @@ int cpu_suspend(unsigned long arg, int (*fn)(unsigned long))
 		ret = fn(arg);
 
 		/*
-		 * PSTATE was not saved over suspend/resume, re-enable any
-		 * detected features that might not have been set correctly.
-		 */
-		asm(ALTERNATIVE("nop", SET_PSTATE_PAN(1), ARM64_HAS_PAN,
-				CONFIG_ARM64_PAN));
-
-		/*
 		 * Never gets here, unless the suspend finisher fails.
 		 * Successful cpu_suspend() should return from cpu_resume(),
 		 * returning through this code path is considered an error

@@ -123,7 +123,7 @@ _decode_session6(struct sk_buff *skb, struct flowi *fl, int reverse)
 	struct flowi6 *fl6 = &fl->u.ip6;
 	int onlyproto = 0;
 	const struct ipv6hdr *hdr = ipv6_hdr(skb);
-	u32 offset = sizeof(*hdr);
+	u16 offset = sizeof(*hdr);
 	struct ipv6_opt_hdr *exthdr;
 	const unsigned char *nh = skb_network_header(skb);
 	u16 nhoff = IP6CB(skb)->nhoff;
@@ -412,13 +412,9 @@ int __init xfrm6_init(void)
 	if (ret)
 		goto out_state;
 
-	ret = register_pernet_subsys(&xfrm6_net_ops);
-	if (ret)
-		goto out_protocol;
+	register_pernet_subsys(&xfrm6_net_ops);
 out:
 	return ret;
-out_protocol:
-	xfrm6_protocol_fini();
 out_state:
 	xfrm6_state_fini();
 out_policy:

@@ -779,6 +779,7 @@ check_roaming:
 		if (roamed_back) {
 			batadv_tt_global_free(bat_priv, tt_global,
 					      "Roaming canceled");
+			tt_global = NULL;
 		} else {
 			/* The global entry has to be marked as ROAMING and
 			 * has to be kept for consistency purpose
@@ -859,7 +860,7 @@ batadv_tt_prepare_tvlv_global_data(struct batadv_orig_node *orig_node,
 	struct batadv_orig_node_vlan *vlan;
 	u8 *tt_change_ptr;
 
-	spin_lock_bh(&orig_node->vlan_list_lock);
+	rcu_read_lock();
 	hlist_for_each_entry_rcu(vlan, &orig_node->vlan_list, list) {
 		num_vlan++;
 		num_entries += atomic_read(&vlan->tt.num_entries);
@@ -897,7 +898,7 @@ batadv_tt_prepare_tvlv_global_data(struct batadv_orig_node *orig_node,
 	*tt_change = (struct batadv_tvlv_tt_change *)tt_change_ptr;
 
 out:
-	spin_unlock_bh(&orig_node->vlan_list_lock);
+	rcu_read_unlock();
 	return tvlv_len;
 }
 
@@ -928,20 +929,15 @@ batadv_tt_prepare_tvlv_local_data(struct batadv_priv *bat_priv,
 	struct batadv_tvlv_tt_vlan_data *tt_vlan;
 	struct batadv_softif_vlan *vlan;
 	u16 num_vlan = 0;
-	u16 vlan_entries = 0;
-	u16 total_entries = 0;
+	u16 num_entries = 0;
 	u16 tvlv_len;
 	u8 *tt_change_ptr;
 	int change_offset;
 
-	spin_lock_bh(&bat_priv->softif_vlan_list_lock);
+	rcu_read_lock();
 	hlist_for_each_entry_rcu(vlan, &bat_priv->softif_vlan_list, list) {
-		vlan_entries = atomic_read(&vlan->tt.num_entries);
-		if (vlan_entries < 1)
-			continue;
-
 		num_vlan++;
-		total_entries += vlan_entries;
+		num_entries += atomic_read(&vlan->tt.num_entries);
 	}
 
 	change_offset = sizeof(**tt_data);
@@ -949,7 +945,7 @@ batadv_tt_prepare_tvlv_local_data(struct batadv_priv *bat_priv,
 
 	/* if tt_len is negative, allocate the space needed by the full table */
 	if (*tt_len < 0)
-		*tt_len = batadv_tt_len(total_entries);
+		*tt_len = batadv_tt_len(num_entries);
 
 	tvlv_len = *tt_len;
 	tvlv_len += change_offset;
@@ -966,13 +962,8 @@ batadv_tt_prepare_tvlv_local_data(struct batadv_priv *bat_priv,
 
 	tt_vlan = (struct batadv_tvlv_tt_vlan_data *)(*tt_data + 1);
 	hlist_for_each_entry_rcu(vlan, &bat_priv->softif_vlan_list, list) {
-		vlan_entries = atomic_read(&vlan->tt.num_entries);
-		if (vlan_entries < 1)
-			continue;
-
 		tt_vlan->vid = htons(vlan->vid);
 		tt_vlan->crc = htonl(vlan->tt.crc);
-		tt_vlan->reserved = 0;
 
 		tt_vlan++;
 	}
@@ -981,7 +972,7 @@ batadv_tt_prepare_tvlv_local_data(struct batadv_priv *bat_priv,
 	*tt_change = (struct batadv_tvlv_tt_change *)tt_change_ptr;
 
 out:
-	spin_unlock_bh(&bat_priv->softif_vlan_list_lock);
+	rcu_read_unlock();
 	return tvlv_len;
 }
 
@@ -1544,8 +1535,7 @@ batadv_tt_global_orig_entry_find(const struct batadv_tt_global_entry *entry,
  */
 static bool
 batadv_tt_global_entry_has_orig(const struct batadv_tt_global_entry *entry,
-				const struct batadv_orig_node *orig_node,
-				u8 *flags)
+				const struct batadv_orig_node *orig_node)
 {
 	struct batadv_tt_orig_list_entry *orig_entry;
 	bool found = false;
@@ -1689,9 +1679,7 @@ static bool batadv_tt_global_add(struct batadv_priv *bat_priv,
 		ether_addr_copy(common->addr, tt_addr);
 		common->vid = vid;
 
-		if (!is_multicast_ether_addr(common->addr))
-			common->flags = flags & (~BATADV_TT_SYNC_MASK);
-
+		common->flags = flags;
 		tt_global_entry->roam_at = 0;
 		/* node must store current time in case of roaming. This is
 		 * needed to purge this entry out on timeout (if nobody claims
@@ -1733,7 +1721,7 @@ static bool batadv_tt_global_add(struct batadv_priv *bat_priv,
 			if (!(common->flags & BATADV_TT_CLIENT_TEMP))
 				goto out;
 			if (batadv_tt_global_entry_has_orig(tt_global_entry,
-							    orig_node, NULL))
+							    orig_node))
 				goto out_remove;
 			batadv_tt_global_del_orig_list(tt_global_entry);
 			goto add_orig_entry;
@@ -2751,12 +2739,10 @@ static u32 batadv_tt_local_crc(struct batadv_priv *bat_priv,
 			/* compute the CRC on flags that have to be kept in sync
 			 * among nodes
 			 */
-			flags = tt_orig->flags;
+			flags = tt_common->flags & BATADV_TT_SYNC_MASK;
 			crc_tmp = crc32c(crc_tmp, &flags, sizeof(flags));
 
 			crc ^= crc32c(crc_tmp, tt_common->addr, ETH_ALEN);
-
-			batadv_tt_orig_list_entry_free_ref(tt_orig);
 		}
 		rcu_read_unlock();
 	}
@@ -2775,29 +2761,6 @@ static void batadv_tt_req_node_release(struct kref *ref)
 	tt_req_node = container_of(ref, struct batadv_tt_req_node, refcount);
 
 	kmem_cache_free(batadv_tt_req_cache, tt_req_node);
-}
-
-/**
- * batadv_tt_req_node_put - decrement the tt_req_node refcounter and
- *  possibly release it
- * @tt_req_node: tt_req_node to be free'd
- */
-static void batadv_tt_req_node_put(struct batadv_tt_req_node *tt_req_node)
-{
-	kref_put(&tt_req_node->refcount, batadv_tt_req_node_release);
-}
-
-/**
- * batadv_tt_req_node_release - free tt_req node entry
- * @ref: kref pointer of the tt req_node entry
- */
-static void batadv_tt_req_node_release(struct kref *ref)
-{
-	struct batadv_tt_req_node *tt_req_node;
-
-	tt_req_node = container_of(ref, struct batadv_tt_req_node, refcount);
-
-	kfree(tt_req_node);
 }
 
 /**
@@ -2930,8 +2893,7 @@ static bool batadv_tt_global_valid(const void *entry_ptr,
 				       struct batadv_tt_global_entry,
 				       common);
 
-	return batadv_tt_global_entry_has_orig(tt_global_entry, orig_node,
-					       flags);
+	return batadv_tt_global_entry_has_orig(tt_global_entry, orig_node);
 }
 
 /**
@@ -2969,12 +2931,11 @@ static void batadv_tt_tvlv_generate(struct batadv_priv *bat_priv,
 			if (tt_tot == tt_num_entries)
 				break;
 
-			ret = valid_cb(tt_common_entry, cb_data, &flags);
-			if (!ret)
+			if ((valid_cb) && (!valid_cb(tt_common_entry, cb_data)))
 				continue;
 
 			ether_addr_copy(tt_change->addr, tt_common_entry->addr);
-			tt_change->flags = flags;
+			tt_change->flags = tt_common_entry->flags;
 			tt_change->vid = htons(tt_common_entry->vid);
 			memset(tt_change->reserved, 0,
 			       sizeof(tt_change->reserved));
@@ -3768,8 +3729,6 @@ static void batadv_tt_purge(struct work_struct *work)
 
 void batadv_tt_free(struct batadv_priv *bat_priv)
 {
-	batadv_tvlv_handler_unregister(bat_priv, BATADV_TVLV_ROAM, 1);
-
 	batadv_tvlv_container_unregister(bat_priv, BATADV_TVLV_TT, 1);
 	batadv_tvlv_handler_unregister(bat_priv, BATADV_TVLV_TT, 1);
 
@@ -4339,10 +4298,8 @@ int batadv_tt_init(struct batadv_priv *bat_priv)
 		return ret;
 
 	ret = batadv_tt_global_init(bat_priv);
-	if (ret < 0) {
-		batadv_tt_local_table_free(bat_priv);
+	if (ret < 0)
 		return ret;
-	}
 
 	batadv_tvlv_handler_register(bat_priv, batadv_tt_tvlv_ogm_handler_v1,
 				     batadv_tt_tvlv_unicast_handler_v1,

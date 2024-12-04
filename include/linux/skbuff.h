@@ -249,7 +249,6 @@ struct nf_conntrack {
 	atomic_t use;
 };
 #endif
-extern int sysctl_max_skb_frags;
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 struct nf_bridge_info {
@@ -626,7 +625,6 @@ typedef unsigned char *sk_buff_data_t;
  *	@hash: the packet hash
  *	@queue_mapping: Queue mapping for multiqueue devices
  *	@xmit_more: More SKBs are pending for this queue
- *	@pfmemalloc: skbuff was allocated from PFMEMALLOC reserves
  *	@ndisc_nodetype: router type (from link layer)
  *	@ooo_okay: allow the mapping of a socket to a queue to be changed
  *	@l4_hash: indicate hash is a canonical 4-tuple hash over transport
@@ -1030,7 +1028,6 @@ static inline struct sk_buff *alloc_skb_fclone(unsigned int size,
 struct sk_buff *skb_morph(struct sk_buff *dst, struct sk_buff *src);
 int skb_copy_ubufs(struct sk_buff *skb, gfp_t gfp_mask);
 struct sk_buff *skb_clone(struct sk_buff *skb, gfp_t priority);
-void skb_copy_header(struct sk_buff *new, const struct sk_buff *old);
 struct sk_buff *skb_copy(const struct sk_buff *skb, gfp_t priority);
 struct sk_buff *__pskb_copy_fclone(struct sk_buff *skb, int headroom,
 				   gfp_t gfp_mask, bool fclone);
@@ -1234,8 +1231,7 @@ static inline __u32 skb_get_hash_flowi6(struct sk_buff *skb, const struct flowi6
 	return skb->hash;
 }
 
-__u32 skb_get_hash_perturb(const struct sk_buff *skb,
-			   const siphash_key_t *perturb);
+__u32 skb_get_hash_perturb(const struct sk_buff *skb, u32 perturb);
 
 static inline __u32 skb_get_hash_raw(const struct sk_buff *skb)
 {
@@ -1630,18 +1626,6 @@ static inline __u32 skb_queue_len(const struct sk_buff_head *list_)
 }
 
 /**
- *	skb_queue_len_lockless	- get queue length
- *	@list_: list to measure
- *
- *	Return the length of an &sk_buff queue.
- *	This variant can be used in lockless contexts.
- */
-static inline __u32 skb_queue_len_lockless(const struct sk_buff_head *list_)
-{
-	return READ_ONCE(list_->qlen);
-}
-
-/**
  *	__skb_queue_head_init - initialize non-spinlock portions of sk_buff_head
  *	@list: queue to initialize
  *
@@ -1693,7 +1677,7 @@ static inline void __skb_insert(struct sk_buff *newsk,
 	newsk->next = next;
 	newsk->prev = prev;
 	next->prev  = prev->next = newsk;
-	WRITE_ONCE(list->qlen, list->qlen + 1);
+	list->qlen++;
 }
 
 static inline void __skb_queue_splice(const struct sk_buff_head *list,
@@ -1844,7 +1828,7 @@ static inline void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
 {
 	struct sk_buff *next, *prev;
 
-	WRITE_ONCE(list->qlen, list->qlen - 1);
+	list->qlen--;
 	next	   = skb->next;
 	prev	   = skb->prev;
 	skb->next  = skb->prev = NULL;
@@ -2166,30 +2150,6 @@ static inline void skb_reserve(struct sk_buff *skb, int len)
 {
 	skb->data += len;
 	skb->tail += len;
-}
-
-/**
- *	skb_tailroom_reserve - adjust reserved_tailroom
- *	@skb: buffer to alter
- *	@mtu: maximum amount of headlen permitted
- *	@needed_tailroom: minimum amount of reserved_tailroom
- *
- *	Set reserved_tailroom so that headlen can be as large as possible but
- *	not larger than mtu and tailroom cannot be smaller than
- *	needed_tailroom.
- *	The required headroom should already have been reserved before using
- *	this function.
- */
-static inline void skb_tailroom_reserve(struct sk_buff *skb, unsigned int mtu,
-					unsigned int needed_tailroom)
-{
-	SKB_LINEAR_ASSERT(skb);
-	if (mtu < skb_tailroom(skb) - needed_tailroom)
-		/* use at most mtu */
-		skb->reserved_tailroom = skb_tailroom(skb) - mtu;
-	else
-		/* use up to all available space */
-		skb->reserved_tailroom = needed_tailroom;
 }
 
 /**
@@ -2610,8 +2570,6 @@ static inline void __skb_queue_purge(struct sk_buff_head *list)
 
 void skb_rbtree_purge(struct rb_root *root);
 
-unsigned int skb_rbtree_purge(struct rb_root *root);
-
 void *netdev_alloc_frag(unsigned int fragsz);
 
 struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int length,
@@ -2912,13 +2870,6 @@ static inline int skb_try_make_writable(struct sk_buff *skb,
 	       pskb_expand_head(skb, 0, 0, GFP_ATOMIC);
 }
 
-static inline int skb_try_make_writable(struct sk_buff *skb,
-					unsigned int write_len)
-{
-	return skb_cloned(skb) && !skb_clone_writable(skb, write_len) &&
-	       pskb_expand_head(skb, 0, 0, GFP_ATOMIC);
-}
-
 static inline int __skb_cow(struct sk_buff *skb, unsigned int headroom,
 			    int cloned)
 {
@@ -3018,7 +2969,7 @@ static inline int __skb_put_padto(struct sk_buff *skb, unsigned int len,
  *	is untouched. Otherwise it is extended. Returns zero on
  *	success. The skb is freed on error.
  */
-static inline int __must_check skb_put_padto(struct sk_buff *skb, unsigned int len)
+static inline int skb_put_padto(struct sk_buff *skb, unsigned int len)
 {
 	return __skb_put_padto(skb, len, true);
 }
@@ -3136,43 +3087,6 @@ __skb_postpush_rcsum(struct sk_buff *skb, const void *start, unsigned int len,
 					   csum_partial(start, len, 0), off);
 }
 
-static inline void skb_postpush_rcsum(struct sk_buff *skb,
-				      const void *start, unsigned int len)
-{
-	/* For performing the reverse operation to skb_postpull_rcsum(),
-	 * we can instead of ...
-	 *
-	 *   skb->csum = csum_add(skb->csum, csum_partial(start, len, 0));
-	 *
-	 * ... just use this equivalent version here to save a few
-	 * instructions. Feeding csum of 0 in csum_partial() and later
-	 * on adding skb->csum is equivalent to feed skb->csum in the
-	 * first place.
-	 */
-	if (skb->ip_summed == CHECKSUM_COMPLETE)
-		skb->csum = csum_partial(start, len, skb->csum);
-}
-
-/**
- *	skb_push_rcsum - push skb and update receive checksum
- *	@skb: buffer to update
- *	@len: length of data pulled
- *
- *	This function performs an skb_push on the packet and updates
- *	the CHECKSUM_COMPLETE checksum.  It should be used on
- *	receive path processing instead of skb_push unless you know
- *	that the checksum difference is zero (e.g., a valid IP header)
- *	or you are setting ip_summed to CHECKSUM_NONE.
- */
-static inline unsigned char *skb_push_rcsum(struct sk_buff *skb,
-					    unsigned int len)
-{
-	skb_push(skb, len);
-	skb_postpush_rcsum(skb, skb->data, len);
-	return skb->data;
-}
-
-int pskb_trim_rcsum_slow(struct sk_buff *skb, unsigned int len);
 /**
  *	skb_postpush_rcsum - update checksum for received skb after push
  *	@skb: buffer to update
@@ -3931,13 +3845,6 @@ static inline void ipvs_reset(struct sk_buff *skb)
 #endif
 }
 
-static inline void ipvs_reset(struct sk_buff *skb)
-{
-#if IS_ENABLED(CONFIG_IP_VS)
-	skb->ipvs_property = 0;
-#endif
-}
-
 /* Note: This doesn't put any conntrack and bridge info in dst. */
 static inline void __nf_copy(struct sk_buff *dst, const struct sk_buff *src,
 			     bool copy)
@@ -4231,36 +4138,6 @@ static inline __wsum lco_csum(struct sk_buff *skb)
 	 * adjustment filled in by caller) and return result.
 	 */
 	return csum_partial(l4_hdr, csum_start - l4_hdr, partial);
-}
-
-/**
- * skb_gso_mac_seglen - Return length of individual segments of a gso packet
- *
- * @skb: GSO skb
- *
- * skb_gso_mac_seglen is used to determine the real size of the
- * individual segments, including MAC/L2, Layer3 (IP, IPv6) and L4
- * headers (TCP/UDP).
- */
-static inline unsigned int skb_gso_mac_seglen(const struct sk_buff *skb)
-{
-	unsigned int hdr_len = skb_transport_header(skb) - skb_mac_header(skb);
-	return hdr_len + skb_gso_transport_seglen(skb);
-}
-
-/**
- * skb_gso_validate_mac_len - Will a split GSO skb fit in a given length?
- *
- * @skb: GSO skb
- * @len: length to validate against
- *
- * skb_gso_validate_mac_len validates if a given skb will fit a wanted
- * length once split, including L2, L3 and L4 headers and the payload.
- */
-static inline bool
-skb_gso_validate_mac_len(const struct sk_buff *skb, unsigned int len)
-{
-	return skb_gso_mac_seglen(skb) <= len;
 }
 
 #endif	/* __KERNEL__ */

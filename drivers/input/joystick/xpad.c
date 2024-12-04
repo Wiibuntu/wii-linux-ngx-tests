@@ -119,10 +119,6 @@ static bool auto_poweroff = true;
 module_param(auto_poweroff, bool, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(auto_poweroff, "Power off wireless controllers on suspend");
 
-static bool auto_poweroff = true;
-module_param(auto_poweroff, bool, S_IWUSR | S_IRUGO);
-MODULE_PARM_DESC(auto_poweroff, "Power off wireless controllers on suspend");
-
 static const struct xpad_device {
 	u16 idVendor;
 	u16 idProduct;
@@ -393,15 +389,15 @@ static const signed short xpad_abs_triggers[] = {
  * match against vendor id as well. Wired Xbox 360 devices have protocol 1,
  * wireless controllers have protocol 129.
  */
-#define XPAD_XBOX360_VENDOR_PROTOCOL(vend, pr) \
+#define XPAD_XBOX360_VENDOR_PROTOCOL(vend,pr) \
 	.match_flags = USB_DEVICE_ID_MATCH_VENDOR | USB_DEVICE_ID_MATCH_INT_INFO, \
 	.idVendor = (vend), \
 	.bInterfaceClass = USB_CLASS_VENDOR_SPEC, \
 	.bInterfaceSubClass = 93, \
 	.bInterfaceProtocol = (pr)
 #define XPAD_XBOX360_VENDOR(vend) \
-	{ XPAD_XBOX360_VENDOR_PROTOCOL((vend), 1) }, \
-	{ XPAD_XBOX360_VENDOR_PROTOCOL((vend), 129) }
+	{ XPAD_XBOX360_VENDOR_PROTOCOL(vend,1) }, \
+	{ XPAD_XBOX360_VENDOR_PROTOCOL(vend,129) }
 
 /* The Xbox One controller uses subclass 71 and protocol 208. */
 #define XPAD_XBOXONE_VENDOR_PROTOCOL(vend, pr) \
@@ -1646,22 +1642,21 @@ static int xpad_init_input(struct usb_xpad *xpad)
 
 	/* set up standard buttons */
 	for (i = 0; xpad_common_btn[i] >= 0; i++)
-		input_set_capability(input_dev, EV_KEY, xpad_common_btn[i]);
+		__set_bit(xpad_common_btn[i], input_dev->keybit);
 
 	/* set up model-specific ones */
 	if (xpad->xtype == XTYPE_XBOX360 || xpad->xtype == XTYPE_XBOX360W ||
 	    xpad->xtype == XTYPE_XBOXONE) {
 		for (i = 0; xpad360_btn[i] >= 0; i++)
-			input_set_capability(input_dev, EV_KEY, xpad360_btn[i]);
+			__set_bit(xpad360_btn[i], input_dev->keybit);
 	} else {
 		for (i = 0; xpad_btn[i] >= 0; i++)
-			input_set_capability(input_dev, EV_KEY, xpad_btn[i]);
+			__set_bit(xpad_btn[i], input_dev->keybit);
 	}
 
 	if (xpad->mapping & MAP_DPAD_TO_BUTTONS) {
 		for (i = 0; xpad_btn_pad[i] >= 0; i++)
-			input_set_capability(input_dev, EV_KEY,
-					     xpad_btn_pad[i]);
+			__set_bit(xpad_btn_pad[i], input_dev->keybit);
 	}
 
 	/*
@@ -1678,8 +1673,7 @@ static int xpad_init_input(struct usb_xpad *xpad)
 
 	if (xpad->mapping & MAP_TRIGGERS_TO_BUTTONS) {
 		for (i = 0; xpad_btn_triggers[i] >= 0; i++)
-			input_set_capability(input_dev, EV_KEY,
-					     xpad_btn_triggers[i]);
+			__set_bit(xpad_btn_triggers[i], input_dev->keybit);
 	} else {
 		for (i = 0; xpad_abs_triggers[i] >= 0; i++)
 			xpad_set_up_abs(input_dev, xpad_abs_triggers[i]);
@@ -1908,7 +1902,6 @@ static int xpad_suspend(struct usb_interface *intf, pm_message_t message)
 
 	xpad_stop_output(xpad);
 
-	xpad->input_created = true;
 	return 0;
 }
 

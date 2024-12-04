@@ -1388,10 +1388,10 @@ static int pci_init_afu(struct cxl *adapter, int slice, struct pci_dev *dev)
 	 * if it returns an error!
 	 */
 	if ((rc = cxl_register_afu(afu)))
-		goto err_put_dev;
+		goto err_put1;
 
 	if ((rc = cxl_sysfs_afu_add(afu)))
-		goto err_del_dev;
+		goto err_put1;
 
 	adapter->afu[afu->slice] = afu;
 
@@ -2266,9 +2266,6 @@ static pci_ers_result_t cxl_pci_slot_reset(struct pci_dev *pdev)
 
 		if (cxl_afu_select_best_mode(afu))
 			goto err;
-
-		if (afu->phb == NULL)
-			continue;
 
 		if (afu->phb == NULL)
 			continue;

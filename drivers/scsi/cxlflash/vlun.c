@@ -1160,8 +1160,6 @@ static int clone_lxt(struct afu *afu,
 		goto err2;
 	}
 
-	if (lli->port_sel == BOTH_PORTS)
-		virt->hdr.return_flags |= DK_CXLFLASH_ALL_PORTS_ACTIVE;
 out:
 	if (locked)
 		mutex_unlock(&blka->mutex);

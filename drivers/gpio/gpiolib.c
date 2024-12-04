@@ -209,14 +209,6 @@ int gpiod_get_direction(struct gpio_desc *desc)
 	chip = gpiod_to_chip(desc);
 	offset = gpio_chip_hwgpio(desc);
 
-	/*
-	 * Open drain emulation using input mode may incorrectly report
-	 * input here, fix that up.
-	 */
-	if (test_bit(FLAG_OPEN_DRAIN, &desc->flags) &&
-	    test_bit(FLAG_IS_OUT, &desc->flags))
-		return 0;
-
 	if (!chip->get_direction)
 		return status;
 
@@ -289,13 +281,6 @@ static struct gpio_desc *gpio_name_to_desc(const char * const name)
 {
 	struct gpio_device *gdev;
 	unsigned long flags;
-
-	chip->data = data;
-
-#ifdef CONFIG_OF_GPIO
-	if ((!chip->of_node) && (chip->dev))
-		chip->of_node = chip->dev->of_node;
-#endif
 
 	spin_lock_irqsave(&gpio_lock, flags);
 
@@ -1267,10 +1252,6 @@ int gpiochip_add_data_with_key(struct gpio_chip *chip, void *data,
 	if (status)
 		goto err_remove_chip;
 
-	status = gpiochip_init_valid_mask(chip);
-	if (status)
-		goto err_remove_from_list;
-
 	status = of_gpiochip_add(chip);
 	if (status)
 		goto err_remove_chip;
@@ -1328,79 +1309,6 @@ void *gpiochip_get_data(struct gpio_chip *chip)
 	return chip->gpiodev->data;
 }
 EXPORT_SYMBOL_GPL(gpiochip_get_data);
-
-static void devm_gpio_chip_release(struct device *dev, void *res)
-{
-	struct gpio_chip *chip = *(struct gpio_chip **)res;
-
-	gpiochip_remove(chip);
-}
-
-static int devm_gpio_chip_match(struct device *dev, void *res, void *data)
-
-{
-	struct gpio_chip **r = res;
-
-	if (!r || !*r) {
-		WARN_ON(!r || !*r);
-		return 0;
-	}
-
-	return *r == data;
-}
-
-/**
- * devm_gpiochip_add_data() - Resource manager piochip_add_data()
- * @dev: the device pointer on which irq_chip belongs to.
- * @chip: the chip to register, with chip->base initialized
- * Context: potentially before irqs will work
- *
- * Returns a negative errno if the chip can't be registered, such as
- * because the chip->base is invalid or already associated with a
- * different chip.  Otherwise it returns zero as a success code.
- *
- * The gpio chip automatically be released when the device is unbound.
- */
-int devm_gpiochip_add_data(struct device *dev, struct gpio_chip *chip,
-			   void *data)
-{
-	struct gpio_chip **ptr;
-	int ret;
-
-	ptr = devres_alloc(devm_gpio_chip_release, sizeof(*ptr),
-			     GFP_KERNEL);
-	if (!ptr)
-		return -ENOMEM;
-
-	ret = gpiochip_add_data(chip, data);
-	if (ret < 0) {
-		devres_free(ptr);
-		return ret;
-	}
-
-	*ptr = chip;
-	devres_add(dev, ptr);
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(devm_gpiochip_add_data);
-
-/**
- * devm_gpiochip_remove() - Resource manager of gpiochip_remove()
- * @dev: device for which which resource was allocated
- * @chip: the chip to remove
- *
- * A gpio_chip with any GPIOs still requested may not be removed.
- */
-void devm_gpiochip_remove(struct device *dev, struct gpio_chip *chip)
-{
-	int ret;
-
-	ret = devres_release(dev, devm_gpio_chip_release,
-			     devm_gpio_chip_match, chip);
-	WARN_ON(ret);
-}
-EXPORT_SYMBOL_GPL(devm_gpiochip_remove);
 
 /**
  * gpiochip_remove() - unregister a gpio_chip
@@ -2222,7 +2130,6 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	struct gpio_chip	*chip = desc->gdev->chip;
 	int			status;
 	unsigned long		flags;
-	unsigned		offset;
 
 	spin_lock_irqsave(&gpio_lock, flags);
 
@@ -2241,11 +2148,7 @@ static int gpiod_request_commit(struct gpio_desc *desc, const char *label)
 	if (chip->request) {
 		/* chip->request may sleep */
 		spin_unlock_irqrestore(&gpio_lock, flags);
-		offset = gpio_chip_hwgpio(desc);
-		if (gpiochip_line_is_valid(chip, offset))
-			status = chip->request(chip, offset);
-		else
-			status = -EINVAL;
+		status = chip->request(chip, gpio_chip_hwgpio(desc));
 		spin_lock_irqsave(&gpio_lock, flags);
 
 		if (status < 0) {
@@ -2638,24 +2541,6 @@ int gpiod_is_active_low(const struct gpio_desc *desc)
 	return test_bit(FLAG_ACTIVE_LOW, &desc->flags);
 }
 EXPORT_SYMBOL_GPL(gpiod_is_active_low);
-
-/**
- * gpio_direction_is_output - tell if a gpio is configured as an output
- * @gpio: gpio in question
- *
- * Returns a negative errno if the given gpio is not valid.
- * Returns a positive non-zero if the gpio is configured as an output.
- * Returns zero otherwise.
- */
-int gpio_direction_is_output(unsigned gpio)
-{
-	struct gpio_desc *desc = gpio_to_desc(gpio);
-	if (desc == NULL)
-		return -EINVAL;
-
-	return test_bit(FLAG_IS_OUT, &desc->flags);
-}
-EXPORT_SYMBOL_GPL(gpio_direction_is_output);
 
 /* I/O calls are only valid after configuration completed; the relevant
  * "is this a valid GPIO" error checks should already have been done.
@@ -3530,9 +3415,8 @@ static struct gpio_desc *gpiod_find(struct device *dev, const char *con_id,
 
 		if (chip->ngpio <= p->chip_hwnum) {
 			dev_err(dev,
-				"requested GPIO %u (%u) is out of range [0..%u] for chip %s\n",
-				idx, p->chip_hwnum, chip->ngpio - 1,
-				chip->label);
+				"requested GPIO %d is out of range [0..%d] for chip %s\n",
+				idx, chip->ngpio, chip->label);
 			return ERR_PTR(-EINVAL);
 		}
 
@@ -3722,8 +3606,6 @@ struct gpio_desc *__must_check gpiod_get_index(struct device *dev,
 	struct gpio_desc *desc = NULL;
 	int status;
 	enum gpio_lookup_flags lookupflags = 0;
-	/* Maybe we have a device name, maybe not */
-	const char *devname = dev ? dev_name(dev) : "?";
 
 	dev_dbg(dev, "GPIO lookup for consumer %s\n", con_id);
 
@@ -3829,10 +3711,6 @@ struct gpio_desc *fwnode_get_named_gpiod(struct fwnode_handle *fwnode,
 		return desc;
 
 	ret = gpiod_request(desc, label);
-	if (ret)
-		return ERR_PTR(ret);
-
-	ret = gpiod_request(desc, NULL);
 	if (ret)
 		return ERR_PTR(ret);
 

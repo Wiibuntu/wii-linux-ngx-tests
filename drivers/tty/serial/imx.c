@@ -517,7 +517,7 @@ static void imx_dma_tx(struct imx_port *sport)
 
 	sport->tx_bytes = uart_circ_chars_pending(xmit);
 
-	if (xmit->tail < xmit->head || xmit->head == 0) {
+	if (xmit->tail < xmit->head) {
 		sport->dma_tx_nents = 1;
 		sg_init_one(sgl, xmit->buf + xmit->tail, sport->tx_bytes);
 	} else {
@@ -533,7 +533,7 @@ static void imx_dma_tx(struct imx_port *sport)
 		dev_err(dev, "DMA mapping error for TX.\n");
 		return;
 	}
-	desc = dmaengine_prep_slave_sg(chan, sgl, ret,
+	desc = dmaengine_prep_slave_sg(chan, sgl, sport->dma_tx_nents,
 					DMA_MEM_TO_DEV, DMA_PREP_INTERRUPT);
 	if (!desc) {
 		dma_unmap_sg(dev, sgl, sport->dma_tx_nents,
@@ -1764,6 +1764,16 @@ imx_console_write(struct console *co, const char *s, unsigned int count)
 	unsigned int ucr1;
 	unsigned long flags = 0;
 	int locked = 1;
+	int retval;
+
+	retval = clk_enable(sport->clk_per);
+	if (retval)
+		return;
+	retval = clk_enable(sport->clk_ipg);
+	if (retval) {
+		clk_disable(sport->clk_per);
+		return;
+	}
 
 	if (sport->port.sysrq)
 		locked = 0;
@@ -1799,6 +1809,9 @@ imx_console_write(struct console *co, const char *s, unsigned int count)
 
 	if (locked)
 		spin_unlock_irqrestore(&sport->port.lock, flags);
+
+	clk_disable(sport->clk_ipg);
+	clk_disable(sport->clk_per);
 }
 
 /*
@@ -1899,12 +1912,13 @@ imx_console_setup(struct console *co, char *options)
 
 	retval = uart_set_options(&sport->port, co, baud, parity, bits, flow);
 
+	clk_disable(sport->clk_ipg);
 	if (retval) {
-		clk_disable_unprepare(sport->clk_ipg);
+		clk_unprepare(sport->clk_ipg);
 		goto error_console;
 	}
 
-	retval = clk_prepare_enable(sport->clk_per);
+	retval = clk_prepare(sport->clk_per);
 	if (retval)
 		clk_disable_unprepare(sport->clk_ipg);
 
@@ -2047,12 +2061,6 @@ static int serial_imx_probe(struct platform_device *pdev)
 		serial_imx_probe_pdata(sport, pdev);
 	else if (ret < 0)
 		return ret;
-
-	if (sport->port.line >= ARRAY_SIZE(imx_ports)) {
-		dev_err(&pdev->dev, "serial%d out of range\n",
-			sport->port.line);
-		return -EINVAL;
-	}
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	base = devm_ioremap_resource(&pdev->dev, res);
@@ -2230,14 +2238,12 @@ static void serial_imx_enable_wakeup(struct imx_port *sport, bool on)
 		val &= ~UCR3_AWAKEN;
 	writel(val, sport->port.membase + UCR3);
 
-	if (sport->have_rtscts) {
-		val = readl(sport->port.membase + UCR1);
-		if (on)
-			val |= UCR1_RTSDEN;
-		else
-			val &= ~UCR1_RTSDEN;
-		writel(val, sport->port.membase + UCR1);
-	}
+	val = readl(sport->port.membase + UCR1);
+	if (on)
+		val |= UCR1_RTSDEN;
+	else
+		val &= ~UCR1_RTSDEN;
+	writel(val, sport->port.membase + UCR1);
 }
 
 static int imx_serial_port_suspend_noirq(struct device *dev)

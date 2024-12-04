@@ -428,12 +428,6 @@ static LIST_HEAD(spi_controller_list);
  */
 static DEFINE_MUTEX(board_lock);
 
-/*
- * Prevents addition of devices with same chip select and
- * addition of devices below an unregistering controller.
- */
-static DEFINE_MUTEX(spi_add_lock);
-
 /**
  * spi_alloc_device - Allocate a new SPI device
  * @ctlr: Controller to which device is connected
@@ -991,8 +985,6 @@ static int spi_map_msg(struct spi_controller *ctlr, struct spi_message *msg)
 		if (max_tx || max_rx) {
 			list_for_each_entry(xfer, &msg->transfers,
 					    transfer_list) {
-				if (!xfer->len)
-					continue;
 				if (!xfer->tx_buf)
 					xfer->tx_buf = ctlr->dummy_tx;
 				if (!xfer->rx_buf)
@@ -2024,47 +2016,6 @@ struct spi_controller *__spi_alloc_controller(struct device *dev,
 	return ctlr;
 }
 EXPORT_SYMBOL_GPL(__spi_alloc_controller);
-
-static void devm_spi_release_master(struct device *dev, void *master)
-{
-	spi_master_put(*(struct spi_master **)master);
-}
-
-/**
- * devm_spi_alloc_master - resource-managed spi_alloc_master()
- * @dev: physical device of SPI master
- * @size: how much zeroed driver-private data to allocate
- * Context: can sleep
- *
- * Allocate an SPI master and automatically release a reference on it
- * when @dev is unbound from its driver.  Drivers are thus relieved from
- * having to call spi_master_put().
- *
- * The arguments to this function are identical to spi_alloc_master().
- *
- * Return: the SPI master structure on success, else NULL.
- */
-struct spi_master *devm_spi_alloc_master(struct device *dev, unsigned int size)
-{
-	struct spi_master **ptr, *master;
-
-	ptr = devres_alloc(devm_spi_release_master, sizeof(*ptr),
-			   GFP_KERNEL);
-	if (!ptr)
-		return NULL;
-
-	master = spi_alloc_master(dev, size);
-	if (master) {
-		master->devm_allocated = true;
-		*ptr = master;
-		devres_add(dev, ptr);
-	} else {
-		devres_free(ptr);
-	}
-
-	return master;
-}
-EXPORT_SYMBOL_GPL(devm_spi_alloc_master);
 
 #ifdef CONFIG_OF
 static int of_spi_register_master(struct spi_controller *ctlr)

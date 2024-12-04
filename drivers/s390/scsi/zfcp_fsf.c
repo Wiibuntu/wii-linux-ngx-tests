@@ -230,15 +230,10 @@ static void zfcp_fsf_status_read_handler(struct zfcp_fsf_req *req)
 	case FSF_STATUS_READ_SENSE_DATA_AVAIL:
 		break;
 	case FSF_STATUS_READ_BIT_ERROR_THRESHOLD:
+		dev_warn(&adapter->ccw_device->dev,
+			 "The error threshold for checksum statistics "
+			 "has been exceeded\n");
 		zfcp_dbf_hba_bit_err("fssrh_3", req);
-		if (ber_stop) {
-			dev_warn(&adapter->ccw_device->dev,
-				 "All paths over this FCP device are disused because of excessive bit errors\n");
-			zfcp_erp_adapter_shutdown(adapter, 0, "fssrh_b");
-		} else {
-			dev_warn(&adapter->ccw_device->dev,
-				 "The error threshold for checksum statistics has been exceeded\n");
-		}
 		break;
 	case FSF_STATUS_READ_LINK_DOWN:
 		zfcp_fsf_status_read_link_down(req);
@@ -1577,7 +1572,7 @@ static void zfcp_fsf_open_wka_port_handler(struct zfcp_fsf_req *req)
 		wka_port->status = ZFCP_FC_WKA_PORT_ONLINE;
 	}
 out:
-	wake_up(&wka_port->opened);
+	wake_up(&wka_port->completion_wq);
 }
 
 /**
@@ -1589,7 +1584,6 @@ int zfcp_fsf_open_wka_port(struct zfcp_fc_wka_port *wka_port)
 {
 	struct zfcp_qdio *qdio = wka_port->adapter->qdio;
 	struct zfcp_fsf_req *req;
-	unsigned long req_id = 0;
 	int retval = -EIO;
 
 	spin_lock_irq(&qdio->req_q_lock);
@@ -1633,7 +1627,7 @@ static void zfcp_fsf_close_wka_port_handler(struct zfcp_fsf_req *req)
 	}
 
 	wka_port->status = ZFCP_FC_WKA_PORT_OFFLINE;
-	wake_up(&wka_port->closed);
+	wake_up(&wka_port->completion_wq);
 }
 
 /**
@@ -1645,7 +1639,6 @@ int zfcp_fsf_close_wka_port(struct zfcp_fc_wka_port *wka_port)
 {
 	struct zfcp_qdio *qdio = wka_port->adapter->qdio;
 	struct zfcp_fsf_req *req;
-	unsigned long req_id = 0;
 	int retval = -EIO;
 
 	spin_lock_irq(&qdio->req_q_lock);

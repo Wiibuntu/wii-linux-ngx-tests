@@ -223,12 +223,9 @@ static inline int __init mips_sc_probe(void)
 	c->scache.waysize = c->scache.sets * c->scache.linesz;
 	c->scache.waybit = __ffs(c->scache.waysize);
 
-	if (c->scache.linesz) {
-		c->scache.flags &= ~MIPS_CACHE_NOT_PRESENT;
-		return 1;
-	}
+	c->scache.flags &= ~MIPS_CACHE_NOT_PRESENT;
 
-	return 0;
+	return 1;
 }
 
 int mips_sc_init(void)

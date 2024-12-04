@@ -30,31 +30,10 @@
 #include "internal.h"
 
 /*
- * New pipe buffers will be restricted to this size while the user is exceeding
- * their pipe buffer quota. The general pipe use case needs at least two
- * buffers: one for data yet to be read, and one for new data. If this is less
- * than two, then a write to a non-empty pipe may block even if the pipe is not
- * full. This can occur with GNU make jobserver or similar uses of pipes as
- * semaphores: multiple processes may be waiting to write tokens back to the
- * pipe before reading tokens: https://lore.kernel.org/lkml/1628086770.5rn8p04n6j.none@localhost/.
- *
- * Users can reduce their pipe buffers with F_SETPIPE_SZ below this at their
- * own risk, namely: pipe writes to non-full pipes may block until the pipe is
- * emptied.
- */
-#define PIPE_MIN_DEF_BUFFERS 2
-
-/*
  * The max size that a non-root user is allowed to grow the pipe. Can
  * be set by root in /proc/sys/fs/pipe-max-size
  */
 unsigned int pipe_max_size = 1048576;
-
-/* Maximum allocatable pages per user. Hard limit is unset by default, soft
- * matches default values.
- */
-unsigned long pipe_user_pages_hard;
-unsigned long pipe_user_pages_soft = PIPE_DEF_BUFFERS * INR_OPEN_CUR;
 
 /*
  * Minimum pipe size, as required by POSIX
@@ -1074,9 +1053,6 @@ static long pipe_set_size(struct pipe_inode_info *pipe, unsigned long arg)
 	if (!nr_pages)
 		return -EINVAL;
 
-	if (!nr_pages)
-		return -EINVAL;
-
 	/*
 	 * If trying to increase the pipe capacity, check that an
 	 * unprivileged user is not trying to exceed various limits
@@ -1137,7 +1113,6 @@ static long pipe_set_size(struct pipe_inode_info *pipe, unsigned long arg)
 			memcpy(bufs + head, pipe->bufs, tail * sizeof(struct pipe_buffer));
 	}
 
-	account_pipe_buffers(pipe, pipe->buffers, nr_pages);
 	pipe->curbuf = 0;
 	kfree(pipe->bufs);
 	pipe->bufs = bufs;

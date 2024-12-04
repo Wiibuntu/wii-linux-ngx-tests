@@ -89,6 +89,10 @@
 static const char banner[] __initconst = KERN_INFO \
 	"AX.25: bpqether driver version 004\n";
 
+static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
+
+static char bpq_eth_addr[6];
+
 static int bpq_rcv(struct sk_buff *, struct net_device *, struct packet_type *, struct net_device *);
 static int bpq_device_event(struct notifier_block *, unsigned long, void *);
 
@@ -511,8 +515,8 @@ static int bpq_new_device(struct net_device *edev)
 	bpq->ethdev = edev;
 	bpq->axdev = ndev;
 
-	eth_broadcast_addr(bpq->dest_addr);
-	eth_broadcast_addr(bpq->acpt_addr);
+	memcpy(bpq->dest_addr, bcast_addr, sizeof(bpq_eth_addr));
+	memcpy(bpq->acpt_addr, bcast_addr, sizeof(bpq_eth_addr));
 
 	err = register_netdevice(ndev);
 	if (err)
@@ -551,7 +555,7 @@ static int bpq_device_event(struct notifier_block *this,
 	if (!net_eq(dev_net(dev), &init_net))
 		return NOTIFY_DONE;
 
-	if (!dev_is_ethdev(dev) && !bpq_get_ax25_dev(dev))
+	if (!dev_is_ethdev(dev))
 		return NOTIFY_DONE;
 
 	switch (event) {

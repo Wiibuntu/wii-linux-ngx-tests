@@ -178,7 +178,8 @@ static int jfs_create(struct inode *dip, struct dentry *dentry, umode_t mode,
 		unlock_new_inode(ip);
 		iput(ip);
 	} else {
-		d_instantiate_new(dentry, ip);
+		unlock_new_inode(ip);
+		d_instantiate(dentry, ip);
 	}
 
       out2:
@@ -312,7 +313,8 @@ static int jfs_mkdir(struct inode *dip, struct dentry *dentry, umode_t mode)
 		unlock_new_inode(ip);
 		iput(ip);
 	} else {
-		d_instantiate_new(dentry, ip);
+		unlock_new_inode(ip);
+		d_instantiate(dentry, ip);
 	}
 
       out2:
@@ -813,11 +815,6 @@ static int jfs_link(struct dentry *old_dentry,
 	if (rc)
 		goto out;
 
-	if (isReadOnly(ip)) {
-		jfs_error(ip->i_sb, "read-only filesystem\n");
-		return -EROFS;
-	}
-
 	tid = txBegin(ip->i_sb, 0);
 
 	mutex_lock_nested(&JFS_IP(dir)->commit_mutex, COMMIT_MUTEX_PARENT);
@@ -1062,7 +1059,8 @@ static int jfs_symlink(struct inode *dip, struct dentry *dentry,
 		unlock_new_inode(ip);
 		iput(ip);
 	} else {
-		d_instantiate_new(dentry, ip);
+		unlock_new_inode(ip);
+		d_instantiate(dentry, ip);
 	}
 
       out2:
@@ -1449,7 +1447,8 @@ static int jfs_mknod(struct inode *dir, struct dentry *dentry,
 		unlock_new_inode(ip);
 		iput(ip);
 	} else {
-		d_instantiate_new(dentry, ip);
+		unlock_new_inode(ip);
+		d_instantiate(dentry, ip);
 	}
 
       out1:

@@ -749,8 +749,7 @@ static bool conn_use_rpa(struct hci_conn *conn)
 }
 
 static void hci_req_add_le_create_conn(struct hci_request *req,
-				       struct hci_conn *conn,
-				       bdaddr_t *direct_rpa)
+				       struct hci_conn *conn)
 {
 	struct hci_cp_le_create_conn cp;
 	struct hci_dev *hdev = conn->hdev;
@@ -826,7 +825,7 @@ static void hci_req_directed_advertising(struct hci_request *req,
 
 struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 				u8 dst_type, u8 sec_level, u16 conn_timeout,
-				u8 role, bdaddr_t *direct_rpa)
+				u8 role)
 {
 	struct hci_conn_params *params;
 	struct hci_conn *conn;
@@ -941,7 +940,7 @@ struct hci_conn *hci_connect_le(struct hci_dev *hdev, bdaddr_t *dst,
 		hci_dev_set_flag(hdev, HCI_LE_SCAN_INTERRUPTED);
 	}
 
-	hci_req_add_le_create_conn(&req, conn, direct_rpa);
+	hci_req_add_le_create_conn(&req, conn);
 
 create_conn:
 	err = hci_req_run(&req, create_le_conn_complete);
@@ -1149,23 +1148,6 @@ int hci_conn_check_link_mode(struct hci_conn *conn)
 			return 0;
 	}
 
-	 /* AES encryption is required for Level 4:
-	  *
-	  * BLUETOOTH CORE SPECIFICATION Version 5.2 | Vol 3, Part C
-	  * page 1319:
-	  *
-	  * 128-bit equivalent strength for link and encryption keys
-	  * required using FIPS approved algorithms (E0 not allowed,
-	  * SAFER+ not allowed, and P-192 not allowed; encryption key
-	  * not shortened)
-	  */
-	if (conn->sec_level == BT_SECURITY_FIPS &&
-	    !test_bit(HCI_CONN_AES_CCM, &conn->flags)) {
-		bt_dev_err(conn->hdev,
-			   "Invalid security: Missing AES-CCM usage");
-		return 0;
-	}
-
 	if (hci_conn_ssp_enabled(conn) &&
 	    !test_bit(HCI_CONN_ENCRYPT, &conn->flags))
 		return 0;
@@ -1286,16 +1268,8 @@ auth:
 		return 0;
 
 encrypt:
-	if (test_bit(HCI_CONN_ENCRYPT, &conn->flags)) {
-		/* Ensure that the encryption key size has been read,
-		 * otherwise stall the upper layer responses.
-		 */
-		if (!conn->enc_key_size)
-			return 0;
-
-		/* Nothing else needed, all requirements are met */
+	if (test_bit(HCI_CONN_ENCRYPT, &conn->flags))
 		return 1;
-	}
 
 	hci_conn_encrypt(conn);
 	return 0;

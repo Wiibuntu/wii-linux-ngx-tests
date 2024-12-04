@@ -46,10 +46,9 @@
  */
 
 enum ftr_type {
-	FTR_EXACT,			/* Use a predefined safe value */
-	FTR_LOWER_SAFE,			/* Smaller value is safe */
-	FTR_HIGHER_SAFE,		/* Bigger value is safe */
-	FTR_HIGHER_OR_ZERO_SAFE,	/* Bigger value is safe, but 0 is biggest */
+	FTR_EXACT,	/* Use a predefined safe value */
+	FTR_LOWER_SAFE,	/* Smaller value is safe */
+	FTR_HIGHER_SAFE,/* Bigger value is safe */
 };
 
 #define FTR_STRICT	true	/* SANITY check strict matching required */
@@ -257,11 +256,6 @@ static inline bool cpu_supports_mixed_endian_el0(void)
 static inline bool system_supports_32bit_el0(void)
 {
 	return cpus_have_const_cap(ARM64_HAS_32BIT_EL0);
-}
-
-static inline bool system_supports_32bit_el0(void)
-{
-	return cpus_have_cap(ARM64_HAS_32BIT_EL0);
 }
 
 static inline bool system_supports_mixed_endian_el0(void)

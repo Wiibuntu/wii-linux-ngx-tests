@@ -122,7 +122,3 @@ all.config
 
 # Kdevelop4
 *.kdev4
-git.diff
-
-# Allow saving the GitHub action
-!.github

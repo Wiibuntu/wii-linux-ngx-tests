@@ -230,7 +230,6 @@ MODULE_DESCRIPTION("Broadcom Tigon3 ethernet driver");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(DRV_MODULE_VERSION);
 MODULE_FIRMWARE(FIRMWARE_TG3);
-MODULE_FIRMWARE(FIRMWARE_TG357766);
 MODULE_FIRMWARE(FIRMWARE_TG3TSO);
 MODULE_FIRMWARE(FIRMWARE_TG3TSO5);
 
@@ -7207,8 +7206,8 @@ static inline void tg3_reset_task_schedule(struct tg3 *tp)
 
 static inline void tg3_reset_task_cancel(struct tg3 *tp)
 {
-	if (test_and_clear_bit(TG3_FLAG_RESET_TASK_PENDING, tp->tg3_flags))
-		cancel_work_sync(&tp->reset_task);
+	cancel_work_sync(&tp->reset_task);
+	tg3_flag_clear(tp, RESET_TASK_PENDING);
 	tg3_flag_clear(tp, TX_RECOVERY_PENDING);
 }
 
@@ -7835,14 +7834,6 @@ static int tigon3_dma_hwbug_workaround(struct tg3_napi *tnapi,
 	dev_consume_skb_any(skb);
 	*pskb = new_skb;
 	return ret;
-}
-
-static bool tg3_tso_bug_gso_check(struct tg3_napi *tnapi, struct sk_buff *skb)
-{
-	/* Check if we will never have enough descriptors,
-	 * as gso_segs can be more than current ring size
-	 */
-	return skb_shinfo(skb)->gso_segs < tnapi->tx_pending / 3;
 }
 
 static bool tg3_tso_bug_gso_check(struct tg3_napi *tnapi, struct sk_buff *skb)
@@ -9338,10 +9329,6 @@ static int tg3_halt(struct tg3 *tp, int kind, bool silent)
 	tg3_write_sig_legacy(tp, kind);
 	tg3_write_sig_post_reset(tp, kind);
 
-	/* tp->hw_stats can be referenced safely:
-	 *     1. under rtnl_lock
-	 *     2. or under tp->lock if TG3_FLAG_INIT_COMPLETE is set.
-	 */
 	if (tp->hw_stats) {
 		/* Save the stats across chip resets... */
 		tg3_get_nstats(tp, &tp->net_stats_prev);
@@ -10066,16 +10053,6 @@ static int tg3_reset_hw(struct tg3 *tp, bool reset_phy)
 		val |= GRC_MODE_TIME_SYNC_ENABLE;
 
 	tw32(GRC_MODE, tp->grc_mode | val);
-
-	/* On one of the AMD platform, MRRS is restricted to 4000 because of
-	 * south bridge limitation. As a workaround, Driver is setting MRRS
-	 * to 2048 instead of default 4096.
-	 */
-	if (tp->pdev->subsystem_vendor == PCI_VENDOR_ID_DELL &&
-	    tp->pdev->subsystem_device == TG3PCI_SUBDEVICE_ID_DELL_5762) {
-		val = tr32(TG3PCI_DEV_STATUS_CTRL) & ~MAX_READ_REQ_MASK;
-		tw32(TG3PCI_DEV_STATUS_CTRL, val | MAX_READ_REQ_SIZE_2048);
-	}
 
 	/* On one of the AMD platform, MRRS is restricted to 4000 because of
 	 * south bridge limitation. As a workaround, Driver is setting MRRS
@@ -11171,7 +11148,7 @@ static void tg3_reset_task(struct work_struct *work)
 	rtnl_lock();
 	tg3_full_lock(tp, 0);
 
-	if (tp->pcierr_recovery || !netif_running(tp->dev)) {
+	if (!netif_running(tp->dev)) {
 		tg3_flag_clear(tp, RESET_TASK_PENDING);
 		tg3_full_unlock(tp);
 		rtnl_unlock();
@@ -11195,27 +11172,18 @@ static void tg3_reset_task(struct work_struct *work)
 
 	tg3_halt(tp, RESET_KIND_SHUTDOWN, 0);
 	err = tg3_init_hw(tp, true);
-	if (err) {
-		tg3_full_unlock(tp);
-		tp->irq_sync = 0;
-		tg3_napi_enable(tp);
-		/* Clear this flag so that tg3_reset_task_cancel() will not
-		 * call cancel_work_sync() and wait forever.
-		 */
-		tg3_flag_clear(tp, RESET_TASK_PENDING);
-		dev_close(tp->dev);
+	if (err)
 		goto out;
-	}
 
 	tg3_netif_start(tp);
 
+out:
 	tg3_full_unlock(tp);
 
 	if (!err)
 		tg3_phy_start(tp);
 
 	tg3_flag_clear(tp, RESET_TASK_PENDING);
-out:
 	rtnl_unlock();
 }
 
@@ -12417,7 +12385,6 @@ static int tg3_set_ringparam(struct net_device *dev, struct ethtool_ringparam *e
 {
 	struct tg3 *tp = netdev_priv(dev);
 	int i, irq_sync = 0, err = 0;
-	bool reset_phy = false;
 
 	if ((ering->rx_pending > tp->rx_std_ring_mask) ||
 	    (ering->rx_jumbo_pending > tp->rx_jmb_ring_mask) ||
@@ -12449,13 +12416,7 @@ static int tg3_set_ringparam(struct net_device *dev, struct ethtool_ringparam *e
 
 	if (netif_running(dev)) {
 		tg3_halt(tp, RESET_KIND_SHUTDOWN, 1);
-		/* Reset PHY to avoid PHY lock up */
-		if (tg3_asic_rev(tp) == ASIC_REV_5717 ||
-		    tg3_asic_rev(tp) == ASIC_REV_5719 ||
-		    tg3_asic_rev(tp) == ASIC_REV_5720)
-			reset_phy = true;
-
-		err = tg3_restart_hw(tp, reset_phy);
+		err = tg3_restart_hw(tp, false);
 		if (!err)
 			tg3_netif_start(tp);
 	}
@@ -12489,7 +12450,6 @@ static int tg3_set_pauseparam(struct net_device *dev, struct ethtool_pauseparam 
 {
 	struct tg3 *tp = netdev_priv(dev);
 	int err = 0;
-	bool reset_phy = false;
 
 	if (tp->link_config.autoneg == AUTONEG_ENABLE)
 		tg3_warn_mgmt_link_flap(tp);
@@ -12580,13 +12540,7 @@ static int tg3_set_pauseparam(struct net_device *dev, struct ethtool_pauseparam 
 
 		if (netif_running(dev)) {
 			tg3_halt(tp, RESET_KIND_SHUTDOWN, 1);
-			/* Reset PHY to avoid PHY lock up */
-			if (tg3_asic_rev(tp) == ASIC_REV_5717 ||
-			    tg3_asic_rev(tp) == ASIC_REV_5719 ||
-			    tg3_asic_rev(tp) == ASIC_REV_5720)
-				reset_phy = true;
-
-			err = tg3_restart_hw(tp, reset_phy);
+			err = tg3_restart_hw(tp, false);
 			if (!err)
 				tg3_netif_start(tp);
 		}
@@ -14213,7 +14167,7 @@ static void tg3_get_stats64(struct net_device *dev,
 	struct tg3 *tp = netdev_priv(dev);
 
 	spin_lock_bh(&tp->lock);
-	if (!tp->hw_stats || !tg3_flag(tp, INIT_COMPLETE)) {
+	if (!tp->hw_stats) {
 		*stats = tp->net_stats_prev;
 		spin_unlock_bh(&tp->lock);
 		return;
@@ -18170,20 +18124,16 @@ static void tg3_shutdown(struct pci_dev *pdev)
 	struct net_device *dev = pci_get_drvdata(pdev);
 	struct tg3 *tp = netdev_priv(dev);
 
-	tg3_reset_task_cancel(tp);
-
 	rtnl_lock();
-
 	netif_device_detach(dev);
 
 	if (netif_running(dev))
 		dev_close(dev);
 
-	tg3_power_down(tp);
+	if (system_state == SYSTEM_POWER_OFF)
+		tg3_power_down(tp);
 
 	rtnl_unlock();
-
-	pci_disable_device(pdev);
 }
 
 /**

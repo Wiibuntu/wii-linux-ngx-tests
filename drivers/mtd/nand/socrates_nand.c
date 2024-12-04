@@ -195,7 +195,7 @@ static int socrates_nand_probe(struct platform_device *ofdev)
 	if (!res)
 		return res;
 
-	nand_cleanup(nand_chip);
+	nand_release(mtd);
 
 out:
 	iounmap(host->io_base);

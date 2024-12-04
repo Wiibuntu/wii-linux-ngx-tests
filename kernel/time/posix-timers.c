@@ -167,30 +167,25 @@ static struct k_itimer *posix_timer_by_id(timer_t id)
 static int posix_timer_add(struct k_itimer *timer)
 {
 	struct signal_struct *sig = current->signal;
+	int first_free_id = sig->posix_timer_id;
 	struct hlist_head *head;
-	unsigned int cnt, id;
+	int ret = -ENOENT;
 
-	/*
-	 * FIXME: Replace this by a per signal struct xarray once there is
-	 * a plan to handle the resulting CRIU regression gracefully.
-	 */
-	for (cnt = 0; cnt <= INT_MAX; cnt++) {
+	do {
 		spin_lock(&hash_lock);
-		id = sig->next_posix_timer_id;
-
-		/* Write the next ID back. Clamp it to the positive space */
-		sig->next_posix_timer_id = (id + 1) & INT_MAX;
-
-		head = &posix_timers_hashtable[hash(sig, id)];
-		if (!__posix_timers_find(head, sig, id)) {
+		head = &posix_timers_hashtable[hash(sig, sig->posix_timer_id)];
+		if (!__posix_timers_find(head, sig, sig->posix_timer_id)) {
 			hlist_add_head_rcu(&timer->t_hash, head);
-			spin_unlock(&hash_lock);
-			return id;
+			ret = sig->posix_timer_id;
 		}
+		if (++sig->posix_timer_id < 0)
+			sig->posix_timer_id = 0;
+		if ((sig->posix_timer_id == first_free_id) && (ret == -ENOENT))
+			/* Loop over all possible ids completed */
+			ret = -EAGAIN;
 		spin_unlock(&hash_lock);
-	}
-	/* POSIX return code when no timer ID could be allocated */
-	return -EAGAIN;
+	} while (ret == -ENOENT);
+	return ret;
 }
 
 static inline void unlock_timer(struct k_itimer *timr, unsigned long flags)
@@ -328,7 +323,7 @@ void posixtimer_rearm(struct siginfo *info)
 		timr->it_overrun = -1;
 		++timr->it_requeue_pending;
 
-		info->si_overrun = timer_overrun_to_int(timr, info->si_overrun);
+		info->si_overrun += timr->it_overrun_last;
 	}
 
 	unlock_timer(timr, flags);
@@ -793,7 +788,7 @@ SYSCALL_DEFINE1(timer_getoverrun, timer_t, timer_id)
 	if (!timr)
 		return -EINVAL;
 
-	overrun = timer_overrun_to_int(timr, 0);
+	overrun = timr->it_overrun_last;
 	unlock_timer(timr, flags);
 
 	return overrun;

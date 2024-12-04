@@ -272,27 +272,6 @@ static int __elan_initialize(struct elan_tp_data *data)
 		woken_up = true;
 	}
 
-	error = elan_query_product(data);
-	if (error)
-		return error;
-
-	/*
-	 * Some ASUS devices were shipped with firmware that requires
-	 * touchpads to be woken up first, before attempting to switch
-	 * them into absolute reporting mode.
-	 */
-	if (elan_check_ASUS_special_fw(data)) {
-		error = data->ops->sleep_control(client, false);
-		if (error) {
-			dev_err(&client->dev,
-				"failed to wake device up: %d\n", error);
-			return error;
-		}
-
-		msleep(200);
-		woken_up = true;
-	}
-
 	data->mode |= ETP_ENABLE_ABS;
 	error = data->ops->set_mode(client, data->mode);
 	if (error) {
@@ -632,7 +611,7 @@ static ssize_t calibrate_store(struct device *dev,
 	int tries = 20;
 	int retval;
 	int error;
-	u8 val[ETP_CALIBRATE_MAX_LEN];
+	u8 val[3];
 
 	retval = mutex_lock_interruptible(&data->sysfs_mutex);
 	if (retval)
@@ -1125,13 +1104,6 @@ static int elan_probe(struct i2c_client *client,
 		return -ENXIO;
 	}
 
-	/* Make sure there is something at this address */
-	error = i2c_smbus_read_byte(client);
-	if (error < 0) {
-		dev_dbg(&client->dev, "nothing at this address: %d\n", error);
-		return -ENXIO;
-	}
-
 	/* Initialize the touchpad. */
 	error = elan_initialize(data);
 	if (error)
@@ -1238,19 +1210,9 @@ static int __maybe_unused elan_suspend(struct device *dev)
 		/* Enable wake from IRQ */
 		data->irq_wake = (enable_irq_wake(client->irq) == 0);
 	} else {
-		ret = elan_set_power(data, false);
-		if (ret)
-			goto err;
-
-		ret = regulator_disable(data->vcc);
-		if (ret) {
-			dev_err(dev, "error %d disabling regulator\n", ret);
-			/* Attempt to power the chip back up */
-			elan_set_power(data, true);
-		}
+		ret = elan_disable_power(data);
 	}
 
-err:
 	mutex_unlock(&data->sysfs_mutex);
 	return ret;
 }
@@ -1261,18 +1223,12 @@ static int __maybe_unused elan_resume(struct device *dev)
 	struct elan_tp_data *data = i2c_get_clientdata(client);
 	int error;
 
-	if (!device_may_wakeup(dev)) {
-		error = regulator_enable(data->vcc);
-		if (error) {
-			dev_err(dev, "error %d enabling regulator\n", error);
-			goto err;
-		}
-	} else if (data->irq_wake) {
+	if (device_may_wakeup(dev) && data->irq_wake) {
 		disable_irq_wake(client->irq);
 		data->irq_wake = false;
 	}
 
-	error = elan_set_power(data, true);
+	error = elan_enable_power(data);
 	if (error) {
 		dev_err(dev, "power up when resuming failed: %d\n", error);
 		goto err;

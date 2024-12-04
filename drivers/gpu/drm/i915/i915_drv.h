@@ -2246,8 +2246,6 @@ struct drm_i915_private {
 
 	struct intel_uncore uncore;
 
-	struct mutex tlb_invalidate_lock;
-
 	struct i915_virtual_gpu vgpu;
 
 	struct intel_gvt *gvt;
@@ -2360,9 +2358,6 @@ struct drm_i915_private {
 		/* The current hardware cdclk state */
 		struct intel_cdclk_state hw;
 	} cdclk;
-
-	unsigned long flags;
-#define I915_BO_WAS_BOUND_BIT    0
 
 	/**
 	 * wq - Driver workqueue for GEM.
@@ -4057,9 +4052,6 @@ bool intel_bios_is_port_hpd_inverted(struct drm_i915_private *dev_priv,
 bool intel_bios_is_lspcon_present(struct drm_i915_private *dev_priv,
 				enum port port);
 
-
-/* intel_bios.c */
-bool intel_bios_is_port_present(struct drm_i915_private *dev_priv, enum port port);
 
 /* intel_opregion.c */
 #ifdef CONFIG_ACPI

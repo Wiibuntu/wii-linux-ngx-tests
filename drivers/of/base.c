@@ -58,30 +58,6 @@ DEFINE_MUTEX(of_mutex);
  */
 DEFINE_RAW_SPINLOCK(devtree_lock);
 
-bool of_node_name_eq(const struct device_node *np, const char *name)
-{
-	const char *node_name;
-	size_t len;
-
-	if (!np)
-		return false;
-
-	node_name = kbasename(np->full_name);
-	len = strchrnul(node_name, '@') - node_name;
-
-	return (strlen(name) == len) && (strncmp(node_name, name, len) == 0);
-}
-EXPORT_SYMBOL(of_node_name_eq);
-
-bool of_node_name_prefix(const struct device_node *np, const char *prefix)
-{
-	if (!np)
-		return false;
-
-	return strncmp(kbasename(np->full_name), prefix, strlen(prefix)) == 0;
-}
-EXPORT_SYMBOL(of_node_name_prefix);
-
 int of_n_addr_cells(struct device_node *np)
 {
 	u32 cells;
@@ -515,28 +491,6 @@ bool of_device_is_available(const struct device_node *device)
 }
 EXPORT_SYMBOL(of_device_is_available);
 
-/** Checks if the device is compatible with any of the entries in
- *  a NULL terminated array of strings. Returns the best match
- *  score or 0.
- */
-int of_device_compatible_match(struct device_node *device,
-			       const char *const *compat)
-{
-	unsigned int tmp, score = 0;
-
-	if (!compat)
-		return 0;
-
-	while (*compat) {
-		tmp = of_device_is_compatible(device, *compat);
-		if (tmp > score)
-			score = tmp;
-		compat++;
-	}
-
-	return score;
-}
-
 /**
  *  of_device_is_big_endian - check if a device has BE registers
  *
@@ -680,31 +634,6 @@ struct device_node *of_get_next_available_child(const struct device_node *node,
 	return next;
 }
 EXPORT_SYMBOL(of_get_next_available_child);
-
-/**
- * of_get_compatible_child - Find compatible child node
- * @parent:	parent node
- * @compatible:	compatible string
- *
- * Lookup child node whose compatible property contains the given compatible
- * string.
- *
- * Returns a node pointer with refcount incremented, use of_node_put() on it
- * when done; or NULL if not found.
- */
-struct device_node *of_get_compatible_child(const struct device_node *parent,
-				const char *compatible)
-{
-	struct device_node *child;
-
-	for_each_child_of_node(parent, child) {
-		if (of_device_is_compatible(child, compatible))
-			break;
-	}
-
-	return child;
-}
-EXPORT_SYMBOL(of_get_compatible_child);
 
 /**
  *	of_get_child_by_name - Find the child node by name for a given parent
@@ -1750,7 +1679,7 @@ struct device_node *of_find_next_cache_node(const struct device_node *np)
 	/* OF on pmac has nodes instead of properties named "l2-cache"
 	 * beneath CPU nodes.
 	 */
-	if (IS_ENABLED(CONFIG_PPC_PMAC) && !strcmp(np->type, "cpu"))
+	if (!strcmp(np->type, "cpu"))
 		for_each_child_of_node(np, child)
 			if (!strcmp(child->type, "cache"))
 				return child;

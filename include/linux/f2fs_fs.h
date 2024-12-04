@@ -289,12 +289,6 @@ struct f2fs_node {
 } __packed;
 
 /*
- * F2FS uses 4 bytes to represent block address. As a result, supported size of
- * disk is 16 TB and it equals to 16 * 1024 * 1024 / 2 segments.
- */
-#define F2FS_MAX_SEGMENT       ((16 * 1024 * 1024) / 2)
-
-/*
  * For NAT entries
  */
 #define NAT_ENTRY_PER_BLOCK (PAGE_SIZE / sizeof(struct f2fs_nat_entry))
@@ -535,7 +529,5 @@ enum {
 #define S_SHIFT 12
 
 #define	F2FS_DEF_PROJID		0	/* default project ID */
-
-#define S_SHIFT 12
 
 #endif  /* _LINUX_F2FS_FS_H */

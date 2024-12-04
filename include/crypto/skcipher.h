@@ -62,8 +62,6 @@ struct crypto_skcipher {
 	unsigned int reqsize;
 	unsigned int keysize;
 
-	bool has_setkey;
-
 	struct crypto_tfm base;
 };
 
@@ -412,11 +410,6 @@ static inline unsigned int crypto_skcipher_default_keysize(
 	struct crypto_skcipher *tfm)
 {
 	return tfm->keysize;
-}
-
-static inline bool crypto_skcipher_has_setkey(struct crypto_skcipher *tfm)
-{
-	return tfm->has_setkey;
 }
 
 /**

@@ -357,8 +357,6 @@ static int vrf_finish_output6(struct net *net, struct sock *sk,
 
 	nf_reset(skb);
 
-	nf_reset(skb);
-
 	skb->protocol = htons(ETH_P_IPV6);
 	skb->dev = dev;
 
@@ -552,8 +550,6 @@ static int vrf_finish_output(struct net *net, struct sock *sk, struct sk_buff *s
 	struct neighbour *neigh;
 	u32 nexthop;
 	int ret = -EINVAL;
-
-	nf_reset(skb);
 
 	nf_reset(skb);
 

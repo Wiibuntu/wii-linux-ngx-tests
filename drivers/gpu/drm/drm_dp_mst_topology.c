@@ -29,7 +29,6 @@
 #include <linux/i2c.h>
 #include <drm/drm_dp_mst_helper.h>
 #include <drm/drmP.h>
-#include <linux/iopoll.h>
 
 #include <drm/drm_fixed.h>
 #include <drm/drm_atomic.h>
@@ -275,7 +274,7 @@ static void drm_dp_encode_sideband_req(struct drm_dp_sideband_msg_req_body *req,
 			memcpy(&buf[idx], req->u.i2c_read.transactions[i].bytes, req->u.i2c_read.transactions[i].num_bytes);
 			idx += req->u.i2c_read.transactions[i].num_bytes;
 
-			buf[idx] = (req->u.i2c_read.transactions[i].no_stop_bit & 0x1) << 4;
+			buf[idx] = (req->u.i2c_read.transactions[i].no_stop_bit & 0x1) << 5;
 			buf[idx] |= (req->u.i2c_read.transactions[i].i2c_transaction_delay & 0xf);
 			idx++;
 		}
@@ -338,13 +337,6 @@ static bool drm_dp_sideband_msg_build(struct drm_dp_sideband_msg_rx *msg,
 			print_hex_dump(KERN_DEBUG, "failed hdr", DUMP_PREFIX_NONE, 16, 1, replybuf, replybuflen, false);
 			return false;
 		}
-
-		/*
-		 * ignore out-of-order messages or messages that are part of a
-		 * failed transaction
-		 */
-		if (!recv_hdr.somt && !msg->have_somt)
-			return false;
 
 		/*
 		 * ignore out-of-order messages or messages that are part of a
@@ -447,7 +439,6 @@ static bool drm_dp_sideband_parse_remote_dpcd_read(struct drm_dp_sideband_msg_rx
 	if (idx > raw->curlen)
 		goto fail_len;
 	repmsg->u.remote_dpcd_read_ack.num_bytes = raw->msg[idx];
-	idx++;
 	if (idx > raw->curlen)
 		goto fail_len;
 
@@ -873,32 +864,11 @@ static void drm_dp_free_mst_branch_device(struct kref *kref)
 	kfree(mstb);
 }
 
-static void drm_dp_free_mst_port(struct kref *kref);
-
-static void drm_dp_free_mst_branch_device(struct kref *kref)
-{
-	struct drm_dp_mst_branch *mstb = container_of(kref, struct drm_dp_mst_branch, kref);
-	if (mstb->port_parent) {
-		if (list_empty(&mstb->port_parent->next))
-			kref_put(&mstb->port_parent->kref, drm_dp_free_mst_port);
-	}
-	kfree(mstb);
-}
-
 static void drm_dp_destroy_mst_branch_device(struct kref *kref)
 {
 	struct drm_dp_mst_branch *mstb = container_of(kref, struct drm_dp_mst_branch, kref);
 	struct drm_dp_mst_port *port, *tmp;
 	bool wake_tx = false;
-
-	/*
-	 * init kref again to be used by ports to remove mst branch when it is
-	 * not needed anymore
-	 */
-	kref_init(kref);
-
-	if (mstb->port_parent && list_empty(&mstb->port_parent->next))
-		kref_get(&mstb->port_parent->kref);
 
 	/*
 	 * init kref again to be used by ports to remove mst branch when it is
@@ -1366,48 +1336,6 @@ static struct drm_dp_mst_branch *drm_dp_get_mst_branch_device_by_guid(
 	return mstb;
 }
 
-static struct drm_dp_mst_branch *get_mst_branch_device_by_guid_helper(
-	struct drm_dp_mst_branch *mstb,
-	uint8_t *guid)
-{
-	struct drm_dp_mst_branch *found_mstb;
-	struct drm_dp_mst_port *port;
-
-	if (memcmp(mstb->guid, guid, 16) == 0)
-		return mstb;
-
-
-	list_for_each_entry(port, &mstb->ports, next) {
-		if (!port->mstb)
-			continue;
-
-		found_mstb = get_mst_branch_device_by_guid_helper(port->mstb, guid);
-
-		if (found_mstb)
-			return found_mstb;
-	}
-
-	return NULL;
-}
-
-static struct drm_dp_mst_branch *drm_dp_get_mst_branch_device_by_guid(
-	struct drm_dp_mst_topology_mgr *mgr,
-	uint8_t *guid)
-{
-	struct drm_dp_mst_branch *mstb;
-
-	/* find the port by iterating down */
-	mutex_lock(&mgr->lock);
-
-	mstb = get_mst_branch_device_by_guid_helper(mgr->mst_primary, guid);
-
-	if (mstb)
-		kref_get(&mstb->kref);
-
-	mutex_unlock(&mgr->lock);
-	return mstb;
-}
-
 static void drm_dp_check_and_send_link_address(struct drm_dp_mst_topology_mgr *mgr,
 					       struct drm_dp_mst_branch *mstb)
 {
@@ -1780,37 +1708,6 @@ static struct drm_dp_mst_branch *drm_dp_get_last_connected_port_and_mstb(struct 
 	return rmstb;
 }
 
-static struct drm_dp_mst_port *drm_dp_get_last_connected_port_to_mstb(struct drm_dp_mst_branch *mstb)
-{
-	if (!mstb->port_parent)
-		return NULL;
-
-	if (mstb->port_parent->mstb != mstb)
-		return mstb->port_parent;
-
-	return drm_dp_get_last_connected_port_to_mstb(mstb->port_parent->parent);
-}
-
-static struct drm_dp_mst_branch *drm_dp_get_last_connected_port_and_mstb(struct drm_dp_mst_topology_mgr *mgr,
-									 struct drm_dp_mst_branch *mstb,
-									 int *port_num)
-{
-	struct drm_dp_mst_branch *rmstb = NULL;
-	struct drm_dp_mst_port *found_port;
-	mutex_lock(&mgr->lock);
-	if (mgr->mst_primary) {
-		found_port = drm_dp_get_last_connected_port_to_mstb(mstb);
-
-		if (found_port) {
-			rmstb = found_port->parent;
-			kref_get(&rmstb->kref);
-			*port_num = found_port->port_num;
-		}
-	}
-	mutex_unlock(&mgr->lock);
-	return rmstb;
-}
-
 static int drm_dp_payload_send_msg(struct drm_dp_mst_topology_mgr *mgr,
 				   struct drm_dp_mst_port *port,
 				   int id,
@@ -2134,7 +2031,6 @@ static int drm_dp_send_dpcd_write(struct drm_dp_mst_topology_mgr *mgr,
 	kfree(txmsg);
 fail_put:
 	drm_dp_put_mst_branch_device(mstb);
-	drm_dp_put_port(port);
 	return ret;
 }
 
@@ -2208,7 +2104,6 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 	int ret = 0;
 	struct drm_dp_mst_branch *mstb = NULL;
 
-	mutex_lock(&mgr->payload_lock);
 	mutex_lock(&mgr->lock);
 	if (mst_state == mgr->mst_state)
 		goto out_unlock;
@@ -2267,10 +2162,7 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 		/* this can fail if the device is gone */
 		drm_dp_dpcd_writeb(mgr->aux, DP_MSTM_CTRL, 0);
 		ret = 0;
-		memset(mgr->payloads, 0,
-		       mgr->max_payloads * sizeof(mgr->payloads[0]));
-		memset(mgr->proposed_vcpis, 0,
-		       mgr->max_payloads * sizeof(mgr->proposed_vcpis[0]));
+		memset(mgr->payloads, 0, mgr->max_payloads * sizeof(struct drm_dp_payload));
 		mgr->payload_mask = 0;
 		set_bit(0, &mgr->payload_mask);
 		mgr->vcpi_mask = 0;
@@ -2278,7 +2170,6 @@ int drm_dp_mst_topology_mgr_set_mst(struct drm_dp_mst_topology_mgr *mgr, bool ms
 
 out_unlock:
 	mutex_unlock(&mgr->lock);
-	mutex_unlock(&mgr->payload_lock);
 	if (mstb)
 		drm_dp_put_mst_branch_device(mstb);
 	return ret;
@@ -2919,17 +2810,6 @@ fail:
 	return ret;
 }
 
-static int do_get_act_status(struct drm_dp_aux *aux)
-{
-	int ret;
-	u8 status;
-
-	ret = drm_dp_dpcd_readb(aux, DP_PAYLOAD_TABLE_UPDATE_STATUS, &status);
-	if (ret < 0)
-		return ret;
-
-	return status;
-}
 
 /**
  * drm_dp_check_act_status() - Check ACT handled status.
@@ -2939,29 +2819,33 @@ static int do_get_act_status(struct drm_dp_aux *aux)
  */
 int drm_dp_check_act_status(struct drm_dp_mst_topology_mgr *mgr)
 {
-	/*
-	 * There doesn't seem to be any recommended retry count or timeout in
-	 * the MST specification. Since some hubs have been observed to take
-	 * over 1 second to update their payload allocations under certain
-	 * conditions, we use a rather large timeout value.
-	 */
-	const int timeout_ms = 3000;
-	int ret, status;
+	u8 status;
+	int ret;
+	int count = 0;
 
-	ret = readx_poll_timeout(do_get_act_status, mgr->aux, status,
-				 status & DP_PAYLOAD_ACT_HANDLED || status < 0,
-				 200, timeout_ms * USEC_PER_MSEC);
-	if (ret < 0 && status >= 0) {
-		DRM_DEBUG_KMS("Failed to get ACT after %dms, last status: %02x\n",
-			      timeout_ms, status);
-		return -EINVAL;
-	} else if (status < 0) {
-		DRM_DEBUG_KMS("Failed to read payload table status: %d\n",
-			      status);
-		return status;
+	do {
+		ret = drm_dp_dpcd_readb(mgr->aux, DP_PAYLOAD_TABLE_UPDATE_STATUS, &status);
+
+		if (ret < 0) {
+			DRM_DEBUG_KMS("failed to read payload table status %d\n", ret);
+			goto fail;
+		}
+
+		if (status & DP_PAYLOAD_ACT_HANDLED)
+			break;
+		count++;
+		udelay(100);
+
+	} while (count < 30);
+
+	if (!(status & DP_PAYLOAD_ACT_HANDLED)) {
+		DRM_DEBUG_KMS("failed to get ACT bit %d after %d retries\n", status, count);
+		ret = -EINVAL;
+		goto fail;
 	}
-
 	return 0;
+fail:
+	return ret;
 }
 EXPORT_SYMBOL(drm_dp_check_act_status);
 
@@ -3161,13 +3045,6 @@ static void drm_dp_tx_work(struct work_struct *work)
 	if (!list_empty(&mgr->tx_msg_downq))
 		process_single_down_tx_qlock(mgr);
 	mutex_unlock(&mgr->qlock);
-}
-
-static void drm_dp_free_mst_port(struct kref *kref)
-{
-	struct drm_dp_mst_port *port = container_of(kref, struct drm_dp_mst_port, kref);
-	kref_put(&port->parent->kref, drm_dp_free_mst_branch_device);
-	kfree(port);
 }
 
 static void drm_dp_free_mst_port(struct kref *kref)
@@ -3392,7 +3269,6 @@ static int drm_dp_mst_i2c_xfer(struct i2c_adapter *adapter, struct i2c_msg *msgs
 		msg.u.i2c_read.transactions[i].i2c_dev_id = msgs[i].addr;
 		msg.u.i2c_read.transactions[i].num_bytes = msgs[i].len;
 		msg.u.i2c_read.transactions[i].bytes = msgs[i].buf;
-		msg.u.i2c_read.transactions[i].no_stop_bit = !(msgs[i].flags & I2C_M_STOP);
 	}
 	msg.u.i2c_read.read_i2c_device_id = msgs[num - 1].addr;
 	msg.u.i2c_read.num_bytes_read = msgs[num - 1].len;

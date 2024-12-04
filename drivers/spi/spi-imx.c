@@ -253,18 +253,6 @@ static bool spi_imx_can_dma(struct spi_master *master, struct spi_device *spi,
 	return true;
 }
 
-/*
- * Note the number of natively supported chip selects for MX51 is 4. Some
- * devices may have less actual SS pins but the register map supports 4. When
- * using gpio chip selects the cs values passed into the macros below can go
- * outside the range 0 - 3. We therefore need to limit the cs value to avoid
- * corrupting bits outside the allocated locations.
- *
- * The simplest way to do this is to just mask the cs bits to 2 bits. This
- * still allows all 4 native chip selects to work as well as gpio chip selects
- * (which can use any of the 4 chip select configurations).
- */
-
 #define MX51_ECSPI_CTRL		0x08
 #define MX51_ECSPI_CTRL_ENABLE		(1 <<  0)
 #define MX51_ECSPI_CTRL_XCH		(1 <<  2)
@@ -1680,23 +1668,12 @@ static int spi_imx_remove(struct platform_device *pdev)
 {
 	struct spi_master *master = platform_get_drvdata(pdev);
 	struct spi_imx_data *spi_imx = spi_master_get_devdata(master);
-	int ret;
 
 	spi_bitbang_stop(&spi_imx->bitbang);
 
-	ret = clk_enable(spi_imx->clk_per);
-	if (ret)
-		return ret;
-
-	ret = clk_enable(spi_imx->clk_ipg);
-	if (ret) {
-		clk_disable(spi_imx->clk_per);
-		return ret;
-	}
-
 	writel(0, spi_imx->base + MXC_CSPICTRL);
-	clk_disable_unprepare(spi_imx->clk_ipg);
-	clk_disable_unprepare(spi_imx->clk_per);
+	clk_unprepare(spi_imx->clk_ipg);
+	clk_unprepare(spi_imx->clk_per);
 	spi_imx_sdma_exit(spi_imx);
 	spi_master_put(master);
 

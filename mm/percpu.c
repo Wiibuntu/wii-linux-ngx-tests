@@ -80,7 +80,6 @@
 #include <linux/vmalloc.h>
 #include <linux/workqueue.h>
 #include <linux/kmemleak.h>
-#include <linux/sched.h>
 
 #include <asm/cacheflush.h>
 #include <asm/sections.h>
@@ -1373,9 +1372,6 @@ static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
 	if (!is_atomic)
 		mutex_lock(&pcpu_alloc_mutex);
 
-	if (!is_atomic)
-		mutex_lock(&pcpu_alloc_mutex);
-
 	spin_lock_irqsave(&pcpu_lock, flags);
 
 	/* serve reserved allocations from the reserved chunk if available */
@@ -1588,7 +1584,6 @@ static void pcpu_balance_workfn(struct work_struct *work)
 		if (chunk == list_first_entry(free_head, struct pcpu_chunk, list))
 			continue;
 
-		list_del_init(&chunk->map_extend_list);
 		list_move(&chunk->list, &to_free);
 	}
 
@@ -1606,25 +1601,6 @@ static void pcpu_balance_workfn(struct work_struct *work)
 		}
 		pcpu_destroy_chunk(chunk);
 	}
-
-	/* service chunks which requested async area map extension */
-	do {
-		int new_alloc = 0;
-
-		spin_lock_irq(&pcpu_lock);
-
-		chunk = list_first_entry_or_null(&pcpu_map_extend_chunks,
-					struct pcpu_chunk, map_extend_list);
-		if (chunk) {
-			list_del_init(&chunk->map_extend_list);
-			new_alloc = pcpu_need_to_extend(chunk, false);
-		}
-
-		spin_unlock_irq(&pcpu_lock);
-
-		if (new_alloc)
-			pcpu_extend_area_map(chunk, new_alloc);
-	} while (chunk);
 
 	/*
 	 * Ensure there are certain number of free populated pages for

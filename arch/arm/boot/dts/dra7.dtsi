@@ -381,16 +381,6 @@
 			ranges = <0x0 0x40300000 0x80000>;
 			#address-cells = <1>;
 			#size-cells = <1>;
-
-			/*
-			 * Do not allow gating of cpsw clock as workaround
-			 * for errata i877. Keeping internal clock disabled
-			 * causes the device switching characteristics
-			 * to degrade over time and eventually fail to meet
-			 * the data manual delay time/skew specs.
-			 */
-			ti,no-idle;
-
 			/*
 			 * This is a placeholder for an optional reserved
 			 * region for use by secure software. The size
@@ -1862,7 +1852,7 @@
 			};
 		};
 
-		dcan1: can@4ae3c000 {
+		dcan1: can@481cc000 {
 			compatible = "ti,dra7-d_can";
 			ti,hwmods = "dcan1";
 			reg = <0x4ae3c000 0x2000>;
@@ -1872,7 +1862,7 @@
 			status = "disabled";
 		};
 
-		dcan2: can@48480000 {
+		dcan2: can@481d0000 {
 			compatible = "ti,dra7-d_can";
 			ti,hwmods = "dcan2";
 			reg = <0x48480000 0x2000>;

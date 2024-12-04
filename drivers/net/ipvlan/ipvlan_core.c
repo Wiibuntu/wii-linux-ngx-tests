@@ -542,7 +542,6 @@ static int ipvlan_xmit_mode_l3(struct sk_buff *skb, struct net_device *dev)
 			}
 			return ipvlan_rcv_frame(addr, &skb, true);
 		}
-		cond_resched();
 	}
 out:
 	ipvlan_skb_crossing_ns(skb, ipvlan->phy_dev);
@@ -552,7 +551,7 @@ out:
 static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 {
 	const struct ipvl_dev *ipvlan = netdev_priv(dev);
-	struct ethhdr *eth = skb_eth_hdr(skb);
+	struct ethhdr *eth = eth_hdr(skb);
 	struct ipvl_addr *addr;
 	void *lyr3h;
 	int addr_type;

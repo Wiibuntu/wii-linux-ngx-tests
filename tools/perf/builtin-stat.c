@@ -2836,7 +2836,7 @@ int cmd_stat(int argc, const char **argv)
 				run_idx + 1);
 
 		status = run_perf_stat(argc, argv);
-		if (forever && status != -1 && !interval) {
+		if (forever && status != -1) {
 			print_counters(NULL, argc, argv);
 			perf_stat__reset_stats();
 		}

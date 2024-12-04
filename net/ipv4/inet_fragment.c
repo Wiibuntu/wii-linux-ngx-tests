@@ -25,6 +25,12 @@
 #include <net/inet_frag.h>
 #include <net/inet_ecn.h>
 
+#define INETFRAGS_EVICT_BUCKETS   128
+#define INETFRAGS_EVICT_MAX	  512
+
+/* don't rebuild inetfrag table with new secret more often than this */
+#define INETFRAGS_MIN_REBUILD_INTERVAL (5 * HZ)
+
 /* Given the OR values of all fragments, apply RFC 3168 5.3 requirements
  * Value : 0xff if frame should be dropped.
  *         0 or INET_ECN_CE value, to be ORed in to final iph->tos field
@@ -277,23 +283,11 @@ void inet_frag_kill(struct inet_frag_queue *fq, struct inet_frags *f)
 }
 EXPORT_SYMBOL(inet_frag_kill);
 
-static void inet_frag_destroy_rcu(struct rcu_head *head)
-{
-	struct inet_frag_queue *q = container_of(head, struct inet_frag_queue,
-						 rcu);
-	struct inet_frags *f = q->net->f;
-
-	if (f->destructor)
-		f->destructor(q);
-	kmem_cache_free(f->frags_cachep, q);
-}
-
-void inet_frag_destroy(struct inet_frag_queue *q)
+void inet_frag_destroy(struct inet_frag_queue *q, struct inet_frags *f)
 {
 	struct sk_buff *fp;
 	struct netns_frags *nf;
 	unsigned int sum, sum_truesize = 0;
-	struct inet_frags *f;
 
 	WARN_ON(!(q->flags & INET_FRAG_COMPLETE));
 	WARN_ON(del_timer(&q->timer) != 0);

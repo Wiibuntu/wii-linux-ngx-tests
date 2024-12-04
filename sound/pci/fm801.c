@@ -1068,19 +1068,11 @@ static int snd_fm801_mixer(struct fm801 *chip)
 		if ((err = snd_ac97_mixer(chip->ac97_bus, &ac97, &chip->ac97_sec)) < 0)
 			return err;
 	}
-	for (i = 0; i < FM801_CONTROLS; i++) {
-		err = snd_ctl_add(chip->card,
-			snd_ctl_new1(&snd_fm801_controls[i], chip));
-		if (err < 0)
-			return err;
-	}
+	for (i = 0; i < FM801_CONTROLS; i++)
+		snd_ctl_add(chip->card, snd_ctl_new1(&snd_fm801_controls[i], chip));
 	if (chip->multichannel) {
-		for (i = 0; i < FM801_CONTROLS_MULTI; i++) {
-			err = snd_ctl_add(chip->card,
-				snd_ctl_new1(&snd_fm801_controls_multi[i], chip));
-			if (err < 0)
-				return err;
-		}
+		for (i = 0; i < FM801_CONTROLS_MULTI; i++)
+			snd_ctl_add(chip->card, snd_ctl_new1(&snd_fm801_controls_multi[i], chip));
 	}
 	return 0;
 }
@@ -1187,8 +1179,6 @@ static int snd_fm801_free(struct fm801 *chip)
 
 	devm_free_irq(chip->dev, chip->irq, chip);
 
-	devm_free_irq(&chip->pci->dev, chip->irq, chip);
-
       __end_hw:
 #ifdef CONFIG_SND_FM801_TEA575X_BOOL
 	if (!(chip->tea575x_tuner & TUNER_DISABLED)) {
@@ -1243,8 +1233,6 @@ static int snd_fm801_create(struct snd_card *card,
 		} else {
 			snd_fm801_chip_multichannel_init(chip);
 		}
-
-		chip->tea575x_tuner |= tuner_only;
 	}
 
 	if ((chip->tea575x_tuner & TUNER_ONLY) == 0) {

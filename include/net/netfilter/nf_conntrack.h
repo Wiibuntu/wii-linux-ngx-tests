@@ -80,7 +80,7 @@ struct nf_conn {
 	struct hlist_node	nat_bysource;
 #endif
 	/* all members below initialized via memset */
-	struct { } __nfct_init_offset;
+	u8 __nfct_init_offset[0];
 
 	/* If we were expected by an expectation, this will be it */
 	struct nf_conn *master;
@@ -320,8 +320,6 @@ nf_ct_set(struct sk_buff *skb, struct nf_conn *ct, enum ip_conntrack_info info)
 {
 	skb->_nfct = (unsigned long)ct | info;
 }
-
-u32 nf_ct_get_id(const struct nf_conn *ct);
 
 #define NF_CT_STAT_INC(net, count)	  __this_cpu_inc((net)->ct.stat->count)
 #define NF_CT_STAT_INC_ATOMIC(net, count) this_cpu_inc((net)->ct.stat->count)

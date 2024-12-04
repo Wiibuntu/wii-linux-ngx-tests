@@ -69,7 +69,9 @@
 static inline int
 pl_vendor_req(struct usbnet *dev, u8 req, u8 val, u8 index)
 {
-	return usbnet_write_cmd(dev, req, USB_TYPE_VENDOR | USB_RECIP_DEVICE,
+	return usbnet_read_cmd(dev, req,
+				USB_DIR_IN | USB_TYPE_VENDOR |
+				USB_RECIP_DEVICE,
 				val, index, NULL, 0);
 }
 
@@ -135,17 +137,6 @@ static const struct usb_device_id	products [] = {
 }, {
 	USB_DEVICE(0x3923, 0x7825),     /* National Instruments USB
 					 * Host-to-Host Cable
-					 */
-	.driver_info =  (unsigned long) &prolific_info,
-
-},
-
-/* super speed cables */
-{
-	USB_DEVICE(0x067b, 0x27a1),     /* PL-27A1, no eeprom
-					 * also: goobay Active USB 3.0
-					 * Data Link,
-					 * Unitek Y-3501
 					 */
 	.driver_info =  (unsigned long) &prolific_info,
 

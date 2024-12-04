@@ -643,7 +643,7 @@ static int rds_tcp_init(void)
 
 	ret = rds_tcp_recv_init();
 	if (ret)
-		goto out_pernet;
+		goto out_slab;
 
 	ret = register_pernet_subsys(&rds_tcp_net_ops);
 	if (ret)

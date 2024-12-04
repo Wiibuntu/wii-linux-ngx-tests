@@ -381,51 +381,6 @@ static int usb_parse_endpoint(struct device *ddev, int cfgno, int inum,
 	}
 
 	/*
-	 * Validate the wMaxPacketSize field.
-	 * Some devices have isochronous endpoints in altsetting 0;
-	 * the USB-2 spec requires such endpoints to have wMaxPacketSize = 0
-	 * (see the end of section 5.6.3), so don't warn about them.
-	 */
-	maxp = le16_to_cpu(endpoint->desc.wMaxPacketSize);
-	if (maxp == 0 && !(usb_endpoint_xfer_isoc(d) && asnum == 0)) {
-		dev_warn(ddev, "config %d interface %d altsetting %d endpoint 0x%X has invalid wMaxPacketSize 0\n",
-		    cfgno, inum, asnum, d->bEndpointAddress);
-	}
-
-	/* Find the highest legal maxpacket size for this endpoint */
-	i = 0;		/* additional transactions per microframe */
-	switch (to_usb_device(ddev)->speed) {
-	case USB_SPEED_LOW:
-		maxpacket_maxes = low_speed_maxpacket_maxes;
-		break;
-	case USB_SPEED_FULL:
-		maxpacket_maxes = full_speed_maxpacket_maxes;
-		break;
-	case USB_SPEED_HIGH:
-		/* Bits 12..11 are allowed only for HS periodic endpoints */
-		if (usb_endpoint_xfer_int(d) || usb_endpoint_xfer_isoc(d)) {
-			i = maxp & (BIT(12) | BIT(11));
-			maxp &= ~i;
-		}
-		/* fallthrough */
-	default:
-		maxpacket_maxes = high_speed_maxpacket_maxes;
-		break;
-	case USB_SPEED_SUPER:
-	case USB_SPEED_SUPER_PLUS:
-		maxpacket_maxes = super_speed_maxpacket_maxes;
-		break;
-	}
-	j = maxpacket_maxes[usb_endpoint_type(&endpoint->desc)];
-
-	if (maxp > j) {
-		dev_warn(ddev, "config %d interface %d altsetting %d endpoint 0x%X has invalid maxpacket %d, setting to %d\n",
-		    cfgno, inum, asnum, d->bEndpointAddress, maxp, j);
-		maxp = j;
-		endpoint->desc.wMaxPacketSize = cpu_to_le16(i | maxp);
-	}
-
-	/*
 	 * Some buggy high speed devices have bulk endpoints using
 	 * maxpacket sizes other than 512.  High speed HCDs may not
 	 * be able to handle that particular bug, so let's warn...
@@ -560,8 +515,8 @@ static int usb_parse_interface(struct device *ddev, int cfgno,
 		if (((struct usb_descriptor_header *) buffer)->bDescriptorType
 		     == USB_DT_INTERFACE)
 			break;
-		retval = usb_parse_endpoint(ddev, cfgno, config, inum, asnum,
-				alt, num_ep, buffer, size);
+		retval = usb_parse_endpoint(ddev, cfgno, inum, asnum, alt,
+		    num_ep, buffer, size);
 		if (retval < 0)
 			return retval;
 		++n;
@@ -979,8 +934,8 @@ int usb_get_bos_descriptor(struct usb_device *dev)
 
 	/* Get BOS descriptor */
 	ret = usb_get_descriptor(dev, USB_DT_BOS, 0, bos, USB_DT_BOS_SIZE);
-	if (ret < USB_DT_BOS_SIZE || bos->bLength < USB_DT_BOS_SIZE) {
-		dev_err(ddev, "unable to get BOS descriptor or descriptor too short\n");
+	if (ret < USB_DT_BOS_SIZE) {
+		dev_err(ddev, "unable to get BOS descriptor\n");
 		if (ret >= 0)
 			ret = -ENOMSG;
 		kfree(bos);

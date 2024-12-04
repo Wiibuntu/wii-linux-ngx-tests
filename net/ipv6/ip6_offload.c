@@ -96,8 +96,6 @@ static struct sk_buff *ipv6_gso_segment(struct sk_buff *skb,
 	if (likely(ops && ops->callbacks.gso_segment)) {
 		skb_reset_transport_header(skb);
 		segs = ops->callbacks.gso_segment(skb, features);
-		if (!segs)
-			skb->network_header = skb_mac_header(skb) + nhoff - skb->head;
 	}
 
 	if (IS_ERR_OR_NULL(segs))
@@ -291,19 +289,6 @@ static struct sk_buff **ip4ip6_gro_receive(struct sk_buff **head,
 	NAPI_GRO_CB(skb)->encap_mark = 1;
 
 	return inet_gro_receive(head, skb);
-}
-
-static struct sk_buff **sit_gro_receive(struct sk_buff **head,
-					struct sk_buff *skb)
-{
-	if (NAPI_GRO_CB(skb)->encap_mark) {
-		NAPI_GRO_CB(skb)->flush = 1;
-		return NULL;
-	}
-
-	NAPI_GRO_CB(skb)->encap_mark = 1;
-
-	return ipv6_gro_receive(head, skb);
 }
 
 static int ipv6_gro_complete(struct sk_buff *skb, int nhoff)

@@ -826,7 +826,7 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 		DMA_BIDIRECTIONAL : DMA_TO_DEVICE;
 
 	/* double check that we don't free the table twice */
-	if (!ttm->sg || !ttm->sg->sgl)
+	if (!ttm->sg->sgl)
 		return;
 
 	/* free the sg table and pages again */
@@ -1057,7 +1057,6 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
 	if (gtt && gtt->userptr) {
 		amdgpu_ttm_tt_set_user_pages(ttm, NULL);
 		kfree(ttm->sg);
-		ttm->sg = NULL;
 		ttm->page_flags &= ~TTM_PAGE_FLAG_SG;
 		return;
 	}
@@ -1152,25 +1151,6 @@ bool amdgpu_ttm_tt_userptr_needs_pages(struct ttm_tt *ttm)
 		return false;
 
 	return atomic_read(&gtt->mmu_invalidations) != gtt->last_set_pages;
-}
-
-bool amdgpu_ttm_tt_affect_userptr(struct ttm_tt *ttm, unsigned long start,
-				  unsigned long end)
-{
-	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned long size;
-
-	if (gtt == NULL)
-		return false;
-
-	if (gtt->ttm.ttm.state != tt_bound || !gtt->userptr)
-		return false;
-
-	size = (unsigned long)gtt->ttm.ttm.num_pages * PAGE_SIZE;
-	if (gtt->userptr > end || gtt->userptr + size <= start)
-		return false;
-
-	return true;
 }
 
 bool amdgpu_ttm_tt_is_readonly(struct ttm_tt *ttm)
@@ -1759,9 +1739,6 @@ static ssize_t amdgpu_ttm_vram_read(struct file *f, char __user *buf,
 
 	if (size & 0x3 || *pos & 0x3)
 		return -EINVAL;
-
-	if (*pos >= adev->mc.mc_vram_size)
-		return -ENXIO;
 
 	if (*pos >= adev->mc.mc_vram_size)
 		return -ENXIO;

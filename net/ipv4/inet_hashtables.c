@@ -160,7 +160,6 @@ int __inet_inherit_port(const struct sock *sk, struct sock *child)
 				return -ENOMEM;
 			}
 		}
-		inet_csk_update_fastreuse(tb, child);
 	}
 	inet_bind_hash(child, tb, port);
 	spin_unlock(&head->lock);
@@ -385,7 +384,7 @@ not_unique:
 	return -EADDRNOTAVAIL;
 }
 
-static u64 inet_sk_port_offset(const struct sock *sk)
+static u32 inet_sk_port_offset(const struct sock *sk)
 {
 	const struct inet_sock *inet = inet_sk(sk);
 
@@ -536,21 +535,8 @@ void inet_unhash(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet_unhash);
 
-/* RFC 6056 3.3.4.  Algorithm 4: Double-Hash Port Selection Algorithm
- * Note that we use 32bit integers (vs RFC 'short integers')
- * because 2^16 is not a multiple of num_ephemeral and this
- * property might be used by clever attacker.
- *
- * RFC claims using TABLE_LENGTH=10 buckets gives an improvement, though
- * attacks were since demonstrated, thus we use 65536 by default instead
- * to really give more isolation and privacy, at the expense of 256kB
- * of kernel memory.
- */
-#define INET_TABLE_PERTURB_SIZE (1 << CONFIG_INET_TABLE_PERTURB_ORDER)
-static u32 *table_perturb;
-
 int __inet_hash_connect(struct inet_timewait_death_row *death_row,
-		struct sock *sk, u64 port_offset,
+		struct sock *sk, u32 port_offset,
 		int (*check_established)(struct inet_timewait_death_row *,
 			struct sock *, __u16, struct inet_timewait_sock **))
 {
@@ -663,7 +649,7 @@ ok:
 int inet_hash_connect(struct inet_timewait_death_row *death_row,
 		      struct sock *sk)
 {
-	u64 port_offset = 0;
+	u32 port_offset = 0;
 
 	if (!inet_sk(sk)->inet_num)
 		port_offset = inet_sk_port_offset(sk);

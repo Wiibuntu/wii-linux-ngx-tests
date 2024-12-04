@@ -287,7 +287,6 @@ badframe:
 static int
 setup_sigframe(struct sigframe __user *sf, struct pt_regs *regs, sigset_t *set)
 {
-	struct sigcontext context;
 	struct aux_sigframe __user *aux;
 	int err = 0;
 
@@ -329,7 +328,7 @@ setup_sigframe(struct sigframe __user *sf, struct pt_regs *regs, sigset_t *set)
 	if (err == 0)
 		err |= preserve_vfp_context(&aux->vfp);
 #endif
-	err |= __put_user(0, &aux->end_magic);
+	__put_user_error(0, &aux->end_magic, err);
 
 	return err;
 }
@@ -492,7 +491,7 @@ setup_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 	/*
 	 * Set uc.uc_flags to a value which sc.trap_no would never have.
 	 */
-	err = __put_user(0x5ac3c35a, &frame->uc.uc_flags);
+	__put_user_error(0x5ac3c35a, &frame->uc.uc_flags, err);
 
 	err |= setup_sigframe(frame, regs, set);
 	if (err == 0)
@@ -512,8 +511,8 @@ setup_rt_frame(struct ksignal *ksig, sigset_t *set, struct pt_regs *regs)
 
 	err |= copy_siginfo_to_user(&frame->info, &ksig->info);
 
-	err |= __put_user(0, &frame->sig.uc.uc_flags);
-	err |= __put_user(NULL, &frame->sig.uc.uc_link);
+	__put_user_error(0, &frame->sig.uc.uc_flags, err);
+	__put_user_error(NULL, &frame->sig.uc.uc_link, err);
 
 	err |= __save_altstack(&frame->sig.uc.uc_stack, regs->ARM_sp);
 	err |= setup_sigframe(&frame->sig, regs, set);
@@ -683,20 +682,18 @@ struct page *get_signal_page(void)
 
 	addr = page_address(page);
 
-	/* Poison the entire page */
-	memset32(addr, __opcode_to_mem_arm(0xe7fddef1),
-		 PAGE_SIZE / sizeof(u32));
-
 	/* Give the signal return code some randomness */
 	offset = 0x200 + (get_random_int() & 0x7fc);
 	signal_return_offset = offset;
 
-	/* Copy signal return handlers into the page */
+	/*
+	 * Copy signal return handlers into the vector page, and
+	 * set sigreturn to be a pointer to these.
+	 */
 	memcpy(addr + offset, sigreturn_codes, sizeof(sigreturn_codes));
 
-	/* Flush out all instructions in this page */
-	ptr = (unsigned long)addr;
-	flush_icache_range(ptr, ptr + PAGE_SIZE);
+	ptr = (unsigned long)addr + offset;
+	flush_icache_range(ptr, ptr + sizeof(sigreturn_codes));
 
 	return page;
 }

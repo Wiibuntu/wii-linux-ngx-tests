@@ -161,12 +161,6 @@ struct dvb_ca_private {
 
 	/* mutex serializing ioctls */
 	struct mutex ioctl_mutex;
-
-	/* A mutex used when a device is disconnected */
-	struct mutex remove_mutex;
-
-	/* Whether the device is disconnected */
-	int exit;
 };
 
 static void dvb_ca_private_free(struct dvb_ca_private *ca)
@@ -843,29 +837,6 @@ static int dvb_ca_en50221_write_data(struct dvb_ca_private *ca, int slot,
 		goto exit;
 	if (!(status & STATUSREG_FR)) {
 		/* it wasn't free => try again later */
-		status = -EAGAIN;
-		goto exit;
-	}
-
-	/*
-	 * It may need some time for the CAM to settle down, or there might
-	 * be a race condition between the CAM, writing HC and our last
-	 * check for DA. This happens, if the CAM asserts DA, just after
-	 * checking DA before we are setting HC. In this case it might be
-	 * a bug in the CAM to keep the FR bit, the lower layer/HW
-	 * communication requires a longer timeout or the CAM needs more
-	 * time internally. But this happens in reality!
-	 * We need to read the status from the HW again and do the same
-	 * we did for the previous check for DA
-	 */
-	status = ca->pub->read_cam_control(ca->pub, slot, CTRLIF_STATUS);
-	if (status < 0)
-		goto exit;
-
-	if (status & (STATUSREG_DA | STATUSREG_RE)) {
-		if (status & STATUSREG_DA)
-			dvb_ca_en50221_thread_wakeup(ca);
-
 		status = -EAGAIN;
 		goto exit;
 	}
@@ -1741,22 +1712,12 @@ static int dvb_ca_en50221_io_open(struct inode *inode, struct file *file)
 
 	dprintk("%s\n", __func__);
 
-	mutex_lock(&ca->remove_mutex);
-
-	if (ca->exit) {
-		mutex_unlock(&ca->remove_mutex);
-		return -ENODEV;
-	}
-
-	if (!try_module_get(ca->pub->owner)) {
-		mutex_unlock(&ca->remove_mutex);
+	if (!try_module_get(ca->pub->owner))
 		return -EIO;
-	}
 
 	err = dvb_generic_open(inode, file);
 	if (err < 0) {
 		module_put(ca->pub->owner);
-		mutex_unlock(&ca->remove_mutex);
 		return err;
 	}
 
@@ -1781,7 +1742,6 @@ static int dvb_ca_en50221_io_open(struct inode *inode, struct file *file)
 
 	dvb_ca_private_get(ca);
 
-	mutex_unlock(&ca->remove_mutex);
 	return 0;
 }
 
@@ -1801,8 +1761,6 @@ static int dvb_ca_en50221_io_release(struct inode *inode, struct file *file)
 
 	dprintk("%s\n", __func__);
 
-	mutex_lock(&ca->remove_mutex);
-
 	/* mark the CA device as closed */
 	ca->open = 0;
 	dvb_ca_en50221_thread_update_delay(ca);
@@ -1812,13 +1770,6 @@ static int dvb_ca_en50221_io_release(struct inode *inode, struct file *file)
 	module_put(ca->pub->owner);
 
 	dvb_ca_private_put(ca);
-
-	if (dvbdev->users == 1 && ca->exit == 1) {
-		mutex_unlock(&ca->remove_mutex);
-		wake_up(&dvbdev->wait_queue);
-	} else {
-		mutex_unlock(&ca->remove_mutex);
-	}
 
 	return err;
 }
@@ -1944,7 +1895,6 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 	}
 
 	mutex_init(&ca->ioctl_mutex);
-	mutex_init(&ca->remove_mutex);
 
 	if (signal_pending(current)) {
 		ret = -EINTR;
@@ -1986,14 +1936,6 @@ void dvb_ca_en50221_release(struct dvb_ca_en50221 *pubca)
 	int i;
 
 	dprintk("%s\n", __func__);
-
-	mutex_lock(&ca->remove_mutex);
-	ca->exit = 1;
-	mutex_unlock(&ca->remove_mutex);
-
-	if (ca->dvbdev->users < 1)
-		wait_event(ca->dvbdev->wait_queue,
-				ca->dvbdev->users == 1);
 
 	/* shutdown the thread if there was one */
 	kthread_stop(ca->thread);

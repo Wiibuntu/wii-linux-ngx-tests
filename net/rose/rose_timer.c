@@ -133,7 +133,6 @@ static void rose_heartbeat_expiry(struct timer_list *t)
 		    (sk->sk_state == TCP_LISTEN && sock_flag(sk, SOCK_DEAD))) {
 			bh_unlock_sock(sk);
 			rose_destroy_socket(sk);
-			sock_put(sk);
 			return;
 		}
 		break;
@@ -156,7 +155,6 @@ static void rose_heartbeat_expiry(struct timer_list *t)
 
 	rose_start_heartbeat(sk);
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }
 
 static void rose_timer_expiry(struct timer_list *t)
@@ -186,7 +184,6 @@ static void rose_timer_expiry(struct timer_list *t)
 		break;
 	}
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }
 
 static void rose_idletimer_expiry(struct timer_list *t)
@@ -211,5 +208,4 @@ static void rose_idletimer_expiry(struct timer_list *t)
 		sock_set_flag(sk, SOCK_DEAD);
 	}
 	bh_unlock_sock(sk);
-	sock_put(sk);
 }

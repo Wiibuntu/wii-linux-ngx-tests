@@ -18,7 +18,6 @@
 
 #include <asm/e820/api.h>
 #include <asm/setup.h>
-#include <asm/cpufeature.h>
 
 /*
  * We organize the E820 table into three main data structures:

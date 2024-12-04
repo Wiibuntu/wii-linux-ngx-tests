@@ -44,8 +44,7 @@ static inline void ima_file_free(struct file *file)
 	return;
 }
 
-static inline int ima_file_mmap(struct file *file, unsigned long reqprot,
-				unsigned long prot, unsigned long flags)
+static inline int ima_file_mmap(struct file *file, unsigned long prot)
 {
 	return 0;
 }

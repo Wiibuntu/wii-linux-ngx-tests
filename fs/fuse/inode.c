@@ -174,12 +174,6 @@ void fuse_change_attributes_common(struct inode *inode, struct fuse_attr *attr,
 	inode->i_uid     = make_kuid(&init_user_ns, attr->uid);
 	inode->i_gid     = make_kgid(&init_user_ns, attr->gid);
 	inode->i_blocks  = attr->blocks;
-
-	/* Sanitize nsecs */
-	attr->atimensec = min_t(u32, attr->atimensec, NSEC_PER_SEC - 1);
-	attr->mtimensec = min_t(u32, attr->mtimensec, NSEC_PER_SEC - 1);
-	attr->ctimensec = min_t(u32, attr->ctimensec, NSEC_PER_SEC - 1);
-
 	inode->i_atime.tv_sec   = attr->atime;
 	inode->i_atime.tv_nsec  = attr->atimensec;
 	/* mtime from server may be stale due to local buffered write */
@@ -397,6 +391,9 @@ static void fuse_put_super(struct super_block *sb)
 {
 	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
+	fuse_send_destroy(fc);
+
+	fuse_abort_conn(fc);
 	mutex_lock(&fuse_mutex);
 	list_del(&fc->entry);
 	fuse_ctl_remove_conn(fc);
@@ -1179,7 +1176,6 @@ static int fuse_fill_super(struct super_block *sb, void *data, int silent)
 	fuse_dev_free(fud);
  err_put_conn:
 	fuse_conn_put(fc);
-	sb->s_fs_info = NULL;
  err_fput:
 	fput(file);
  err:
@@ -1193,25 +1189,16 @@ static struct dentry *fuse_mount(struct file_system_type *fs_type,
 	return mount_nodev(fs_type, flags, raw_data, fuse_fill_super);
 }
 
-static void fuse_sb_destroy(struct super_block *sb)
+static void fuse_kill_sb_anon(struct super_block *sb)
 {
 	struct fuse_conn *fc = get_fuse_conn_super(sb);
 
 	if (fc) {
-		fuse_send_destroy(fc);
-
-		fuse_abort_conn(fc);
-		fuse_wait_aborted(fc);
-
 		down_write(&fc->killsb);
 		fc->sb = NULL;
 		up_write(&fc->killsb);
 	}
-}
 
-static void fuse_kill_sb_anon(struct super_block *sb)
-{
-	fuse_sb_destroy(sb);
 	kill_anon_super(sb);
 }
 
@@ -1234,7 +1221,14 @@ static struct dentry *fuse_mount_blk(struct file_system_type *fs_type,
 
 static void fuse_kill_sb_blk(struct super_block *sb)
 {
-	fuse_sb_destroy(sb);
+	struct fuse_conn *fc = get_fuse_conn_super(sb);
+
+	if (fc) {
+		down_write(&fc->killsb);
+		fc->sb = NULL;
+		up_write(&fc->killsb);
+	}
+
 	kill_block_super(sb);
 }
 

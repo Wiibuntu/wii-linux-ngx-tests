@@ -846,10 +846,10 @@ static int gfs2_make_fs_ro(struct gfs2_sbd *sdp)
 	if (error && !test_bit(SDF_SHUTDOWN, &sdp->sd_flags))
 		return error;
 
-	flush_workqueue(gfs2_delete_workqueue);
 	kthread_stop(sdp->sd_quotad_process);
 	kthread_stop(sdp->sd_logd_process);
 
+	flush_workqueue(gfs2_delete_workqueue);
 	gfs2_quota_sync(sdp->sd_vfs, 0);
 	gfs2_statfs_sync(sdp->sd_vfs, 0);
 
@@ -1361,14 +1361,7 @@ static int gfs2_show_options(struct seq_file *s, struct dentry *root)
 {
 	struct gfs2_sbd *sdp = root->d_sb->s_fs_info;
 	struct gfs2_args *args = &sdp->sd_args;
-	unsigned int logd_secs, statfs_slow, statfs_quantum, quota_quantum;
-
-	spin_lock(&sdp->sd_tune.gt_spin);
-	logd_secs = sdp->sd_tune.gt_logd_secs;
-	quota_quantum = sdp->sd_tune.gt_quota_quantum;
-	statfs_quantum = sdp->sd_tune.gt_statfs_quantum;
-	statfs_slow = sdp->sd_tune.gt_statfs_slow;
-	spin_unlock(&sdp->sd_tune.gt_spin);
+	int val;
 
 	if (is_ancestor(root, sdp->sd_master_dir))
 		seq_puts(s, ",meta");
@@ -1423,14 +1416,17 @@ static int gfs2_show_options(struct seq_file *s, struct dentry *root)
 	}
 	if (args->ar_discard)
 		seq_puts(s, ",discard");
-	if (logd_secs != 30)
-		seq_printf(s, ",commit=%d", logd_secs);
-	if (statfs_quantum != 30)
-		seq_printf(s, ",statfs_quantum=%d", statfs_quantum);
-	else if (statfs_slow)
+	val = sdp->sd_tune.gt_logd_secs;
+	if (val != 30)
+		seq_printf(s, ",commit=%d", val);
+	val = sdp->sd_tune.gt_statfs_quantum;
+	if (val != 30)
+		seq_printf(s, ",statfs_quantum=%d", val);
+	else if (sdp->sd_tune.gt_statfs_slow)
 		seq_puts(s, ",statfs_quantum=0");
-	if (quota_quantum != 60)
-		seq_printf(s, ",quota_quantum=%d", quota_quantum);
+	val = sdp->sd_tune.gt_quota_quantum;
+	if (val != 60)
+		seq_printf(s, ",quota_quantum=%d", val);
 	if (args->ar_statfs_percent)
 		seq_printf(s, ",statfs_percent=%d", args->ar_statfs_percent);
 	if (args->ar_errors != GFS2_ERRORS_DEFAULT) {
@@ -1585,14 +1581,6 @@ static void gfs2_evict_inode(struct inode *inode)
 
 	/* Deletes should never happen under memory pressure anymore.  */
 	if (WARN_ON_ONCE(current->flags & PF_MEMALLOC))
-		goto out;
-
-	/*
-	 * In case of an incomplete mount, gfs2_evict_inode() may be called for
-	 * system files without having an active journal to write to.  In that
-	 * case, skip the filesystem evict.
-	 */
-	if (!sdp->sd_jdesc)
 		goto out;
 
 	/* Must not read inode block until block type has been verified */

@@ -157,8 +157,7 @@ int intel_sanitize_enable_ppgtt(struct drm_i915_private *dev_priv,
 	if (enable_ppgtt == 0 && INTEL_GEN(dev_priv) < 9)
 		return 0;
 
-	/* Full PPGTT is required by the Gen9 cmdparser */
-	if (enable_ppgtt == 1 && INTEL_INFO(dev)->gen != 9)
+	if (enable_ppgtt == 1)
 		return 1;
 
 	if (enable_ppgtt == 2 && has_full_ppgtt)
@@ -3556,9 +3555,6 @@ int i915_ggtt_enable_hw(struct drm_i915_private *dev_priv)
 {
 	if (INTEL_GEN(dev_priv) < 6 && !intel_enable_gtt())
 		return -EIO;
-
-	if (vma->obj)
-		set_bit(I915_BO_WAS_BOUND_BIT, &vma->obj->flags);
 
 	return 0;
 }

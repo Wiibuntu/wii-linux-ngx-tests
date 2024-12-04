@@ -589,9 +589,9 @@ static void dlm_init_lockres(struct dlm_ctxt *dlm,
 
 	res->last_used = 0;
 
-	spin_lock(&dlm->track_lock);
+	spin_lock(&dlm->spinlock);
 	list_add_tail(&res->tracking, &dlm->tracking_list);
-	spin_unlock(&dlm->track_lock);
+	spin_unlock(&dlm->spinlock);
 
 	memset(res->lvb, 0, DLM_LVB_LEN);
 	memset(res->refmap, 0, sizeof(res->refmap));
@@ -3405,15 +3405,6 @@ top:
 			if (mle->master != dead_node &&
 			    mle->new_master != dead_node)
 				continue;
-
-			if (mle->new_master == dead_node && mle->inuse) {
-				mlog(ML_NOTICE, "%s: target %u died during "
-						"migration from %u, the MLE is "
-						"still keep used, ignore it!\n",
-						dlm->name, dead_node,
-						mle->master);
-				continue;
-			}
 
 			if (mle->new_master == dead_node && mle->inuse) {
 				mlog(ML_NOTICE, "%s: target %u died during "

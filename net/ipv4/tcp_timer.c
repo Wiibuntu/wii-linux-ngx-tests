@@ -248,13 +248,6 @@ static int tcp_write_timeout(struct sock *sk)
 		tcp_write_err(sk);
 		return 1;
 	}
-
-	if (!check_net(sock_net(sk))) {
-		/* Not possible to send reset; just close */
-		tcp_done(sk);
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -366,7 +359,7 @@ static void tcp_probe_timer(struct sock *sk)
 			return;
 	}
 
-	if (icsk->icsk_probes_out >= max_probes) {
+	if (icsk->icsk_probes_out > max_probes) {
 abort:		tcp_write_err(sk);
 	} else {
 		/* Only send another probe if we didn't close things up. */
@@ -544,9 +537,7 @@ out_reset_timer:
 	    tcp_stream_is_thin(tp) &&
 	    icsk->icsk_retransmits <= TCP_THIN_LINEAR_RETRIES) {
 		icsk->icsk_backoff = 0;
-		icsk->icsk_rto = clamp(__tcp_set_rto(tp),
-				       tcp_rto_min(sk),
-				       TCP_RTO_MAX);
+		icsk->icsk_rto = min(__tcp_set_rto(tp), TCP_RTO_MAX);
 	} else {
 		/* Use normal (exponential) backoff */
 		icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);

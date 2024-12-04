@@ -1030,12 +1030,10 @@ static int __init da850_evm_config_emac(void)
 	int ret;
 	u32 val;
 	struct davinci_soc_info *soc_info = &davinci_soc_info;
-	u8 rmii_en;
+	u8 rmii_en = soc_info->emac_pdata->rmii_en;
 
 	if (!machine_is_davinci_da850_evm())
 		return 0;
-
-	rmii_en = soc_info->emac_pdata->rmii_en;
 
 	cfg_chip3_base = DA8XX_SYSCFG0_VIRT(DA8XX_CFGCHIP3_REG);
 
@@ -1461,8 +1459,6 @@ static __init void da850_evm_init(void)
 	if (ret)
 		pr_warn("%s: dsp/rproc registration failed: %d\n",
 			__func__, ret);
-
-	regulator_has_full_constraints();
 }
 
 #ifdef CONFIG_SERIAL_8250_CONSOLE

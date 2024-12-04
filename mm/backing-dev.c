@@ -19,7 +19,6 @@ struct backing_dev_info noop_backing_dev_info = {
 EXPORT_SYMBOL_GPL(noop_backing_dev_info);
 
 static struct class *bdi_class;
-const char *bdi_unknown_name = "(unknown)";
 
 /*
  * bdi_lock protects updates to bdi_list. bdi_list has RCU reader side
@@ -919,20 +918,6 @@ int bdi_register_owner(struct backing_dev_info *bdi, struct device *owner)
 		return rc;
 	/* Leaking owner reference... */
 	WARN_ON(bdi->owner);
-	bdi->owner = owner;
-	get_device(owner);
-	return 0;
-}
-EXPORT_SYMBOL(bdi_register_owner);
-
-int bdi_register_owner(struct backing_dev_info *bdi, struct device *owner)
-{
-	int rc;
-
-	rc = bdi_register(bdi, NULL, "%u:%u", MAJOR(owner->devt),
-			MINOR(owner->devt));
-	if (rc)
-		return rc;
 	bdi->owner = owner;
 	get_device(owner);
 	return 0;

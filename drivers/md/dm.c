@@ -220,6 +220,7 @@ out_free_io_cache:
 
 static void local_exit(void)
 {
+	flush_scheduled_work();
 	destroy_workqueue(deferred_remove_workqueue);
 
 	kmem_cache_destroy(_rq_cache);
@@ -1667,8 +1668,6 @@ static void cleanup_mapped_device(struct mapped_device *md)
 
 	cleanup_srcu_struct(&md->io_barrier);
 
-	cleanup_srcu_struct(&md->io_barrier);
-
 	if (md->bdev) {
 		bdput(md->bdev);
 		md->bdev = NULL;
@@ -1729,12 +1728,6 @@ static struct mapped_device *alloc_dev(int minor)
 		goto bad;
 
 	dm_init_md_queue(md);
-	/*
-	 * default to bio-based required ->make_request_fn until DM
-	 * table is loaded and md->type established. If request-based
-	 * table is loaded: blk-mq will override accordingly.
-	 */
-	blk_queue_make_request(md->queue, dm_make_request);
 
 	md->disk = alloc_disk_node(1, numa_node_id);
 	if (!md->disk)
@@ -1775,9 +1768,7 @@ static struct mapped_device *alloc_dev(int minor)
 	bio_set_dev(&md->flush_bio, md->bdev);
 	md->flush_bio.bi_opf = REQ_OP_WRITE | REQ_PREFLUSH | REQ_SYNC;
 
-	r = dm_stats_init(&md->stats);
-	if (r < 0)
-		goto bad;
+	dm_stats_init(&md->stats);
 
 	/* Populate the mapping, nobody knows we exist yet */
 	spin_lock(&_minor_lock);
@@ -2135,8 +2126,6 @@ static void __dm_destroy(struct mapped_device *md, bool wait)
 
 	blk_set_queue_dying(q);
 
-	blk_set_queue_dying(q);
-
 	if (dm_request_based(md) && md->kworker_task)
 		kthread_flush_worker(&md->kworker);
 
@@ -2207,8 +2196,6 @@ static int dm_wait_for_completion(struct mapped_device *md, long task_state)
 		io_schedule();
 	}
 	finish_wait(&md->wait, &wait);
-
-	smp_rmb(); /* paired with atomic_dec_return in end_io_acct */
 
 	return r;
 }

@@ -248,9 +248,6 @@ process_mbx:
 		/* process the SM mailbox first to drain outgoing messages */
 		hw->mbx.ops.process(hw, &hw->mbx);
 
-		/* process the SM mailbox first to drain outgoing messages */
-		hw->mbx.ops.process(hw, &hw->mbx);
-
 		/* verify port mapping is valid, if not reset port */
 		if (vf_info->vf_flags && !fm10k_glort_valid_pf(hw, glort)) {
 			hw->iov.ops.reset_lport(hw, vf_info);

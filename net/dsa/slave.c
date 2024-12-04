@@ -141,14 +141,10 @@ static void dsa_slave_change_rx_flags(struct net_device *dev, int change)
 {
 	struct net_device *master = dsa_slave_to_master(dev);
 
-	if (dev->flags & IFF_UP) {
-		if (change & IFF_ALLMULTI)
-			dev_set_allmulti(master,
-					 dev->flags & IFF_ALLMULTI ? 1 : -1);
-		if (change & IFF_PROMISC)
-			dev_set_promiscuity(master,
-					    dev->flags & IFF_PROMISC ? 1 : -1);
-	}
+	if (change & IFF_ALLMULTI)
+		dev_set_allmulti(master, dev->flags & IFF_ALLMULTI ? 1 : -1);
+	if (change & IFF_PROMISC)
+		dev_set_promiscuity(master, dev->flags & IFF_PROMISC ? 1 : -1);
 }
 
 static void dsa_slave_set_rx_mode(struct net_device *dev)
@@ -1103,8 +1099,6 @@ static int dsa_slave_phy_setup(struct net_device *slave_dev)
 				of_phy_deregister_fixed_link(port_dn);
 			return ret;
 		}
-
-		of_node_put(phy_dn);
 	}
 
 	phy_attached_info(slave_dev->phydev);

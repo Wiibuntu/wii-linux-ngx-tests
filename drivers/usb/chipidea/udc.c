@@ -920,9 +920,6 @@ isr_setup_status_complete(struct usb_ep *ep, struct usb_request *req)
 	struct ci_hdrc *ci = req->context;
 	unsigned long flags;
 
-	if (req->status < 0)
-		return;
-
 	if (ci->setaddr) {
 		hw_usb_set_address(ci, ci->address);
 		ci->setaddr = false;
@@ -945,15 +942,6 @@ isr_setup_status_complete(struct usb_ep *ep, struct usb_request *req)
 static int isr_setup_status_phase(struct ci_hdrc *ci)
 {
 	struct ci_hw_ep *hwep;
-
-	/*
-	 * Unexpected USB controller behavior, caused by bad signal integrity
-	 * or ground reference problems, can lead to isr_setup_status_phase
-	 * being called with ci->status equal to NULL.
-	 * If this situation occurs, you should review your USB hardware design.
-	 */
-	if (WARN_ON_ONCE(!ci->status))
-		return -EPIPE;
 
 	/*
 	 * Unexpected USB controller behavior, caused by bad signal integrity
@@ -1633,25 +1621,6 @@ static int ci_udc_pullup(struct usb_gadget *_gadget, int is_on)
 static int ci_udc_start(struct usb_gadget *gadget,
 			 struct usb_gadget_driver *driver);
 static int ci_udc_stop(struct usb_gadget *gadget);
-
-/* Match ISOC IN from the highest endpoint */
-static struct usb_ep *ci_udc_match_ep(struct usb_gadget *gadget,
-			      struct usb_endpoint_descriptor *desc,
-			      struct usb_ss_ep_comp_descriptor *comp_desc)
-{
-	struct ci_hdrc *ci = container_of(gadget, struct ci_hdrc, gadget);
-	struct usb_ep *ep;
-
-	if (usb_endpoint_xfer_isoc(desc) && usb_endpoint_dir_in(desc)) {
-		list_for_each_entry_reverse(ep, &ci->gadget.ep_list, ep_list) {
-			if (ep->caps.dir_in && !ep->claimed)
-				return ep;
-		}
-	}
-
-	return NULL;
-}
-
 /**
  * Device operations part of the API to the USB controller hardware,
  * which don't involve endpoints (or i/o)
@@ -1665,7 +1634,6 @@ static const struct usb_gadget_ops usb_gadget_ops = {
 	.vbus_draw	= ci_udc_vbus_draw,
 	.udc_start	= ci_udc_start,
 	.udc_stop	= ci_udc_stop,
-	.match_ep 	= ci_udc_match_ep,
 };
 
 static int init_eps(struct ci_hdrc *ci)

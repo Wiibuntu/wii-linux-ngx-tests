@@ -38,23 +38,6 @@ static inline void prepare_switch_to(struct task_struct *next)
 
 asmlinkage void ret_from_fork(void);
 
-#ifdef CONFIG_RETPOLINE
-	/*
-	 * When switching from a shallower to a deeper call stack
-	 * the RSB may either underflow or use entries populated
-	 * with userspace addresses. On CPUs where those concerns
-	 * exist, overwrite the RSB with entries which capture
-	 * speculative execution to prevent attack.
-	 */
-#define __retpoline_fill_return_buffer					\
-	ALTERNATIVE("jmp 910f",						\
-		__stringify(__FILL_RETURN_BUFFER(%%ebx, RSB_CLEAR_LOOPS, %%esp)),\
-		X86_FEATURE_RSB_CTXSW)					\
-	"910:\n\t"
-#else
-#define __retpoline_fill_return_buffer
-#endif
-
 /*
  * This is the structure pointed to by thread.sp for an inactive task.  The
  * order of the fields must match the code in __switch_to_asm().

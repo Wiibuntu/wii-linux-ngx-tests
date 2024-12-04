@@ -176,9 +176,7 @@ static int ipvlan_init(struct net_device *dev)
 	dev->state = (dev->state & ~IPVLAN_STATE_MASK) |
 		     (phy_dev->state & IPVLAN_STATE_MASK);
 	dev->features = phy_dev->features & IPVLAN_FEATURES;
-	dev->features |= IPVLAN_ALWAYS_ON;
-	dev->vlan_features = phy_dev->vlan_features & IPVLAN_FEATURES;
-	dev->vlan_features |= IPVLAN_ALWAYS_ON_OFLOADS;
+	dev->features |= NETIF_F_LLTX;
 	dev->gso_max_size = phy_dev->gso_max_size;
 	dev->gso_max_segs = phy_dev->gso_max_segs;
 	dev->hard_header_len = phy_dev->hard_header_len;
@@ -218,6 +216,7 @@ static void ipvlan_uninit(struct net_device *dev)
 static int ipvlan_open(struct net_device *dev)
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
+	struct net_device *phy_dev = ipvlan->phy_dev;
 	struct ipvl_addr *addr;
 
 	if (ipvlan->port->mode == IPVLAN_MODE_L3 ||
@@ -229,7 +228,7 @@ static int ipvlan_open(struct net_device *dev)
 	list_for_each_entry(addr, &ipvlan->addrs, anode)
 		ipvlan_ht_addr_add(ipvlan, addr);
 
-	return 0;
+	return dev_uc_add(phy_dev, phy_dev->dev_addr);
 }
 
 static int ipvlan_stop(struct net_device *dev)
@@ -240,6 +239,8 @@ static int ipvlan_stop(struct net_device *dev)
 
 	dev_uc_unsync(phy_dev, dev);
 	dev_mc_unsync(phy_dev, dev);
+
+	dev_uc_del(phy_dev, phy_dev->dev_addr);
 
 	list_for_each_entry(addr, &ipvlan->addrs, anode)
 		ipvlan_ht_addr_del(addr);
@@ -275,14 +276,7 @@ static netdev_features_t ipvlan_fix_features(struct net_device *dev,
 {
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
-	features |= NETIF_F_ALL_FOR_ALL;
-	features &= (ipvlan->sfeatures | ~IPVLAN_FEATURES);
-	features = netdev_increment_features(ipvlan->phy_dev->features,
-					     features, features);
-	features |= IPVLAN_ALWAYS_ON;
-	features &= (IPVLAN_FEATURES | IPVLAN_ALWAYS_ON);
-
-	return features;
+	return features & (ipvlan->sfeatures | ~IPVLAN_FEATURES);
 }
 
 static void ipvlan_change_rx_flags(struct net_device *dev, int change)
@@ -572,8 +566,6 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 		struct ipvl_dev *tmp = netdev_priv(phy_dev);
 
 		phy_dev = tmp->phy_dev;
-		if (!ns_capable(dev_net(phy_dev)->user_ns, CAP_NET_ADMIN))
-			return -EPERM;
 	} else if (!netif_is_ipvlan_port(phy_dev)) {
 		/* Exit early if the underlying link is invalid or busy */
 		if (phy_dev->type != ARPHRD_ETHER ||

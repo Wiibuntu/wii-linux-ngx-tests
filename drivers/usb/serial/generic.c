@@ -484,12 +484,6 @@ void usb_serial_generic_unthrottle(struct tty_struct *tty)
 	port->throttled = port->throttle_req = 0;
 	spin_unlock_irq(&port->lock);
 
-	/*
-	 * Matches the smp_mb__after_atomic() in
-	 * usb_serial_generic_read_bulk_callback().
-	 */
-	smp_mb();
-
 	if (was_throttled)
 		usb_serial_generic_submit_read_urbs(port, GFP_KERNEL);
 }

@@ -106,9 +106,6 @@ int afs_write_begin(struct file *file, struct address_space *mapping,
 	/* page won't leak in error case: it eventually gets cleaned off LRU */
 	*pagep = page;
 
-	/* page won't leak in error case: it eventually gets cleaned off LRU */
-	*pagep = page;
-
 try_again:
 	/* See if this page is already partially written in a way that we can
 	 * merge the new write with.
@@ -734,20 +731,6 @@ int afs_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 	       datasync);
 
 	return file_write_and_wait_range(file, start, end);
-}
-
-/*
- * Flush out all outstanding writes on a file opened for writing when it is
- * closed.
- */
-int afs_flush(struct file *file, fl_owner_t id)
-{
-	_enter("");
-
-	if ((file->f_mode & FMODE_WRITE) == 0)
-		return 0;
-
-	return vfs_fsync(file, 0);
 }
 
 /*

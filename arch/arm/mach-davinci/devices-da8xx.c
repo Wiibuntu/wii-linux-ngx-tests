@@ -699,9 +699,6 @@ static struct platform_device da8xx_lcdc_device = {
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(da8xx_lcdc_resources),
 	.resource	= da8xx_lcdc_resources,
-	.dev		= {
-		.coherent_dma_mask	= DMA_BIT_MASK(32),
-	}
 };
 
 int __init da8xx_register_lcdc(struct da8xx_lcdc_platform_data *pdata)
@@ -839,8 +836,6 @@ static struct platform_device da8xx_dsp = {
 
 static bool rproc_mem_inited __initdata;
 
-static bool rproc_mem_inited __initdata;
-
 #if IS_ENABLED(CONFIG_DA8XX_REMOTEPROC)
 
 static phys_addr_t rproc_base __initdata;
@@ -894,12 +889,6 @@ void __init da8xx_rproc_reserve_cma(void)
 int __init da8xx_register_rproc(void)
 {
 	int ret;
-
-	if (!rproc_mem_inited) {
-		pr_warn("%s: memory not reserved for DSP, not registering DSP device\n",
-			__func__);
-		return -ENOMEM;
-	}
 
 	if (!rproc_mem_inited) {
 		pr_warn("%s: memory not reserved for DSP, not registering DSP device\n",

@@ -316,7 +316,6 @@ void __transport_register_session(
 {
 	const struct target_core_fabric_ops *tfo = se_tpg->se_tpg_tfo;
 	unsigned char buf[PR_REG_ISID_LEN];
-	unsigned long flags;
 
 	se_sess->se_tpg = se_tpg;
 	se_sess->fabric_sess_ptr = fabric_sess_ptr;
@@ -362,7 +361,7 @@ void __transport_register_session(
 
 		list_add_tail(&se_sess->sess_acl_list,
 			      &se_nacl->acl_sess_list);
-		spin_unlock_irqrestore(&se_nacl->nacl_sess_lock, flags);
+		spin_unlock_irq(&se_nacl->nacl_sess_lock);
 	}
 	list_add_tail(&se_sess->sess_list, &se_tpg->tpg_sess_list);
 
@@ -607,10 +606,6 @@ static int transport_cmd_check_stop_to_fabric(struct se_cmd *cmd)
 	unsigned long flags;
 
 	target_remove_from_state_list(cmd);
-
-	spin_lock_irqsave(&cmd->t_state_lock, flags);
-	if (write_pending)
-		cmd->t_state = TRANSPORT_WRITE_PENDING;
 
 	/*
 	 * Clear struct se_cmd->se_lun before the handoff to FE.
@@ -1913,43 +1908,38 @@ static bool target_handle_task_attr(struct se_cmd *cmd)
 
 	cmd->se_cmd_flags |= SCF_TASK_ATTR_SET;
 
-	cmd->se_cmd_flags |= SCF_TASK_ATTR_SET;
-
 	/*
 	 * Check for the existence of HEAD_OF_QUEUE, and if true return 1
 	 * to allow the passed struct se_cmd list of tasks to the front of the list.
 	 */
 	switch (cmd->sam_task_attr) {
 	case TCM_HEAD_TAG:
-		atomic_inc_mb(&dev->non_ordered);
 		pr_debug("Added HEAD_OF_QUEUE for CDB: 0x%02x\n",
 			 cmd->t_task_cdb[0]);
 		return false;
 	case TCM_ORDERED_TAG:
-		atomic_inc_mb(&dev->delayed_cmd_count);
+		atomic_inc_mb(&dev->dev_ordered_sync);
 
 		pr_debug("Added ORDERED for CDB: 0x%02x to ordered list\n",
 			 cmd->t_task_cdb[0]);
+
+		/*
+		 * Execute an ORDERED command if no other older commands
+		 * exist that need to be completed first.
+		 */
+		if (!atomic_read(&dev->simple_cmds))
+			return false;
 		break;
 	default:
 		/*
 		 * For SIMPLE and UNTAGGED Task Attribute commands
 		 */
-		atomic_inc_mb(&dev->non_ordered);
-
-		if (atomic_read(&dev->delayed_cmd_count) == 0)
-			return false;
+		atomic_inc_mb(&dev->simple_cmds);
 		break;
 	}
 
-	if (cmd->sam_task_attr != TCM_ORDERED_TAG) {
-		atomic_inc_mb(&dev->delayed_cmd_count);
-		/*
-		 * We will account for this when we dequeue from the delayed
-		 * list.
-		 */
-		atomic_dec_mb(&dev->non_ordered);
-	}
+	if (atomic_read(&dev->dev_ordered_sync) == 0)
+		return false;
 
 	spin_lock(&dev->delayed_cmd_lock);
 	list_add_tail(&cmd->se_delayed_node, &dev->delayed_cmd_list);
@@ -2601,7 +2591,6 @@ __transport_wait_for_tasks(struct se_cmd *, bool, bool *, bool *,
 static void target_wait_free_cmd(struct se_cmd *cmd, bool *aborted, bool *tas)
 {
 	unsigned long flags;
-	int rc;
 
 	spin_lock_irqsave(&cmd->t_state_lock, flags);
 	__transport_wait_for_tasks(cmd, true, aborted, tas, &flags);
@@ -3089,26 +3078,6 @@ static const struct sense_info sense_info_table[] = {
 		.asc = 0x26,
 		.ascq = 0x09, /* UNSUPPORTED SEGMENT DESCRIPTOR TYPE CODE */
 	},
-	[TCM_TOO_MANY_TARGET_DESCS] = {
-		.key = ILLEGAL_REQUEST,
-		.asc = 0x26,
-		.ascq = 0x06, /* TOO MANY TARGET DESCRIPTORS */
-	},
-	[TCM_UNSUPPORTED_TARGET_DESC_TYPE_CODE] = {
-		.key = ILLEGAL_REQUEST,
-		.asc = 0x26,
-		.ascq = 0x07, /* UNSUPPORTED TARGET DESCRIPTOR TYPE CODE */
-	},
-	[TCM_TOO_MANY_SEGMENT_DESCS] = {
-		.key = ILLEGAL_REQUEST,
-		.asc = 0x26,
-		.ascq = 0x08, /* TOO MANY SEGMENT DESCRIPTORS */
-	},
-	[TCM_UNSUPPORTED_SEGMENT_DESC_TYPE_CODE] = {
-		.key = ILLEGAL_REQUEST,
-		.asc = 0x26,
-		.ascq = 0x09, /* UNSUPPORTED SEGMENT DESCRIPTOR TYPE CODE */
-	},
 	[TCM_PARAMETER_LIST_LENGTH_ERROR] = {
 		.key = ILLEGAL_REQUEST,
 		.asc = 0x1a, /* PARAMETER LIST LENGTH ERROR */
@@ -3164,12 +3133,6 @@ static const struct sense_info sense_info_table[] = {
 		.asc = 0x10,
 		.ascq = 0x03, /* LOGICAL BLOCK REFERENCE TAG CHECK FAILED */
 		.add_sector_info = true,
-	},
-	[TCM_COPY_TARGET_DEVICE_NOT_REACHABLE] = {
-		.key = COPY_ABORTED,
-		.asc = 0x0d,
-		.ascq = 0x02, /* COPY TARGET DEVICE NOT REACHABLE */
-
 	},
 	[TCM_COPY_TARGET_DEVICE_NOT_REACHABLE] = {
 		.key = COPY_ABORTED,

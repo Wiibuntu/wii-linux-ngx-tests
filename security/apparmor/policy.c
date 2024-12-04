@@ -668,22 +668,6 @@ bool policy_admin_capable(struct aa_ns *ns)
 	return policy_view_capable(ns) && capable && !aa_g_lock_policy;
 }
 
-bool policy_view_capable(void)
-{
-	struct user_namespace *user_ns = current_user_ns();
-	bool response = false;
-
-	if (ns_capable(user_ns, CAP_MAC_ADMIN))
-		response = true;
-
-	return response;
-}
-
-bool policy_admin_capable(void)
-{
-	return policy_view_capable() && !aa_g_lock_policy;
-}
-
 /**
  * aa_may_manage_policy - can the current task manage policy
  * @label: label to check if it can manage policy

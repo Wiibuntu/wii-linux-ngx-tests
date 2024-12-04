@@ -458,12 +458,6 @@ int aac_queue_get(struct aac_dev * dev, u32 * index, u32 qid, struct hw_fib * hw
 		hw_fib->header.u.ReceiverFibAddress = hw_fib->header.SenderFibAddress;  /* Let the adapter now where to find its data */
 		map = 0;
 	}
-
-	/*
-	 *Assign vector numbers to fibs
-	 */
-	aac_fib_vector_assign(dev);
-
 	/*
 	 *	If MapFib is true than we need to map the Fib and put pointers
 	 *	in the queue entry.
@@ -1507,10 +1501,9 @@ static int _aac_reset_adapter(struct aac_dev *aac, int forced, u8 reset_type)
 	host = aac->scsi_host_ptr;
 	scsi_block_requests(host);
 	aac_adapter_disable_int(aac);
-	if (aac->thread && aac->thread->pid != current->pid) {
+	if (aac->thread->pid != current->pid) {
 		spin_unlock_irq(host->host_lock);
 		kthread_stop(aac->thread);
-		aac->thread = NULL;
 		jafo = 1;
 	}
 
@@ -1597,7 +1590,6 @@ static int _aac_reset_adapter(struct aac_dev *aac, int forced, u8 reset_type)
 					  aac->name);
 		if (IS_ERR(aac->thread)) {
 			retval = PTR_ERR(aac->thread);
-			aac->thread = NULL;
 			goto out;
 		}
 	}

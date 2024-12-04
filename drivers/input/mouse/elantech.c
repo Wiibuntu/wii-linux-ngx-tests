@@ -431,19 +431,6 @@ static void elantech_report_trackpoint(struct psmouse *psmouse,
 	case 0x16008020U:
 	case 0x26800010U:
 	case 0x36808000U:
-
-		/*
-		 * This firmware misreport coordinates for trackpoint
-		 * occasionally. Discard packets outside of [-127, 127] range
-		 * to prevent cursor jumps.
-		 */
-		if (packet[4] == 0x80 || packet[5] == 0x80 ||
-		    packet[1] >> 7 == packet[4] >> 7 ||
-		    packet[2] >> 7 == packet[5] >> 7) {
-			elantech_debug("discarding packet [%6ph]\n", packet);
-			break;
-
-		}
 		x = packet[4] - (int)((packet[1]^0x80) << 1);
 		y = (int)((packet[2]^0x80) << 1) - packet[5];
 
@@ -595,11 +582,10 @@ static void process_packet_head_v4(struct psmouse *psmouse)
 	struct input_dev *dev = psmouse->dev;
 	struct elantech_data *etd = psmouse->private;
 	unsigned char *packet = psmouse->packet;
-	int id;
+	int id = ((packet[3] & 0xe0) >> 5) - 1;
 	int pres, traces;
 
-	id = ((packet[3] & 0xe0) >> 5) - 1;
-	if (id < 0 || id >= ETP_MAX_FINGERS)
+	if (id < 0)
 		return;
 
 	etd->mt[id].x = ((packet[1] & 0x0f) << 8) | packet[2];
@@ -629,7 +615,7 @@ static void process_packet_motion_v4(struct psmouse *psmouse)
 	int id, sid;
 
 	id = ((packet[0] & 0xe0) >> 5) - 1;
-	if (id < 0 || id >= ETP_MAX_FINGERS)
+	if (id < 0)
 		return;
 
 	sid = ((packet[3] & 0xe0) >> 5) - 1;
@@ -650,7 +636,7 @@ static void process_packet_motion_v4(struct psmouse *psmouse)
 	input_report_abs(dev, ABS_MT_POSITION_X, etd->mt[id].x);
 	input_report_abs(dev, ABS_MT_POSITION_Y, etd->mt[id].y);
 
-	if (sid >= 0 && sid < ETP_MAX_FINGERS) {
+	if (sid >= 0) {
 		etd->mt[sid].x += delta_x2 * weight;
 		etd->mt[sid].y -= delta_y2 * weight;
 		input_mt_slot(dev, sid);
@@ -818,7 +804,7 @@ static int elantech_packet_check_v4(struct psmouse *psmouse)
 	else if (ic_version == 7 && etd->samples[1] == 0x2A)
 		sanity_check = ((packet[3] & 0x1c) == 0x10);
 	else
-		sanity_check = ((packet[0] & 0x08) == 0x00 &&
+		sanity_check = ((packet[0] & 0x0c) == 0x04 &&
 				(packet[3] & 0x1c) == 0x10);
 
 	if (!sanity_check)
@@ -1187,32 +1173,8 @@ static const struct dmi_system_id elantech_dmi_has_middle_button[] = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "CELSIUS H760"),
 		},
 	},
-	{
-		/* Fujitsu H760 also has a middle button */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "CELSIUS H760"),
-		},
-	},
-	{
-		/* Fujitsu H780 also has a middle button */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "CELSIUS H780"),
-		},
-	},
 #endif
 	{ }
-};
-
-static const char * const middle_button_pnp_ids[] = {
-	"LEN2131", /* ThinkPad P52 w/ NFC */
-	"LEN2132", /* ThinkPad P52 */
-	"LEN2133", /* ThinkPad P72 w/ NFC */
-	"LEN2134", /* ThinkPad P72 */
-	"LEN0407",
-	"LEN0408",
-	NULL
 };
 
 /*
@@ -1234,8 +1196,7 @@ static int elantech_set_input_params(struct psmouse *psmouse)
 	__clear_bit(EV_REL, dev->evbit);
 
 	__set_bit(BTN_LEFT, dev->keybit);
-	if (dmi_check_system(elantech_dmi_has_middle_button) ||
-			psmouse_matches_pnp_id(psmouse, middle_button_pnp_ids))
+	if (dmi_check_system(elantech_dmi_has_middle_button))
 		__set_bit(BTN_MIDDLE, dev->keybit);
 	__set_bit(BTN_RIGHT, dev->keybit);
 
@@ -1584,41 +1545,6 @@ static const struct dmi_system_id elantech_dmi_force_crc_enabled[] = {
 		},
 	},
 	{
-		/* Fujitsu H760 does not work with crc_enabled == 0 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "CELSIUS H760"),
-		},
-	},
-	{
-		/* Fujitsu LIFEBOOK E556 does not work with crc_enabled == 0 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "LIFEBOOK E556"),
-		},
-	},
-	{
-		/* Fujitsu LIFEBOOK E557 does not work with crc_enabled == 0 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "LIFEBOOK E557"),
-		},
-	},
-	{
-		/* Fujitsu LIFEBOOK E546  does not work with crc_enabled == 0 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "LIFEBOOK E546"),
-		},
-	},
-	{
-		/* Fujitsu LIFEBOOK E547 does not work with crc_enabled == 0 */
-		.matches = {
-			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
-			DMI_MATCH(DMI_PRODUCT_NAME, "LIFEBOOK E547"),
-		},
-	},
-	{
 		/* Fujitsu LIFEBOOK E554  does not work with crc_enabled == 0 */
 		.matches = {
 			DMI_MATCH(DMI_SYS_VENDOR, "FUJITSU"),
@@ -1787,17 +1713,6 @@ int elantech_init(struct psmouse *psmouse)
 		psmouse_info(psmouse,
 			     "Elan sample query result %02x, %02x, %02x\n",
 			     etd->samples[0], etd->samples[1], etd->samples[2]);
-	}
-
-	if (etd->samples[1] == 0x74 && etd->hw_version == 0x03) {
-		/*
-		 * This module has a bug which makes absolute mode
-		 * unusable, so let's abort so we'll be using standard
-		 * PS/2 protocol.
-		 */
-		psmouse_info(psmouse,
-			     "absolute mode broken, forcing standard PS/2 protocol\n");
-		goto init_fail;
 	}
 
 	if (etd->samples[1] == 0x74 && etd->hw_version == 0x03) {

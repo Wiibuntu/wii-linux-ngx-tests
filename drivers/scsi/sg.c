@@ -51,7 +51,6 @@ static int sg_version_num = 30536;	/* 2 digits for each component */
 #include <linux/atomic.h>
 #include <linux/ratelimit.h>
 #include <linux/uio.h>
-#include <linux/cred.h> /* for sg_check_file_access() */
 
 #include "scsi.h"
 #include <scsi/scsi_dbg.h>
@@ -210,33 +209,6 @@ static void sg_device_destroy(struct kref *kref);
 #define sg_printk(prefix, sdp, fmt, a...) \
 	sdev_prefix_printk(prefix, (sdp)->device,		\
 			   (sdp)->disk->disk_name, fmt, ##a)
-
-/*
- * The SCSI interfaces that use read() and write() as an asynchronous variant of
- * ioctl(..., SG_IO, ...) are fundamentally unsafe, since there are lots of ways
- * to trigger read() and write() calls from various contexts with elevated
- * privileges. This can lead to kernel memory corruption (e.g. if these
- * interfaces are called through splice()) and privilege escalation inside
- * userspace (e.g. if a process with access to such a device passes a file
- * descriptor to a SUID binary as stdin/stdout/stderr).
- *
- * This function provides protection for the legacy API by restricting the
- * calling context.
- */
-static int sg_check_file_access(struct file *filp, const char *caller)
-{
-	if (filp->f_cred != current_real_cred()) {
-		pr_err_once("%s: process %d (%s) changed security contexts after opening file descriptor, this is not allowed.\n",
-			caller, task_tgid_vnr(current), current->comm);
-		return -EPERM;
-	}
-	if (unlikely(segment_eq(get_fs(), KERNEL_DS))) {
-		pr_err_once("%s: process %d (%s) called from kernel context, this is not allowed.\n",
-			caller, task_tgid_vnr(current), current->comm);
-		return -EACCES;
-	}
-	return 0;
-}
 
 static int sg_allow_access(struct file *filp, unsigned char *cmd)
 {
@@ -418,18 +390,9 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 	Sg_fd *sfp;
 	Sg_request *srp;
 	int req_pack_id = -1;
-	bool busy;
 	sg_io_hdr_t *hp;
 	struct sg_header *old_hdr = NULL;
 	int retval = 0;
-
-	/*
-	 * This could cause a response to be stranded. Close the associated
-	 * file descriptor to free up any resources being held.
-	 */
-	retval = sg_check_file_access(filp, __func__);
-	if (retval)
-		return retval;
 
 	if ((!(sfp = (Sg_fd *) filp->private_data)) || (!(sdp = sfp->parentdp)))
 		return -ENXIO;
@@ -466,19 +429,25 @@ sg_read(struct file *filp, char __user *buf, size_t count, loff_t * ppos)
 		} else
 			req_pack_id = old_hdr->pack_id;
 	}
-	srp = sg_get_rq_mark(sfp, req_pack_id, &busy);
+	srp = sg_get_rq_mark(sfp, req_pack_id);
 	if (!srp) {		/* now wait on packet to arrive */
+		if (atomic_read(&sdp->detaching)) {
+			retval = -ENODEV;
+			goto free_old_hdr;
+		}
 		if (filp->f_flags & O_NONBLOCK) {
 			retval = -EAGAIN;
 			goto free_old_hdr;
 		}
 		retval = wait_event_interruptible(sfp->read_wait,
-			((srp = sg_get_rq_mark(sfp, req_pack_id, &busy)) ||
-			(!busy && atomic_read(&sdp->detaching))));
-		if (!srp) {
-			/* signal or detaching */
-			if (!retval)
-				retval = -ENODEV;
+			(atomic_read(&sdp->detaching) ||
+			(srp = sg_get_rq_mark(sfp, req_pack_id))));
+		if (atomic_read(&sdp->detaching)) {
+			retval = -ENODEV;
+			goto free_old_hdr;
+		}
+		if (retval) {
+			/* -ERESTARTSYS as signal hit process */
 			goto free_old_hdr;
 		}
 	}
@@ -612,11 +581,6 @@ sg_write(struct file *filp, const char __user *buf, size_t count, loff_t * ppos)
 	struct sg_header old_hdr;
 	sg_io_hdr_t *hp;
 	unsigned char cmnd[SG_MAX_CDB_SIZE];
-	int retval;
-
-	retval = sg_check_file_access(filp, __func__);
-	if (retval)
-		return retval;
 
 	if (unlikely(uaccess_kernel()))
 		return -EINVAL;
@@ -897,39 +861,6 @@ sg_fill_request_table(Sg_fd *sfp, sg_req_info_t *rinfo)
 	}
 }
 
-static void
-sg_fill_request_table(Sg_fd *sfp, sg_req_info_t *rinfo)
-{
-	Sg_request *srp;
-	int val;
-	unsigned int ms;
-
-	val = 0;
-	list_for_each_entry(srp, &sfp->rq_list, entry) {
-		if (val >= SG_MAX_QUEUE)
-			break;
-		rinfo[val].req_state = srp->done + 1;
-		rinfo[val].problem =
-			srp->header.masked_status &
-			srp->header.host_status &
-			srp->header.driver_status;
-		if (srp->done)
-			rinfo[val].duration =
-				srp->header.duration;
-		else {
-			ms = jiffies_to_msecs(jiffies);
-			rinfo[val].duration =
-				(ms > srp->header.duration) ?
-				(ms - srp->header.duration) : 0;
-		}
-		rinfo[val].orphan = srp->orphan;
-		rinfo[val].sg_io_owned = srp->sg_io_owned;
-		rinfo[val].pack_id = srp->header.pack_id;
-		rinfo[val].usr_ptr = srp->header.usr_ptr;
-		val++;
-	}
-}
-
 static long
 sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 {
@@ -961,7 +892,9 @@ sg_ioctl(struct file *filp, unsigned int cmd_in, unsigned long arg)
 		if (result < 0)
 			return result;
 		result = wait_event_interruptible(sfp->read_wait,
-			srp_done(sfp, srp));
+			(srp_done(sfp, srp) || atomic_read(&sdp->detaching)));
+		if (atomic_read(&sdp->detaching))
+			return -ENODEV;
 		write_lock_irq(&sfp->rq_list_lock);
 		if (srp->done) {
 			srp->done = 2;
@@ -1267,7 +1200,6 @@ sg_vma_fault(struct vm_fault *vmf)
 	unsigned long offset, len, sa;
 	Sg_scatter_hold *rsv_schp;
 	int k, length;
-	int ret = 0;
 
 	if ((NULL == vma) || (!(sfp = (Sg_fd *) vma->vm_private_data)))
 		return VM_FAULT_SIGBUS;
@@ -1962,7 +1894,7 @@ retry:
 		num = (rem_sz > scatter_elem_sz_prev) ?
 			scatter_elem_sz_prev : rem_sz;
 
-		schp->pages[k] = alloc_pages(gfp_mask | __GFP_ZERO, order);
+		schp->pages[k] = alloc_pages(gfp_mask, order);
 		if (!schp->pages[k])
 			goto out;
 

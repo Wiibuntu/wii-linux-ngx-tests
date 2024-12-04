@@ -474,9 +474,6 @@ void f2fs_balance_fs(struct f2fs_sb_info *sbi, bool need)
 
 void f2fs_balance_fs_bg(struct f2fs_sb_info *sbi)
 {
-	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
-		return;
-
 	/* try to shrink extent cache when there is no enough memory */
 	if (!available_free_memory(sbi, EXTENT_CACHE))
 		f2fs_shrink_extent_tree(sbi, EXTENT_CACHE_SHRINK_NUMBER);
@@ -1924,7 +1921,7 @@ bool is_checkpointed_data(struct f2fs_sb_info *sbi, block_t blkaddr)
 	struct seg_entry *se;
 	bool is_cp = false;
 
-	if (!is_valid_data_blkaddr(sbi, blkaddr))
+	if (blkaddr == NEW_ADDR || blkaddr == NULL_ADDR)
 		return true;
 
 	down_read(&sit_i->sentry_lock);
@@ -3485,7 +3482,7 @@ static int build_curseg(struct f2fs_sb_info *sbi)
 	return restore_curseg_summaries(sbi);
 }
 
-static int build_sit_entries(struct f2fs_sb_info *sbi)
+static void build_sit_entries(struct f2fs_sb_info *sbi)
 {
 	struct sit_info *sit_i = SIT_I(sbi);
 	struct curseg_info *curseg = CURSEG_I(sbi, CURSEG_COLD_DATA);
@@ -3653,41 +3650,6 @@ static int build_dirty_segmap(struct f2fs_sb_info *sbi)
 	return init_victim_secmap(sbi);
 }
 
-static int sanity_check_curseg(struct f2fs_sb_info *sbi)
-{
-	int i;
-
-	/*
-	 * In LFS/SSR curseg, .next_blkoff should point to an unused blkaddr;
-	 * In LFS curseg, all blkaddr after .next_blkoff should be unused.
-	 */
-	for (i = 0; i < NO_CHECK_TYPE; i++) {
-		struct curseg_info *curseg = CURSEG_I(sbi, i);
-		struct seg_entry *se = get_seg_entry(sbi, curseg->segno);
-		unsigned int blkofs = curseg->next_blkoff;
-
-		if (f2fs_test_bit(blkofs, se->cur_valid_map))
-			goto out;
-
-		if (curseg->alloc_type == SSR)
-			continue;
-
-		for (blkofs += 1; blkofs < sbi->blocks_per_seg; blkofs++) {
-			if (!f2fs_test_bit(blkofs, se->cur_valid_map))
-				continue;
-out:
-			f2fs_msg(sbi->sb, KERN_ERR,
-				"Current segment's next free block offset is "
-				"inconsistent with bitmap, logtype:%u, "
-				"segno:%u, type:%u, next_blkoff:%u, blkofs:%u",
-				i, curseg->segno, curseg->alloc_type,
-				curseg->next_blkoff, blkofs);
-			return -EINVAL;
-		}
-	}
-	return 0;
-}
-
 /*
  * Update min, max modified time for cost-benefit GC algorithm
  */
@@ -3775,16 +3737,10 @@ int build_segment_manager(struct f2fs_sb_info *sbi)
 		return err;
 
 	/* reinit free segmap based on SIT */
-	err = build_sit_entries(sbi);
-	if (err)
-		return err;
+	build_sit_entries(sbi);
 
 	init_free_segmap(sbi);
 	err = build_dirty_segmap(sbi);
-	if (err)
-		return err;
-
-	err = sanity_check_curseg(sbi);
 	if (err)
 		return err;
 

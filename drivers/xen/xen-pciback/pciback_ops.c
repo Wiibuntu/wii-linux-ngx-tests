@@ -127,6 +127,8 @@ void xen_pcibk_reset_device(struct pci_dev *dev)
 		if (pci_is_enabled(dev))
 			pci_disable_device(dev);
 
+		pci_write_config_word(dev, PCI_COMMAND, 0);
+
 		dev->is_busmaster = 0;
 	} else {
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
@@ -400,31 +402,16 @@ void xen_pcibk_do_op(struct work_struct *data)
 	smp_mb__before_atomic(); /* /after/ clearing PCIF_active */
 	clear_bit(_PDEVF_op_active, &pdev->flags);
 	smp_mb__after_atomic(); /* /before/ final check for work */
-}
 
-void xen_pcibk_do_op(struct work_struct *data)
-{
-	struct xen_pcibk_device *pdev =
-		container_of(data, struct xen_pcibk_device, op_work);
-
-	do {
-		xen_pcibk_do_one_op(pdev);
-	} while (xen_pcibk_test_op_pending(pdev));
-
-	xen_pcibk_lateeoi(pdev, 0);
+	/* Check to see if the driver domain tried to start another request in
+	 * between clearing _XEN_PCIF_active and clearing _PDEVF_op_active.
+	*/
+	xen_pcibk_test_and_schedule_op(pdev);
 }
 
 irqreturn_t xen_pcibk_handle_event(int irq, void *dev_id)
 {
 	struct xen_pcibk_device *pdev = dev_id;
-	bool eoi;
-
-	/* IRQs might come in before pdev->evtchn_irq is written. */
-	if (unlikely(pdev->evtchn_irq != irq))
-		pdev->evtchn_irq = irq;
-
-	eoi = test_and_set_bit(_EOI_pending, &pdev->flags);
-	WARN(eoi, "IRQ while EOI pending\n");
 
 	xen_pcibk_test_and_schedule_op(pdev);
 

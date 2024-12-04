@@ -144,11 +144,6 @@ enum key_state {
 	KEY_IS_POSITIVE,		/* Positively instantiated */
 };
 
-enum key_state {
-	KEY_IS_UNINSTANTIATED,
-	KEY_IS_POSITIVE,		/* Positively instantiated */
-};
-
 /*****************************************************************************/
 /*
  * authentication token / access credential / keyring

@@ -149,7 +149,7 @@ static void batadv_iv_ogm_orig_free(struct batadv_orig_node *orig_node)
  * Return: 0 on success, a negative error code otherwise.
  */
 static int batadv_iv_ogm_orig_add_if(struct batadv_orig_node *orig_node,
-				     unsigned int max_if_num)
+				     int max_if_num)
 {
 	void *data_ptr;
 	size_t old_size;
@@ -302,8 +302,7 @@ static struct batadv_orig_node *
 batadv_iv_ogm_orig_get(struct batadv_priv *bat_priv, const u8 *addr)
 {
 	struct batadv_orig_node *orig_node;
-	int hash_added;
-	size_t size;
+	int size, hash_added;
 
 	orig_node = batadv_orig_hash_find(bat_priv, addr);
 	if (orig_node)
@@ -367,18 +366,14 @@ static int batadv_iv_ogm_iface_enable(struct batadv_hard_iface *hard_iface)
 	unsigned char *ogm_buff;
 	u32 random_seqno;
 
-	mutex_lock(&hard_iface->bat_iv.ogm_buff_mutex);
-
 	/* randomize initial seqno to avoid collision */
 	get_random_bytes(&random_seqno, sizeof(random_seqno));
 	atomic_set(&hard_iface->bat_iv.ogm_seqno, random_seqno);
 
 	hard_iface->bat_iv.ogm_buff_len = BATADV_OGM_HLEN;
 	ogm_buff = kmalloc(hard_iface->bat_iv.ogm_buff_len, GFP_ATOMIC);
-	if (!ogm_buff) {
-		mutex_unlock(&hard_iface->bat_iv.ogm_buff_mutex);
+	if (!ogm_buff)
 		return -ENOMEM;
-	}
 
 	hard_iface->bat_iv.ogm_buff = ogm_buff;
 
@@ -493,7 +488,7 @@ static void batadv_iv_ogm_send_to_if(struct batadv_forw_packet *forw_packet,
 
 	/* adjust all flags and log packets */
 	while (batadv_iv_ogm_aggr_packet(buff_pos, forw_packet->packet_len,
-					 batadv_ogm_packet)) {
+					 batadv_ogm_packet->tvlv_len)) {
 		/* we might have aggregated direct link packets with an
 		 * ordinary base packet
 		 */
@@ -889,7 +884,7 @@ batadv_iv_ogm_slide_own_bcast_window(struct batadv_hard_iface *hard_iface)
 	u32 i;
 	size_t word_index;
 	u8 *w;
-	unsigned int if_num;
+	int if_num;
 
 	for (i = 0; i < hash->size; i++) {
 		head = &hash->table[i];
@@ -910,11 +905,7 @@ batadv_iv_ogm_slide_own_bcast_window(struct batadv_hard_iface *hard_iface)
 	}
 }
 
-/**
- * batadv_iv_ogm_schedule_buff() - schedule submission of hardif ogm buffer
- * @hard_iface: interface whose ogm buffer should be transmitted
- */
-static void batadv_iv_ogm_schedule_buff(struct batadv_hard_iface *hard_iface)
+static void batadv_iv_ogm_schedule(struct batadv_hard_iface *hard_iface)
 {
 	struct batadv_priv *bat_priv = netdev_priv(hard_iface->soft_iface);
 	unsigned char **ogm_buff = &hard_iface->bat_iv.ogm_buff;
@@ -937,12 +928,6 @@ static void batadv_iv_ogm_schedule_buff(struct batadv_hard_iface *hard_iface)
 	 */
 	if (hard_iface->if_status == BATADV_IF_TO_BE_ACTIVATED)
 		hard_iface->if_status = BATADV_IF_ACTIVE;
-
-	lockdep_assert_held(&hard_iface->bat_iv.ogm_buff_mutex);
-
-	/* interface already disabled by batadv_iv_ogm_iface_disable */
-	if (!*ogm_buff)
-		return;
 
 	primary_if = batadv_primary_if_get_selected(bat_priv);
 
@@ -1001,17 +986,6 @@ out:
 		batadv_hardif_put(primary_if);
 }
 
-static void batadv_iv_ogm_schedule(struct batadv_hard_iface *hard_iface)
-{
-	if (hard_iface->if_status == BATADV_IF_NOT_IN_USE ||
-	    hard_iface->if_status == BATADV_IF_TO_BE_REMOVED)
-		return;
-
-	mutex_lock(&hard_iface->bat_iv.ogm_buff_mutex);
-	batadv_iv_ogm_schedule_buff(hard_iface);
-	mutex_unlock(&hard_iface->bat_iv.ogm_buff_mutex);
-}
-
 /**
  * batadv_iv_ogm_orig_update - use OGM to update corresponding data in an
  *  originator
@@ -1040,7 +1014,7 @@ batadv_iv_ogm_orig_update(struct batadv_priv *bat_priv,
 	struct batadv_neigh_node *tmp_neigh_node = NULL;
 	struct batadv_neigh_node *router = NULL;
 	struct batadv_orig_node *orig_node_tmp;
-	unsigned int if_num;
+	int if_num;
 	u8 sum_orig, sum_neigh;
 	u8 *neigh_addr;
 	u8 tq_avg;
@@ -1718,9 +1692,9 @@ static void batadv_iv_ogm_process(const struct sk_buff *skb, int ogm_offset,
 
 	if (is_my_orig) {
 		unsigned long *word;
-		size_t offset;
+		int offset;
 		s32 bit_pos;
-		unsigned int if_num;
+		s16 if_num;
 		u8 *weight;
 
 		orig_neigh_node = batadv_iv_ogm_orig_get(bat_priv,
@@ -1864,7 +1838,7 @@ static int batadv_iv_ogm_receive(struct sk_buff *skb,
 
 	/* unpack the aggregated packets and process them one by one */
 	while (batadv_iv_ogm_aggr_packet(ogm_offset, skb_headlen(skb),
-					 ogm_packet)) {
+					 ogm_packet->tvlv_len)) {
 		batadv_iv_ogm_process(skb, ogm_offset, if_incoming);
 
 		ogm_offset += BATADV_OGM_HLEN;

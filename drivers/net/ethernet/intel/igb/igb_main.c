@@ -1227,12 +1227,8 @@ static int igb_alloc_q_vector(struct igb_adapter *adapter,
 	if (!q_vector) {
 		q_vector = kzalloc(size, GFP_KERNEL);
 	} else if (size > ksize(q_vector)) {
-		struct igb_q_vector *new_q_vector;
-
-		new_q_vector = kzalloc(size, GFP_KERNEL);
-		if (new_q_vector)
-			kfree_rcu(q_vector, rcu);
-		q_vector = new_q_vector;
+		kfree_rcu(q_vector, rcu);
+		q_vector = kzalloc(size, GFP_KERNEL);
 	} else {
 		memset(q_vector, 0, size);
 	}
@@ -1981,8 +1977,7 @@ static void igb_check_swap_media(struct igb_adapter *adapter)
 	if ((hw->phy.media_type == e1000_media_type_copper) &&
 	    (!(connsw & E1000_CONNSW_AUTOSENSE_EN))) {
 		swap_now = true;
-	} else if ((hw->phy.media_type != e1000_media_type_copper) &&
-		   !(connsw & E1000_CONNSW_SERDESD)) {
+	} else if (!(connsw & E1000_CONNSW_SERDESD)) {
 		/* copper signal takes time to appear */
 		if (adapter->copper_tries < 4) {
 			adapter->copper_tries++;
@@ -5836,18 +5831,9 @@ static void igb_reset_task(struct work_struct *work)
 	struct igb_adapter *adapter;
 	adapter = container_of(work, struct igb_adapter, reset_task);
 
-	rtnl_lock();
-	/* If we're already down or resetting, just bail */
-	if (test_bit(__IGB_DOWN, &adapter->state) ||
-	    test_bit(__IGB_RESETTING, &adapter->state)) {
-		rtnl_unlock();
-		return;
-	}
-
 	igb_dump(adapter);
 	netdev_err(adapter->netdev, "Reset adapter\n");
 	igb_reinit_locked(adapter);
-	rtnl_unlock();
 }
 
 /**
@@ -8330,6 +8316,10 @@ static int __igb_shutdown(struct pci_dev *pdev, bool *enable_wake,
 		}
 
 		ctrl = rd32(E1000_CTRL);
+		/* advertise wake from D3Cold */
+		#define E1000_CTRL_ADVD3WUC 0x00100000
+		/* phy power management enable */
+		#define E1000_CTRL_EN_PHY_PWR_MGMT 0x00200000
 		ctrl |= E1000_CTRL_ADVD3WUC;
 		wr32(E1000_CTRL, ctrl);
 
@@ -8343,14 +8333,11 @@ static int __igb_shutdown(struct pci_dev *pdev, bool *enable_wake,
 		wr32(E1000_WUFC, 0);
 	}
 
-	wake = wufc || adapter->en_mng_pt;
-	if (!wake)
+	*enable_wake = wufc || adapter->en_mng_pt;
+	if (!*enable_wake)
 		igb_power_down_link(adapter);
 	else
 		igb_power_up_link(adapter);
-
-	if (enable_wake)
-		*enable_wake = wake;
 
 	/* Release control of h/w to f/w.  If f/w is AMT enabled, this
 	 * would have already happened in close and is redundant.
@@ -8394,7 +8381,22 @@ static void igb_deliver_wake_packet(struct net_device *netdev)
 
 static int __maybe_unused igb_suspend(struct device *dev)
 {
-	return __igb_shutdown(to_pci_dev(dev), NULL, 0);
+	int retval;
+	bool wake;
+	struct pci_dev *pdev = to_pci_dev(dev);
+
+	retval = __igb_shutdown(pdev, &wake, 0);
+	if (retval)
+		return retval;
+
+	if (wake) {
+		pci_prepare_to_sleep(pdev);
+	} else {
+		pci_wake_from_d3(pdev, false);
+		pci_set_power_state(pdev, PCI_D3hot);
+	}
+
+	return 0;
 }
 
 static int __maybe_unused igb_resume(struct device *dev)
@@ -8465,7 +8467,22 @@ static int __maybe_unused igb_runtime_idle(struct device *dev)
 
 static int __maybe_unused igb_runtime_suspend(struct device *dev)
 {
-	return __igb_shutdown(to_pci_dev(dev), NULL, 1);
+	struct pci_dev *pdev = to_pci_dev(dev);
+	int retval;
+	bool wake;
+
+	retval = __igb_shutdown(pdev, &wake, 1);
+	if (retval)
+		return retval;
+
+	if (wake) {
+		pci_prepare_to_sleep(pdev);
+	} else {
+		pci_wake_from_d3(pdev, false);
+		pci_set_power_state(pdev, PCI_D3hot);
+	}
+
+	return 0;
 }
 
 static int __maybe_unused igb_runtime_resume(struct device *dev)
@@ -8591,11 +8608,6 @@ static pci_ers_result_t igb_io_error_detected(struct pci_dev *pdev,
 	struct net_device *netdev = pci_get_drvdata(pdev);
 	struct igb_adapter *adapter = netdev_priv(netdev);
 
-	if (state == pci_channel_io_normal) {
-		dev_warn(&pdev->dev, "Non-correctable non-fatal error reported.\n");
-		return PCI_ERS_RESULT_CAN_RECOVER;
-	}
-
 	netif_device_detach(netdev);
 
 	if (state == pci_channel_io_perm_failure)
@@ -8635,11 +8647,6 @@ static pci_ers_result_t igb_io_slot_reset(struct pci_dev *pdev)
 
 		pci_enable_wake(pdev, PCI_D3hot, 0);
 		pci_enable_wake(pdev, PCI_D3cold, 0);
-
-		/* In case of PCI error, adapter lose its HW address
-		 * so we should re-assign it here.
-		 */
-		hw->hw_addr = adapter->io_addr;
 
 		/* In case of PCI error, adapter lose its HW address
 		 * so we should re-assign it here.
@@ -8949,10 +8956,11 @@ static void igb_init_dmac(struct igb_adapter *adapter, u32 pba)
 	struct e1000_hw *hw = &adapter->hw;
 	u32 dmac_thr;
 	u16 hwm;
-	u32 reg;
 
 	if (hw->mac.type > e1000_82580) {
 		if (adapter->flags & IGB_FLAG_DMAC) {
+			u32 reg;
+
 			/* force threshold to 0. */
 			wr32(E1000_DMCTXTH, 0);
 
@@ -8985,6 +8993,7 @@ static void igb_init_dmac(struct igb_adapter *adapter, u32 pba)
 			/* Disable BMC-to-OS Watchdog Enable */
 			if (hw->mac.type != e1000_i354)
 				reg &= ~E1000_DMACR_DC_BMC2OSW_EN;
+
 			wr32(E1000_DMACR, reg);
 
 			/* no lower threshold to disable
@@ -9001,12 +9010,12 @@ static void igb_init_dmac(struct igb_adapter *adapter, u32 pba)
 			 */
 			wr32(E1000_DMCTXTH, (IGB_MIN_TXPBSIZE -
 			     (IGB_TX_BUF_4096 + adapter->max_frame_size)) >> 6);
-		}
 
-		if (hw->mac.type >= e1000_i210 ||
-		    (adapter->flags & IGB_FLAG_DMAC)) {
+			/* make low power state decision controlled
+			 * by DMA coal
+			 */
 			reg = rd32(E1000_PCIEMISC);
-			reg |= E1000_PCIEMISC_LX_DECISION;
+			reg &= ~E1000_PCIEMISC_LX_DECISION;
 			wr32(E1000_PCIEMISC, reg);
 		} /* endif adapter->dmac is not disabled */
 	} else if (hw->mac.type == e1000_82580) {

@@ -10,7 +10,6 @@
 #include <uapi/linux/magic.h>
 #include <linux/fs.h>
 #include <linux/namei.h>
-#include <linux/pagemap.h>
 #include <linux/xattr.h>
 #include <linux/mount.h>
 #include <linux/parser.h>
@@ -123,37 +122,6 @@ static struct dentry *ovl_d_real(struct dentry *dentry,
 		return real;
 bug:
 	WARN(1, "ovl_d_real(%pd4, %s:%lu): real dentry not found\n", dentry,
-	     inode ? inode->i_sb->s_id : "NULL", inode ? inode->i_ino : 0);
-	return dentry;
-}
-
-static struct dentry *ovl_d_real(struct dentry *dentry, struct inode *inode)
-{
-	struct dentry *real;
-
-	if (d_is_dir(dentry)) {
-		if (!inode || inode == d_inode(dentry))
-			return dentry;
-		goto bug;
-	}
-
-	real = ovl_dentry_upper(dentry);
-	if (real && (!inode || inode == d_inode(real)))
-		return real;
-
-	real = ovl_dentry_lower(dentry);
-	if (!real)
-		goto bug;
-
-	if (!inode || inode == d_inode(real))
-		return real;
-
-	/* Handle recursion */
-	if (real->d_flags & DCACHE_OP_REAL)
-		return real->d_op->d_real(real, inode);
-
-bug:
-	WARN(1, "ovl_d_real(%pd4, %s:%lu\n): real dentry not found\n", dentry,
 	     inode ? inode->i_sb->s_id : "NULL", inode ? inode->i_ino : 0);
 	return dentry;
 }
@@ -566,10 +534,6 @@ retry:
 		struct iattr attr = {
 			.ia_valid = ATTR_MODE,
 			.ia_mode = S_IFDIR | 0,
-		};
-		struct iattr attr = {
-			.ia_valid = ATTR_MODE,
-			.ia_mode = stat.mode,
 		};
 
 		if (work->d_inode) {
@@ -1303,9 +1267,6 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 	/* Never override disk quota limits or use reserved space */
 	cap_lower(cred->cap_effective, CAP_SYS_RESOURCE);
-
-	ovl_copyattr(ovl_dentry_real(root_dentry)->d_inode,
-		     root_dentry->d_inode);
 
 	sb->s_magic = OVERLAYFS_SUPER_MAGIC;
 	sb->s_op = &ovl_super_operations;

@@ -161,12 +161,6 @@ struct dmatest_done {
 	wait_queue_head_t	*wait;
 };
 
-/* poor man's completion - we want to use wait_event_freezable() on it */
-struct dmatest_done {
-	bool			done;
-	wait_queue_head_t	*wait;
-};
-
 struct dmatest_thread {
 	struct list_head	node;
 	struct dmatest_info	*info;
@@ -558,8 +552,8 @@ static int dmatest_func(void *data)
 	flags = DMA_CTRL_ACK | DMA_PREP_INTERRUPT;
 
 	ktime = ktime_get();
-	while (!(kthread_should_stop() ||
-	       (params->iterations && total_tests >= params->iterations))) {
+	while (!kthread_should_stop()
+	       && !(params->iterations && total_tests >= params->iterations)) {
 		struct dma_async_tx_descriptor *tx = NULL;
 		struct dmaengine_unmap_data *um;
 		dma_addr_t srcs[src_cnt];
@@ -632,9 +626,11 @@ static int dmatest_func(void *data)
 			srcs[i] = um->addr[i] + src_off;
 			ret = dma_mapping_error(dev->dev, um->addr[i]);
 			if (ret) {
+				dmaengine_unmap_put(um);
 				result("src mapping error", total_tests,
 				       src_off, dst_off, len, ret);
-				goto error_unmap_continue;
+				failed_tests++;
+				continue;
 			}
 			um->to_cnt++;
 		}
@@ -649,9 +645,11 @@ static int dmatest_func(void *data)
 					       DMA_BIDIRECTIONAL);
 			ret = dma_mapping_error(dev->dev, dsts[i]);
 			if (ret) {
+				dmaengine_unmap_put(um);
 				result("dst mapping error", total_tests,
 				       src_off, dst_off, len, ret);
-				goto error_unmap_continue;
+				failed_tests++;
+				continue;
 			}
 			um->bidi_cnt++;
 		}
@@ -767,12 +765,6 @@ static int dmatest_func(void *data)
 			verbose_result("test passed", total_tests, src_off,
 				       dst_off, len, 0);
 		}
-
-		continue;
-
-error_unmap_continue:
-		dmaengine_unmap_put(um);
-		failed_tests++;
 	}
 	ktime = ktime_sub(ktime_get(), ktime);
 	ktime = ktime_sub(ktime, comparetime);

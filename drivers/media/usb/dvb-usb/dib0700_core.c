@@ -619,6 +619,8 @@ int dib0700_streaming_ctrl(struct dvb_usb_adapter *adap, int onoff)
 		deb_info("the endpoint number (%i) is not correct, use the adapter id instead", adap->fe_adap[0].stream.props.endpoint);
 		if (onoff)
 			st->channel_state |=	1 << (adap->id);
+		else
+			st->channel_state |=	1 << ~(adap->id);
 	} else {
 		if (onoff)
 			st->channel_state |=	1 << (adap->fe_adap[0].stream.props.endpoint-2);
@@ -822,9 +824,6 @@ int dib0700_rc_setup(struct dvb_usb_device *d, struct usb_interface *intf)
 	if (intf->altsetting[0].desc.bNumEndpoints < rc_ep + 1)
 		return -ENODEV;
 
-	if (intf->cur_altsetting->desc.bNumEndpoints < rc_ep + 1)
-		return -ENODEV;
-
 	purb = usb_alloc_urb(0, GFP_KERNEL);
 	if (purb == NULL)
 		return -ENOMEM;
@@ -842,7 +841,7 @@ int dib0700_rc_setup(struct dvb_usb_device *d, struct usb_interface *intf)
 	 * Some devices like the Hauppauge NovaTD model 52009 use an interrupt
 	 * endpoint, while others use a bulk one.
 	 */
-	e = &intf->cur_altsetting->endpoint[rc_ep].desc;
+	e = &intf->altsetting[0].endpoint[rc_ep].desc;
 	if (usb_endpoint_dir_in(e)) {
 		if (usb_endpoint_xfer_bulk(e)) {
 			pipe = usb_rcvbulkpipe(d->udev, rc_ep);

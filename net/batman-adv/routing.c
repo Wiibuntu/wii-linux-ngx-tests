@@ -254,7 +254,6 @@ static int batadv_recv_my_icmp_packet(struct batadv_priv *bat_priv,
 		if (skb_cow(skb, ETH_HLEN) < 0)
 			goto out;
 
-		ethhdr = eth_hdr(skb);
 		icmph = (struct batadv_icmp_header *)skb->data;
 
 		ether_addr_copy(icmph->dst, icmph->orig);
@@ -525,52 +524,6 @@ batadv_last_bonding_replace(struct batadv_orig_node *orig_node,
 }
 
 /**
- * batadv_last_bonding_get - Get last_bonding_candidate of orig_node
- * @orig_node: originator node whose last bonding candidate should be retrieved
- *
- * Return: last bonding candidate of router or NULL if not found
- *
- * The object is returned with refcounter increased by 1.
- */
-static struct batadv_orig_ifinfo *
-batadv_last_bonding_get(struct batadv_orig_node *orig_node)
-{
-	struct batadv_orig_ifinfo *last_bonding_candidate;
-
-	spin_lock_bh(&orig_node->neigh_list_lock);
-	last_bonding_candidate = orig_node->last_bonding_candidate;
-
-	if (last_bonding_candidate)
-		atomic_inc(&last_bonding_candidate->refcount);
-	spin_unlock_bh(&orig_node->neigh_list_lock);
-
-	return last_bonding_candidate;
-}
-
-/**
- * batadv_last_bonding_replace - Replace last_bonding_candidate of orig_node
- * @orig_node: originator node whose bonding candidates should be replaced
- * @new_candidate: new bonding candidate or NULL
- */
-static void
-batadv_last_bonding_replace(struct batadv_orig_node *orig_node,
-			    struct batadv_orig_ifinfo *new_candidate)
-{
-	struct batadv_orig_ifinfo *old_candidate;
-
-	spin_lock_bh(&orig_node->neigh_list_lock);
-	old_candidate = orig_node->last_bonding_candidate;
-
-	if (new_candidate)
-		atomic_inc(&new_candidate->refcount);
-	orig_node->last_bonding_candidate = new_candidate;
-	spin_unlock_bh(&orig_node->neigh_list_lock);
-
-	if (old_candidate)
-		batadv_orig_ifinfo_free_ref(old_candidate);
-}
-
-/**
  * batadv_find_router - find a suitable router for this originator
  * @bat_priv: the bat priv with all the soft interface information
  * @orig_node: the destination node
@@ -790,7 +743,6 @@ free_skb:
 /**
  * batadv_reroute_unicast_packet - update the unicast header for re-routing
  * @bat_priv: the bat priv with all the soft interface information
- * @skb: unicast packet to process
  * @unicast_packet: the unicast header to be updated
  * @dst_addr: the payload destination
  * @vid: VLAN identifier
@@ -802,7 +754,7 @@ free_skb:
  * Return: true if the packet header has been updated, false otherwise
  */
 static bool
-batadv_reroute_unicast_packet(struct batadv_priv *bat_priv, struct sk_buff *skb,
+batadv_reroute_unicast_packet(struct batadv_priv *bat_priv,
 			      struct batadv_unicast_packet *unicast_packet,
 			      u8 *dst_addr, unsigned short vid)
 {
@@ -831,10 +783,8 @@ batadv_reroute_unicast_packet(struct batadv_priv *bat_priv, struct sk_buff *skb,
 	}
 
 	/* update the packet header */
-	skb_postpull_rcsum(skb, unicast_packet, sizeof(*unicast_packet));
 	ether_addr_copy(unicast_packet->dest, orig_addr);
 	unicast_packet->ttvn = orig_ttvn;
-	skb_postpush_rcsum(skb, unicast_packet, sizeof(*unicast_packet));
 
 	ret = true;
 out:
@@ -869,17 +819,13 @@ static bool batadv_check_unicast_ttvn(struct batadv_priv *bat_priv,
 	vid = batadv_get_vid(skb, hdr_len);
 	ethhdr = (struct ethhdr *)(skb->data + hdr_len);
 
-	/* do not reroute multicast frames in a unicast header */
-	if (is_multicast_ether_addr(ethhdr->h_dest))
-		return true;
-
 	/* check if the destination client was served by this node and it is now
 	 * roaming. In this case, it means that the node has got a ROAM_ADV
 	 * message and that it knows the new destination in the mesh to re-route
 	 * the packet to
 	 */
 	if (batadv_tt_local_client_is_roaming(bat_priv, ethhdr->h_dest, vid)) {
-		if (batadv_reroute_unicast_packet(bat_priv, skb, unicast_packet,
+		if (batadv_reroute_unicast_packet(bat_priv, unicast_packet,
 						  ethhdr->h_dest, vid))
 			batadv_dbg_ratelimited(BATADV_DBG_TT,
 					       bat_priv,
@@ -925,7 +871,7 @@ static bool batadv_check_unicast_ttvn(struct batadv_priv *bat_priv,
 	 * destination can possibly be updated and forwarded towards the new
 	 * target host
 	 */
-	if (batadv_reroute_unicast_packet(bat_priv, skb, unicast_packet,
+	if (batadv_reroute_unicast_packet(bat_priv, unicast_packet,
 					  ethhdr->h_dest, vid)) {
 		batadv_dbg_ratelimited(BATADV_DBG_TT, bat_priv,
 				       "Rerouting unicast packet to %pM (dst=%pM): TTVN mismatch old_ttvn=%u new_ttvn=%u\n",
@@ -1184,12 +1130,6 @@ int batadv_recv_frag_packet(struct sk_buff *skb,
 
 	batadv_inc_counter(bat_priv, BATADV_CNT_FRAG_RX);
 	batadv_add_counter(bat_priv, BATADV_CNT_FRAG_RX_BYTES, skb->len);
-
-	/* batadv_frag_skb_buffer will always consume the skb and
-	 * the caller should therefore never try to free the
-	 * skb after this point
-	 */
-	ret = NET_RX_SUCCESS;
 
 	/* Add fragment to buffer and merge if possible. */
 	if (!batadv_frag_skb_buffer(&skb, orig_node_src))

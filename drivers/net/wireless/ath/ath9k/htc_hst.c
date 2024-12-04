@@ -30,7 +30,6 @@ static int htc_issue_send(struct htc_target *target, struct sk_buff* skb,
 	hdr->endpoint_id = epid;
 	hdr->flags = flags;
 	hdr->payload_len = cpu_to_be16(len);
-	memset(hdr->control, 0, sizeof(hdr->control));
 
 	status = target->hif->send(target->hif_dev, endpoint->ul_pipeid, skb);
 
@@ -114,15 +113,6 @@ static void htc_process_conn_rsp(struct htc_target *target,
 
 	if (svc_rspmsg->status == HTC_SERVICE_SUCCESS) {
 		epid = svc_rspmsg->endpoint_id;
-
-		/* Check that the received epid for the endpoint to attach
-		 * a new service is valid. ENDPOINT0 can't be used here as it
-		 * is already reserved for HTC_CTRL_RSVD_SVC service and thus
-		 * should not be modified.
-		 */
-		if (epid <= ENDPOINT0 || epid >= ENDPOINT_MAX)
-			return;
-
 		service_id = be16_to_cpu(svc_rspmsg->service_id);
 		max_msglen = be16_to_cpu(svc_rspmsg->max_msg_len);
 		endpoint = &target->endpoint[epid];
@@ -180,7 +170,6 @@ static int htc_config_pipe_credits(struct htc_target *target)
 	time_left = wait_for_completion_timeout(&target->cmd_wait, HZ);
 	if (!time_left) {
 		dev_err(target->dev, "HTC credit config timeout\n");
-		kfree_skb(skb);
 		return -ETIMEDOUT;
 	}
 
@@ -216,7 +205,6 @@ static int htc_setup_complete(struct htc_target *target)
 	time_left = wait_for_completion_timeout(&target->cmd_wait, HZ);
 	if (!time_left) {
 		dev_err(target->dev, "HTC start timeout\n");
-		kfree_skb(skb);
 		return -ETIMEDOUT;
 	}
 
@@ -281,10 +269,6 @@ int htc_connect_service(struct htc_target *target,
 	conn_msg->dl_pipeid = endpoint->dl_pipeid;
 	conn_msg->ul_pipeid = endpoint->ul_pipeid;
 
-	/* To prevent infoleak */
-	conn_msg->svc_meta_len = 0;
-	conn_msg->pad = 0;
-
 	ret = htc_issue_send(target, skb, skb->len, 0, ENDPOINT0);
 	if (ret)
 		goto err;
@@ -293,7 +277,6 @@ int htc_connect_service(struct htc_target *target,
 	if (!time_left) {
 		dev_err(target->dev, "Service connection timeout for: %d\n",
 			service_connreq->service_id);
-		kfree_skb(skb);
 		return -ETIMEDOUT;
 	}
 
@@ -353,8 +336,6 @@ void ath9k_htc_txcompletion_cb(struct htc_target *htc_handle,
 
 	if (skb) {
 		htc_hdr = (struct htc_frame_hdr *) skb->data;
-		if (htc_hdr->endpoint_id >= ARRAY_SIZE(htc_handle->endpoint))
-			goto ret;
 		endpoint = &htc_handle->endpoint[htc_hdr->endpoint_id];
 		skb_pull(skb, sizeof(struct htc_frame_hdr));
 
@@ -441,30 +422,21 @@ void ath9k_htc_rx_msg(struct htc_target *htc_handle,
 
 		/* Handle trailer */
 		if (htc_hdr->flags & HTC_FLAGS_RECV_TRAILER) {
-			if (be32_to_cpu(*(__be32 *) skb->data) == 0x00C60000) {
+			if (be32_to_cpu(*(__be32 *) skb->data) == 0x00C60000)
 				/* Move past the Watchdog pattern */
 				htc_hdr = (struct htc_frame_hdr *)(skb->data + 4);
-				len -= 4;
-			}
 		}
 
 		/* Get the message ID */
-		if (unlikely(len < sizeof(struct htc_frame_hdr) + sizeof(__be16)))
-			goto invalid;
 		msg_id = (__be16 *) ((void *) htc_hdr +
 				     sizeof(struct htc_frame_hdr));
 
 		/* Now process HTC messages */
 		switch (be16_to_cpu(*msg_id)) {
 		case HTC_MSG_READY_ID:
-			if (unlikely(len < sizeof(struct htc_ready_msg)))
-				goto invalid;
 			htc_process_target_rdy(htc_handle, htc_hdr);
 			break;
 		case HTC_MSG_CONNECT_SERVICE_RESPONSE_ID:
-			if (unlikely(len < sizeof(struct htc_frame_hdr) +
-				     sizeof(struct htc_conn_svc_rspmsg)))
-				goto invalid;
 			htc_process_conn_rsp(htc_handle, htc_hdr);
 			break;
 		default:
@@ -483,8 +455,6 @@ void ath9k_htc_rx_msg(struct htc_target *htc_handle,
 		if (endpoint->ep_callbacks.rx)
 			endpoint->ep_callbacks.rx(endpoint->ep_callbacks.priv,
 						  skb, epid);
-		else
-			goto invalid;
 	}
 }
 

@@ -8,7 +8,6 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/dma-mapping.h>
-#include <linux/sizes.h>
 
 struct dma_coherent_mem {
 	void		*virt_base;

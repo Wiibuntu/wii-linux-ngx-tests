@@ -233,17 +233,6 @@ SECTIONS
 		*(.altinstr_aux)
 	}
 
-	/*
-	 * Section for code used exclusively before alternatives are run. All
-	 * references to such code must be patched out by alternatives, normally
-	 * by using X86_FEATURE_ALWAYS CPU feature bit.
-	 *
-	 * See static_cpu_has() for an example.
-	 */
-	.altinstr_aux : AT(ADDR(.altinstr_aux) - LOAD_OFFSET) {
-		*(.altinstr_aux)
-	}
-
 	INIT_DATA_SECTION(16)
 
 	.x86_cpu_dev.init : AT(ADDR(.x86_cpu_dev.init) - LOAD_OFFSET) {
@@ -399,7 +388,7 @@ SECTIONS
  * Per-cpu symbols which need to be offset from __per_cpu_load
  * for the boot processor.
  */
-#define INIT_PER_CPU(x) init_per_cpu__##x = ABSOLUTE(x) + __per_cpu_load
+#define INIT_PER_CPU(x) init_per_cpu__##x = x + __per_cpu_load
 INIT_PER_CPU(gdt_page);
 INIT_PER_CPU(irq_stack_union);
 

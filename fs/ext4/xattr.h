@@ -84,19 +84,6 @@ struct ext4_xattr_entry {
 
 #define EXT4_ZERO_XATTR_VALUE ((void *)-1)
 
-/*
- * If we want to add an xattr to the inode, we should make sure that
- * i_extra_isize is not 0 and that the inode size is not less than
- * EXT4_GOOD_OLD_INODE_SIZE + extra_isize + pad.
- *   EXT4_GOOD_OLD_INODE_SIZE   extra_isize header   entry   pad  data
- * |--------------------------|------------|------|---------|---|-------|
- */
-#define EXT4_INODE_HAS_XATTR_SPACE(inode)				\
-	((EXT4_I(inode)->i_extra_isize != 0) &&				\
-	 (EXT4_GOOD_OLD_INODE_SIZE + EXT4_I(inode)->i_extra_isize +	\
-	  sizeof(struct ext4_xattr_ibody_header) + EXT4_XATTR_PAD <=	\
-	  EXT4_INODE_SIZE((inode)->i_sb)))
-
 struct ext4_xattr_info {
 	const char *name;
 	const void *value;
@@ -161,38 +148,6 @@ static inline void ext4_write_unlock_xattr(struct inode *inode, int *save)
 	up_write(&EXT4_I(inode)->xattr_sem);
 }
 
-/*
- * The EXT4_STATE_NO_EXPAND is overloaded and used for two purposes.
- * The first is to signal that there the inline xattrs and data are
- * taking up so much space that we might as well not keep trying to
- * expand it.  The second is that xattr_sem is taken for writing, so
- * we shouldn't try to recurse into the inode expansion.  For this
- * second case, we need to make sure that we take save and restore the
- * NO_EXPAND state flag appropriately.
- */
-static inline void ext4_write_lock_xattr(struct inode *inode, int *save)
-{
-	down_write(&EXT4_I(inode)->xattr_sem);
-	*save = ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND);
-	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND);
-}
-
-static inline int ext4_write_trylock_xattr(struct inode *inode, int *save)
-{
-	if (down_write_trylock(&EXT4_I(inode)->xattr_sem) == 0)
-		return 0;
-	*save = ext4_test_inode_state(inode, EXT4_STATE_NO_EXPAND);
-	ext4_set_inode_state(inode, EXT4_STATE_NO_EXPAND);
-	return 1;
-}
-
-static inline void ext4_write_unlock_xattr(struct inode *inode, int *save)
-{
-	if (*save == 0)
-		ext4_clear_inode_state(inode, EXT4_STATE_NO_EXPAND);
-	up_write(&EXT4_I(inode)->xattr_sem);
-}
-
 extern ssize_t ext4_listxattr(struct dentry *, char *, size_t);
 
 extern int ext4_xattr_get(struct inode *, int, const char *, void *, size_t);
@@ -219,9 +174,9 @@ extern int ext4_xattr_ibody_find(struct inode *inode, struct ext4_xattr_info *i,
 extern int ext4_xattr_ibody_get(struct inode *inode, int name_index,
 				const char *name,
 				void *buffer, size_t buffer_size);
-extern int ext4_xattr_ibody_set(handle_t *handle, struct inode *inode,
-				struct ext4_xattr_info *i,
-				struct ext4_xattr_ibody_find *is);
+extern int ext4_xattr_ibody_inline_set(handle_t *handle, struct inode *inode,
+				       struct ext4_xattr_info *i,
+				       struct ext4_xattr_ibody_find *is);
 
 extern struct mb_cache *ext4_xattr_create_cache(void);
 extern void ext4_xattr_destroy_cache(struct mb_cache *);

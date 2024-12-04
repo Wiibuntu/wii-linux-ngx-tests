@@ -7,10 +7,7 @@
 
 #include <linux/linkage.h>
 #include <asm/asm-offsets.h>
-#include <asm/nospec-insn.h>
 #include <asm/sigp.h>
-
-	GEN_BR_THUNK %r14
 
 #
 # Issue "store status" for the current CPU to its prefix page

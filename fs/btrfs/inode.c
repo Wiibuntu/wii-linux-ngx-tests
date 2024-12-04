@@ -520,7 +520,6 @@ again:
 		pages = kcalloc(nr_pages, sizeof(struct page *), GFP_NOFS);
 		if (!pages) {
 			/* just bail out to the uncompressed code */
-			nr_pages = 0;
 			goto cont;
 		}
 
@@ -975,6 +974,7 @@ static noinline int cow_file_range(struct inode *inode,
 
 	num_bytes = ALIGN(end - start + 1, blocksize);
 	num_bytes = max(blocksize,  num_bytes);
+	disk_num_bytes = num_bytes;
 
 	inode_should_defrag(BTRFS_I(inode), start, end, num_bytes, SZ_64K);
 
@@ -1257,8 +1257,6 @@ static noinline int csum_exist_in_range(struct btrfs_fs_info *fs_info,
 		list_del(&sums->list);
 		kfree(sums);
 	}
-	if (ret < 0)
-		return ret;
 	return 1;
 }
 
@@ -1332,11 +1330,8 @@ next_slot:
 		leaf = path->nodes[0];
 		if (path->slots[0] >= btrfs_header_nritems(leaf)) {
 			ret = btrfs_next_leaf(root, path);
-			if (ret < 0) {
-				if (cow_start != (u64)-1)
-					cur_offset = cow_start;
+			if (ret < 0)
 				goto error;
-			}
 			if (ret > 0)
 				break;
 			leaf = path->nodes[0];
@@ -4528,19 +4523,8 @@ search_again:
 		if (found_type > min_type) {
 			del_item = 1;
 		} else {
-			if (item_end < new_size) {
-				/*
-				 * With NO_HOLES mode, for the following mapping
-				 *
-				 * [0-4k][hole][8k-12k]
-				 *
-				 * if truncating isize down to 6k, it ends up
-				 * isize being 8k.
-				 */
-				if (btrfs_fs_incompat(root->fs_info, NO_HOLES))
-					last_size = new_size;
+			if (item_end < new_size)
 				break;
-			}
 			if (found_key.offset >= new_size)
 				del_item = 1;
 			else
@@ -5438,13 +5422,11 @@ no_delete:
 }
 
 /*
- * Return the key found in the dir entry in the location pointer, fill @type
- * with BTRFS_FT_*, and return 0.
- *
+ * this returns the key found in the dir entry in the location pointer.
  * If no dir entries were found, location->objectid is 0.
  */
 static int btrfs_inode_by_name(struct inode *dir, struct dentry *dentry,
-			       struct btrfs_key *location, u8 *type)
+			       struct btrfs_key *location)
 {
 	const char *name = dentry->d_name.name;
 	int namelen = dentry->d_name.len;
@@ -5787,18 +5769,6 @@ struct inode *btrfs_lookup_dentry(struct inode *dir, struct dentry *dentry)
 
 	if (location.type == BTRFS_INODE_ITEM_KEY) {
 		inode = btrfs_iget(dir->i_sb, &location, root, NULL);
-		if (IS_ERR(inode))
-			return inode;
-
-		/* Do extra check against inode mode with di_type */
-		if (btrfs_inode_type(inode) != di_type) {
-			btrfs_crit(root->fs_info,
-"inode mode mismatch with dir: inode mode=0%o btrfs type=%u dir type=%u",
-				  inode->i_mode, btrfs_inode_type(inode),
-				  di_type);
-			iput(inode);
-			return ERR_PTR(-EUCLEAN);
-		}
 		return inode;
 	}
 
@@ -5967,7 +5937,6 @@ again:
 	if (ret < 0)
 		goto err;
 
-	emitted = false;
 	while (1) {
 		struct dir_entry *entry;
 
@@ -6440,6 +6409,11 @@ fail:
 	return ERR_PTR(ret);
 }
 
+static inline u8 btrfs_inode_type(struct inode *inode)
+{
+	return btrfs_type_by_mode[(inode->i_mode & S_IFMT) >> S_SHIFT];
+}
+
 /*
  * utility function to add 'inode' into 'parent_inode' with
  * a give name and a given sequence number.
@@ -6580,7 +6554,8 @@ static int btrfs_mknod(struct inode *dir, struct dentry *dentry,
 		goto out_unlock_inode;
 	} else {
 		btrfs_update_inode(trans, root, inode);
-		d_instantiate_new(dentry, inode);
+		unlock_new_inode(inode);
+		d_instantiate(dentry, inode);
 	}
 
 out_unlock:
@@ -6657,7 +6632,8 @@ static int btrfs_create(struct inode *dir, struct dentry *dentry,
 		goto out_unlock_inode;
 
 	BTRFS_I(inode)->io_tree.ops = &btrfs_extent_io_ops;
-	d_instantiate_new(dentry, inode);
+	unlock_new_inode(inode);
+	d_instantiate(dentry, inode);
 
 out_unlock:
 	btrfs_end_transaction(trans);
@@ -6804,7 +6780,12 @@ static int btrfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 	if (err)
 		goto out_fail_inode;
 
-	d_instantiate_new(dentry, inode);
+	d_instantiate(dentry, inode);
+	/*
+	 * mkdir is special.  We're unlocking after we call d_instantiate
+	 * to avoid a race with nfsd calling d_instantiate.
+	 */
+	unlock_new_inode(inode);
 	drop_on_err = 0;
 
 out_fail:
@@ -7035,14 +7016,6 @@ again:
 	extent_start = found_key.offset;
 	if (found_type == BTRFS_FILE_EXTENT_REG ||
 	    found_type == BTRFS_FILE_EXTENT_PREALLOC) {
-		/* Only regular file could have regular/prealloc extent */
-		if (!S_ISREG(inode->i_mode)) {
-			err = -EUCLEAN;
-			btrfs_crit(root->fs_info,
-		"regular/prealloc extent found for non-regular inode %llu",
-				   btrfs_ino(inode));
-			goto out;
-		}
 		extent_end = extent_start +
 		       btrfs_file_extent_num_bytes(leaf, item);
 
@@ -8616,8 +8589,7 @@ submit:
 	if (!status)
 		return 0;
 
-	if (bio != orig_bio)
-		bio_put(bio);
+	bio_put(bio);
 out_err:
 	dip->errors = 1;
 	/*
@@ -10467,7 +10439,8 @@ static int btrfs_symlink(struct inode *dir, struct dentry *dentry,
 		goto out_unlock_inode;
 	}
 
-	d_instantiate_new(dentry, inode);
+	unlock_new_inode(inode);
+	d_instantiate(dentry, inode);
 
 out_unlock:
 	btrfs_end_transaction(trans);

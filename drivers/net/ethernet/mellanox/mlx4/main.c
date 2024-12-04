@@ -2504,7 +2504,6 @@ static int mlx4_allocate_default_counters(struct mlx4_dev *dev)
 
 		if (!err || err == -ENOSPC) {
 			priv->def_counter[port] = idx;
-			err = 0;
 		} else if (err == -ENOENT) {
 			err = 0;
 			continue;
@@ -2555,8 +2554,7 @@ int mlx4_counter_alloc(struct mlx4_dev *dev, u32 *idx, u8 usage)
 				   MLX4_CMD_TIME_CLASS_A, MLX4_CMD_WRAPPED);
 		if (!err)
 			*idx = get_param_l(&out_param);
-		if (WARN_ON(err == -ENOSPC))
-			err = -EINVAL;
+
 		return err;
 	}
 	return __mlx4_counter_alloc(dev, idx);
@@ -3468,7 +3466,6 @@ slave_start:
 
 		if (!SRIOV_VALID_STATE(dev->flags)) {
 			mlx4_err(dev, "Invalid SRIOV state\n");
-			err = -EINVAL;
 			goto err_close;
 		}
 	}
@@ -3979,9 +3976,6 @@ static void mlx4_remove_one(struct pci_dev *pdev)
 	struct mlx4_priv *priv = mlx4_priv(dev);
 	struct devlink *devlink = priv_to_devlink(priv);
 	int active_vfs = 0;
-
-	if (mlx4_is_slave(dev))
-		persist->interface_state |= MLX4_INTERFACE_STATE_NOWAIT;
 
 	if (mlx4_is_slave(dev))
 		persist->interface_state |= MLX4_INTERFACE_STATE_NOWAIT;

@@ -984,7 +984,6 @@ static void vhci_shutdown_connection(struct usbip_device *ud)
 	if (vdev->ud.tcp_socket) {
 		sockfd_put(vdev->ud.tcp_socket);
 		vdev->ud.tcp_socket = NULL;
-		vdev->ud.sockfd = -1;
 	}
 	pr_info("release socket\n");
 

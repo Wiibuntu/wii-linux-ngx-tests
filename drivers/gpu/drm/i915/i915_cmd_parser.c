@@ -50,11 +50,13 @@
  * granting userspace undue privileges. There are three categories of privilege.
  *
  * First, commands which are explicitly defined as privileged or which should
- * only be used by the kernel driver. The parser rejects such commands
+ * only be used by the kernel driver. The parser generally rejects such
+ * commands, though it may allow some from the drm master process.
  *
  * Second, commands which access registers. To support correct/enhanced
  * userspace functionality, particularly certain OpenGL extensions, the parser
- * provides a whitelist of registers which userspace may safely access
+ * provides a whitelist of registers which userspace may safely access (for both
+ * normal and drm master processes).
  *
  * Third, commands which access privileged memory (i.e. GGTT, HWS page, etc).
  * The parser always rejects such commands.
@@ -79,9 +81,9 @@
  * in the per-engine command tables.
  *
  * Other command table entries map fairly directly to high level categories
- * mentioned above: rejected, register whitelist. The parser implements a number
- * of checks, including the privileged memory checks, via a general bitmasking
- * mechanism.
+ * mentioned above: rejected, master-only, register whitelist. The parser
+ * implements a number of checks, including the privileged memory checks, via a
+ * general bitmasking mechanism.
  */
 
 /*
@@ -204,13 +206,14 @@ struct drm_i915_cmd_table {
 #define R CMD_DESC_REJECT
 #define W CMD_DESC_REGISTER
 #define B CMD_DESC_BITMASK
+#define M CMD_DESC_MASTER
 
 /*            Command                          Mask   Fixed Len   Action
 	      ---------------------------------------------------------- */
-static const struct drm_i915_cmd_descriptor gen7_common_cmds[] = {
+static const struct drm_i915_cmd_descriptor common_cmds[] = {
 	CMD(  MI_NOOP,                          SMI,    F,  1,      S  ),
 	CMD(  MI_USER_INTERRUPT,                SMI,    F,  1,      R  ),
-	CMD(  MI_WAIT_FOR_EVENT,                SMI,    F,  1,      R  ),
+	CMD(  MI_WAIT_FOR_EVENT,                SMI,    F,  1,      M  ),
 	CMD(  MI_ARB_CHECK,                     SMI,    F,  1,      S  ),
 	CMD(  MI_REPORT_HEAD,                   SMI,    F,  1,      S  ),
 	CMD(  MI_SUSPEND_FLUSH,                 SMI,    F,  1,      S  ),
@@ -240,7 +243,7 @@ static const struct drm_i915_cmd_descriptor gen7_common_cmds[] = {
 	CMD(  MI_BATCH_BUFFER_START,            SMI,   !F,  0xFF,   S  ),
 };
 
-static const struct drm_i915_cmd_descriptor gen7_render_cmds[] = {
+static const struct drm_i915_cmd_descriptor render_cmds[] = {
 	CMD(  MI_FLUSH,                         SMI,    F,  1,      S  ),
 	CMD(  MI_ARB_ON_OFF,                    SMI,    F,  1,      R  ),
 	CMD(  MI_PREDICATE,                     SMI,    F,  1,      S  ),
@@ -307,7 +310,7 @@ static const struct drm_i915_cmd_descriptor hsw_render_cmds[] = {
 	CMD(  MI_URB_ATOMIC_ALLOC,              SMI,    F,  1,      S  ),
 	CMD(  MI_SET_APPID,                     SMI,    F,  1,      S  ),
 	CMD(  MI_RS_CONTEXT,                    SMI,    F,  1,      S  ),
-	CMD(  MI_LOAD_SCAN_LINES_INCL,          SMI,   !F,  0x3F,   R  ),
+	CMD(  MI_LOAD_SCAN_LINES_INCL,          SMI,   !F,  0x3F,   M  ),
 	CMD(  MI_LOAD_SCAN_LINES_EXCL,          SMI,   !F,  0x3F,   R  ),
 	CMD(  MI_LOAD_REGISTER_REG,             SMI,   !F,  0xFF,   W,
 	      .reg = { .offset = 1, .mask = 0x007FFFFC, .step = 1 }    ),
@@ -324,7 +327,7 @@ static const struct drm_i915_cmd_descriptor hsw_render_cmds[] = {
 	CMD(  GFX_OP_3DSTATE_BINDING_TABLE_EDIT_PS,  S3D,   !F,  0x1FF,  S  ),
 };
 
-static const struct drm_i915_cmd_descriptor gen7_video_cmds[] = {
+static const struct drm_i915_cmd_descriptor video_cmds[] = {
 	CMD(  MI_ARB_ON_OFF,                    SMI,    F,  1,      R  ),
 	CMD(  MI_SET_APPID,                     SMI,    F,  1,      S  ),
 	CMD(  MI_STORE_DWORD_IMM,               SMI,   !F,  0xFF,   B,
@@ -368,7 +371,7 @@ static const struct drm_i915_cmd_descriptor gen7_video_cmds[] = {
 	CMD(  MFX_WAIT,                         SMFX,   F,  1,      S  ),
 };
 
-static const struct drm_i915_cmd_descriptor gen7_vecs_cmds[] = {
+static const struct drm_i915_cmd_descriptor vecs_cmds[] = {
 	CMD(  MI_ARB_ON_OFF,                    SMI,    F,  1,      R  ),
 	CMD(  MI_SET_APPID,                     SMI,    F,  1,      S  ),
 	CMD(  MI_STORE_DWORD_IMM,               SMI,   !F,  0xFF,   B,
@@ -406,7 +409,7 @@ static const struct drm_i915_cmd_descriptor gen7_vecs_cmds[] = {
 	      }},						       ),
 };
 
-static const struct drm_i915_cmd_descriptor gen7_blt_cmds[] = {
+static const struct drm_i915_cmd_descriptor blt_cmds[] = {
 	CMD(  MI_DISPLAY_FLIP,                  SMI,   !F,  0xFF,   R  ),
 	CMD(  MI_STORE_DWORD_IMM,               SMI,   !F,  0x3FF,  B,
 	      .bits = {{
@@ -457,43 +460,39 @@ static const struct drm_i915_cmd_descriptor noop_desc =
 #undef R
 #undef W
 #undef B
+#undef M
 
-static const struct drm_i915_cmd_table gen7_render_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_render_cmds, ARRAY_SIZE(gen7_render_cmds) },
+static const struct drm_i915_cmd_table gen7_render_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ render_cmds, ARRAY_SIZE(render_cmds) },
 };
 
-static const struct drm_i915_cmd_table hsw_render_ring_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_render_cmds, ARRAY_SIZE(gen7_render_cmds) },
+static const struct drm_i915_cmd_table hsw_render_ring_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ render_cmds, ARRAY_SIZE(render_cmds) },
 	{ hsw_render_cmds, ARRAY_SIZE(hsw_render_cmds) },
 };
 
-static const struct drm_i915_cmd_table gen7_video_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_video_cmds, ARRAY_SIZE(gen7_video_cmds) },
+static const struct drm_i915_cmd_table gen7_video_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ video_cmds, ARRAY_SIZE(video_cmds) },
 };
 
-static const struct drm_i915_cmd_table hsw_vebox_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_vecs_cmds, ARRAY_SIZE(gen7_vecs_cmds) },
+static const struct drm_i915_cmd_table hsw_vebox_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ vecs_cmds, ARRAY_SIZE(vecs_cmds) },
 };
 
-static const struct drm_i915_cmd_table gen7_blt_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_blt_cmds, ARRAY_SIZE(gen7_blt_cmds) },
+static const struct drm_i915_cmd_table gen7_blt_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ blt_cmds, ARRAY_SIZE(blt_cmds) },
 };
 
-static const struct drm_i915_cmd_table hsw_blt_ring_cmd_table[] = {
-	{ gen7_common_cmds, ARRAY_SIZE(gen7_common_cmds) },
-	{ gen7_blt_cmds, ARRAY_SIZE(gen7_blt_cmds) },
+static const struct drm_i915_cmd_table hsw_blt_ring_cmds[] = {
+	{ common_cmds, ARRAY_SIZE(common_cmds) },
+	{ blt_cmds, ARRAY_SIZE(blt_cmds) },
 	{ hsw_blt_cmds, ARRAY_SIZE(hsw_blt_cmds) },
 };
-
-static const struct drm_i915_cmd_table gen9_blt_cmd_table[] = {
-	{ gen9_blt_cmds, ARRAY_SIZE(gen9_blt_cmds) },
-};
-
 
 /*
  * Register whitelists, sorted by increasing register offset.
@@ -528,10 +527,6 @@ struct drm_i915_reg_descriptor {
 #define REG64(_reg) \
 	{ .addr = _reg }, \
 	{ .addr = _reg ## _UDW }
-
-#define REG64_IDX(_reg, idx) \
-	{ .addr = _reg(idx) }, \
-	{ .addr = _reg ## _UDW(idx) }
 
 #define REG64_IDX(_reg, idx) \
 	{ .addr = _reg(idx) }, \
@@ -614,27 +609,17 @@ static const struct drm_i915_reg_descriptor gen7_blt_regs[] = {
 	REG64_IDX(RING_TIMESTAMP, BLT_RING_BASE),
 };
 
-static const struct drm_i915_reg_descriptor gen9_blt_regs[] = {
-	REG64_IDX(RING_TIMESTAMP, RENDER_RING_BASE),
-	REG64_IDX(RING_TIMESTAMP, BSD_RING_BASE),
-	REG32(BCS_SWCTRL),
-	REG64_IDX(RING_TIMESTAMP, BLT_RING_BASE),
-	REG64_IDX(BCS_GPR, 0),
-	REG64_IDX(BCS_GPR, 1),
-	REG64_IDX(BCS_GPR, 2),
-	REG64_IDX(BCS_GPR, 3),
-	REG64_IDX(BCS_GPR, 4),
-	REG64_IDX(BCS_GPR, 5),
-	REG64_IDX(BCS_GPR, 6),
-	REG64_IDX(BCS_GPR, 7),
-	REG64_IDX(BCS_GPR, 8),
-	REG64_IDX(BCS_GPR, 9),
-	REG64_IDX(BCS_GPR, 10),
-	REG64_IDX(BCS_GPR, 11),
-	REG64_IDX(BCS_GPR, 12),
-	REG64_IDX(BCS_GPR, 13),
-	REG64_IDX(BCS_GPR, 14),
-	REG64_IDX(BCS_GPR, 15),
+static const struct drm_i915_reg_descriptor ivb_master_regs[] = {
+	REG32(FORCEWAKE_MT),
+	REG32(DERRMR),
+	REG32(GEN7_PIPE_DE_LOAD_SL(PIPE_A)),
+	REG32(GEN7_PIPE_DE_LOAD_SL(PIPE_B)),
+	REG32(GEN7_PIPE_DE_LOAD_SL(PIPE_C)),
+};
+
+static const struct drm_i915_reg_descriptor hsw_master_regs[] = {
+	REG32(FORCEWAKE_MT),
+	REG32(DERRMR),
 };
 
 #undef REG64
@@ -1159,6 +1144,12 @@ static bool check_cmd(const struct intel_engine_cs *engine,
 		return false;
 	}
 
+	if ((desc->flags & CMD_DESC_MASTER) && !is_master) {
+		DRM_DEBUG_DRIVER("CMD: Rejected master-only command: 0x%08X\n",
+				 *cmd);
+		return false;
+	}
+
 	if (desc->flags & CMD_DESC_REGISTER) {
 		/*
 		 * Get the distance between individual register offset
@@ -1282,8 +1273,6 @@ int intel_engine_cmd_parser(struct intel_engine_cs *engine,
 		return PTR_ERR(cmd);
 	}
 
-	init_whitelist(ctx, batch_len);
-
 	/*
 	 * We use the batch length as size because the shadow object is as
 	 * large or larger and copy_batch() will write MI_NOPs to the extra
@@ -1307,6 +1296,16 @@ int intel_engine_cmd_parser(struct intel_engine_cs *engine,
 			DRM_DEBUG_DRIVER("CMD: Unrecognized command: 0x%08X\n",
 					 *cmd);
 			ret = -EINVAL;
+			break;
+		}
+
+		/*
+		 * If the batch buffer contains a chained batch, return an
+		 * error that tells the caller to abort and dispatch the
+		 * workload as a non-secure batch.
+		 */
+		if (desc->cmd.value == MI_BATCH_BUFFER_START) {
+			ret = -EACCES;
 			break;
 		}
 

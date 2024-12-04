@@ -81,8 +81,7 @@ static inline struct anon_vma *anon_vma_alloc(void)
 	anon_vma = kmem_cache_alloc(anon_vma_cachep, GFP_KERNEL);
 	if (anon_vma) {
 		atomic_set(&anon_vma->refcount, 1);
-		anon_vma->num_children = 0;
-		anon_vma->num_active_vmas = 0;
+		anon_vma->degree = 1;	/* Reference for first vma */
 		anon_vma->parent = anon_vma;
 		/*
 		 * Initialise the anon_vma root to point to itself. If called
@@ -279,19 +278,19 @@ int anon_vma_clone(struct vm_area_struct *dst, struct vm_area_struct *src)
 		anon_vma_chain_link(dst, avc, anon_vma);
 
 		/*
-		 * Reuse existing anon_vma if it has no vma and only one
-		 * anon_vma child.
+		 * Reuse existing anon_vma if its degree lower than two,
+		 * that means it has no vma and only one anon_vma child.
 		 *
-		 * Root anon_vma is never reused:
+		 * Do not chose parent anon_vma, otherwise first child
+		 * will always reuse it. Root anon_vma is never reused:
 		 * it has self-parent reference and at least one child.
 		 */
-		if (!dst->anon_vma &&
-		    anon_vma->num_children < 2 &&
-		    anon_vma->num_active_vmas == 0)
+		if (!dst->anon_vma && anon_vma != src->anon_vma &&
+				anon_vma->degree < 2)
 			dst->anon_vma = anon_vma;
 	}
 	if (dst->anon_vma)
-		dst->anon_vma->num_active_vmas++;
+		dst->anon_vma->degree++;
 	unlock_anon_vma_root(root);
 	return 0;
 
@@ -341,7 +340,6 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	anon_vma = anon_vma_alloc();
 	if (!anon_vma)
 		goto out_error;
-	anon_vma->num_active_vmas++;
 	avc = anon_vma_chain_alloc(GFP_KERNEL);
 	if (!avc)
 		goto out_error_free_anon_vma;
@@ -362,7 +360,7 @@ int anon_vma_fork(struct vm_area_struct *vma, struct vm_area_struct *pvma)
 	vma->anon_vma = anon_vma;
 	anon_vma_lock_write(anon_vma);
 	anon_vma_chain_link(vma, avc, anon_vma);
-	anon_vma->parent->num_children++;
+	anon_vma->parent->degree++;
 	anon_vma_unlock_write(anon_vma);
 
 	return 0;
@@ -402,7 +400,7 @@ void unlink_anon_vmas(struct vm_area_struct *vma)
 		anon_vma_chain_free(avc);
 	}
 	if (vma->anon_vma)
-		vma->anon_vma->num_active_vmas--;
+		vma->anon_vma->degree--;
 	unlock_anon_vma_root(root);
 
 	/*
@@ -615,13 +613,6 @@ static void set_tlb_ubc_flush_pending(struct mm_struct *mm, bool writable)
 	mm->tlb_flush_batched = true;
 
 	/*
-	 * Ensure compiler does not re-order the setting of tlb_flush_batched
-	 * before the PTE is cleared.
-	 */
-	barrier();
-	mm->tlb_flush_batched = true;
-
-	/*
 	 * If the PTE was dirty then it's best to assume it's writable. The
 	 * caller must use try_to_unmap_flush_dirty() or try_to_unmap_flush()
 	 * before the page is queued for IO.
@@ -647,35 +638,6 @@ static bool should_defer_flush(struct mm_struct *mm, enum ttu_flags flags)
 	put_cpu();
 
 	return should_defer;
-}
-
-/*
- * Reclaim unmaps pages under the PTL but do not flush the TLB prior to
- * releasing the PTL if TLB flushes are batched. It's possible for a parallel
- * operation such as mprotect or munmap to race between reclaim unmapping
- * the page and flushing the page. If this race occurs, it potentially allows
- * access to data via a stale TLB entry. Tracking all mm's that have TLB
- * batching in flight would be expensive during reclaim so instead track
- * whether TLB batching occurred in the past and if so then do a flush here
- * if required. This will cost one additional flush per reclaim cycle paid
- * by the first operation at risk such as mprotect and mumap.
- *
- * This must be called under the PTL so that an access to tlb_flush_batched
- * that is potentially a "reclaim vs mprotect/munmap/etc" race will synchronise
- * via the PTL.
- */
-void flush_tlb_batched_pending(struct mm_struct *mm)
-{
-	if (mm->tlb_flush_batched) {
-		flush_tlb_mm(mm);
-
-		/*
-		 * Do not allow the compiler to re-order the clearing of
-		 * tlb_flush_batched before the tlb is flushed.
-		 */
-		barrier();
-		mm->tlb_flush_batched = false;
-	}
 }
 
 /*

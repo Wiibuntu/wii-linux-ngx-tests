@@ -313,11 +313,6 @@ static inline struct Qdisc *qdisc_root(const struct Qdisc *qdisc)
 	return q;
 }
 
-static inline struct Qdisc *qdisc_root_bh(const struct Qdisc *qdisc)
-{
-	return rcu_dereference_bh(qdisc->dev_queue->qdisc);
-}
-
 static inline struct Qdisc *qdisc_root_sleeping(const struct Qdisc *qdisc)
 {
 	return qdisc->dev_queue->qdisc_sleeping;
@@ -482,15 +477,6 @@ static inline bool skb_skip_tc_classify(struct sk_buff *skb)
 	}
 #endif
 	return false;
-}
-
-static inline bool skb_at_tc_ingress(const struct sk_buff *skb)
-{
-#ifdef CONFIG_NET_CLS_ACT
-	return G_TC_AT(skb->tc_verd) & AT_INGRESS;
-#else
-	return false;
-#endif
 }
 
 /* Reset all TX qdiscs greater then index of a device.  */
@@ -888,7 +874,6 @@ struct psched_ratecfg {
 	u64	rate_bytes_ps; /* bytes per second */
 	u32	mult;
 	u16	overhead;
-	u16	mpu;
 	u8	linklayer;
 	u8	shift;
 };
@@ -897,9 +882,6 @@ static inline u64 psched_l2t_ns(const struct psched_ratecfg *r,
 				unsigned int len)
 {
 	len += r->overhead;
-
-	if (len < r->mpu)
-		len = r->mpu;
 
 	if (unlikely(r->linklayer == TC_LINKLAYER_ATM))
 		return ((u64)(DIV_ROUND_UP(len,48)*53) * r->mult) >> r->shift;
@@ -923,7 +905,6 @@ static inline void psched_ratecfg_getrate(struct tc_ratespec *res,
 	res->rate = min_t(u64, r->rate_bytes_ps, ~0U);
 
 	res->overhead = r->overhead;
-	res->mpu = r->mpu;
 	res->linklayer = (r->linklayer & TC_LINKLAYER_MASK);
 }
 

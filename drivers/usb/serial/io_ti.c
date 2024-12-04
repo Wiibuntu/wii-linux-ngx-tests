@@ -168,7 +168,6 @@ static const struct usb_device_id edgeport_2port_id_table[] = {
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_8S) },
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_416) },
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_416B) },
-	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_E5805A) },
 	{ }
 };
 
@@ -207,7 +206,6 @@ static const struct usb_device_id id_table_combined[] = {
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_8S) },
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_416) },
 	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_TI_EDGEPORT_416B) },
-	{ USB_DEVICE(USB_VENDOR_ID_ION, ION_DEVICE_ID_E5805A) },
 	{ }
 };
 
@@ -992,7 +990,7 @@ static int check_fw_sanity(struct edgeport_serial *serial,
 		return -EINVAL;
 	}
 
-	return 1;
+	return 0;
 }
 
 /*
@@ -2548,13 +2546,6 @@ static int edge_startup(struct usb_serial *serial)
 	struct edgeport_serial *edge_serial;
 	int status;
 	u16 product_id;
-
-	/* Make sure we have the required endpoints when in download mode. */
-	if (serial->interface->cur_altsetting->desc.bNumEndpoints > 1) {
-		if (serial->num_bulk_in < serial->num_ports ||
-				serial->num_bulk_out < serial->num_ports)
-			return -ENODEV;
-	}
 
 	/* create our private serial structure */
 	edge_serial = kzalloc(sizeof(struct edgeport_serial), GFP_KERNEL);

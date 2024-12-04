@@ -1036,8 +1036,6 @@ static int gmc_v8_0_late_init(void *handle)
 
 #define mmMC_SEQ_MISC0_FIJI 0xA71
 
-#define mmMC_SEQ_MISC0_FIJI 0xA71
-
 static int gmc_v8_0_sw_init(void *handle)
 {
 	int r;

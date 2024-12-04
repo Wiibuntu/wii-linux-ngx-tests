@@ -623,10 +623,7 @@ static void __rs_deltree(struct gfs2_blkreserv *rs)
 	RB_CLEAR_NODE(&rs->rs_node);
 
 	if (rs->rs_free) {
-		u64 last_block = gfs2_rbm_to_block(&rs->rs_rbm) +
-				 rs->rs_free - 1;
-		struct gfs2_rbm last_rbm = { .rgd = rs->rs_rbm.rgd, };
-		struct gfs2_bitmap *start, *last;
+		struct gfs2_bitmap *bi = rbm_bi(&rs->rs_rbm);
 
 		/* return reserved blocks to the rgrp */
 		BUG_ON(rs->rs_rbm.rgd->rd_reserved < rs->rs_free);
@@ -637,13 +634,7 @@ static void __rs_deltree(struct gfs2_blkreserv *rs)
 		   it will force the number to be recalculated later. */
 		rgd->rd_extfail_pt += rs->rs_free;
 		rs->rs_free = 0;
-		if (gfs2_rbm_from_block(&last_rbm, last_block))
-			return;
-		start = rbm_bi(&rs->rs_rbm);
-		last = rbm_bi(&last_rbm);
-		do
-			clear_bit(GBF_FULL, &start->bi_flags);
-		while (start++ != last);
+		clear_bit(GBF_FULL, &bi->bi_flags);
 	}
 }
 
@@ -989,10 +980,6 @@ static int gfs2_ri_update(struct gfs2_inode *ip)
 	if (error < 0)
 		return error;
 
-	if (RB_EMPTY_ROOT(&sdp->sd_rindex_tree)) {
-		fs_err(sdp, "no resource groups found in the file system.\n");
-		return -ENOENT;
-	}
 	set_rgrp_preferences(sdp);
 
 	sdp->sd_rindex_uptodate = 1;
@@ -1128,7 +1115,7 @@ static u32 count_unlinked(struct gfs2_rgrpd *rgd)
  * @rgd: the struct gfs2_rgrpd describing the RG to read in
  *
  * Read in all of a Resource Group's header and bitmap blocks.
- * Caller must eventually call gfs2_rgrp_brelse() to free the bitmaps.
+ * Caller must eventually call gfs2_rgrp_relse() to free the bitmaps.
  *
  * Returns: errno
  */
@@ -1213,7 +1200,7 @@ static int update_rgrp_lvb(struct gfs2_rgrpd *rgd)
 	rl_flags = be32_to_cpu(rgd->rd_rgl->rl_flags);
 	rl_flags &= ~GFS2_RDF_MASK;
 	rgd->rd_flags &= GFS2_RDF_MASK;
-	rgd->rd_flags |= (rl_flags | GFS2_RDF_CHECK);
+	rgd->rd_flags |= (rl_flags | GFS2_RDF_UPTODATE | GFS2_RDF_CHECK);
 	if (rgd->rd_rgl->rl_unlinked == 0)
 		rgd->rd_flags &= ~GFS2_RDF_CHECK;
 	rgd->rd_free = be32_to_cpu(rgd->rd_rgl->rl_free);
@@ -1364,9 +1351,6 @@ int gfs2_fitrim(struct file *filp, void __user *argp)
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (!test_bit(SDF_JOURNAL_LIVE, &sdp->sd_flags))
-		return -EROFS;
-
 	if (!blk_queue_discard(q))
 		return -EOPNOTSUPP;
 
@@ -1379,8 +1363,7 @@ int gfs2_fitrim(struct file *filp, void __user *argp)
 
 	start = r.start >> bs_shift;
 	end = start + (r.len >> bs_shift);
-	minlen = max_t(u64, r.minlen, sdp->sd_sb.sb_bsize);
-	minlen = max_t(u64, minlen,
+	minlen = max_t(u64, r.minlen,
 		       q->limits.discard_granularity) >> bs_shift;
 
 	if (end <= start || minlen > sdp->sd_max_rg_data)

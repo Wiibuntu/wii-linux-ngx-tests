@@ -66,7 +66,6 @@ struct ad_sigma_delta {
 	bool			irq_dis;
 
 	bool			bus_locked;
-	bool			keep_cs_asserted;
 
 	uint8_t			comm;
 
@@ -111,9 +110,6 @@ int ad_sd_write_reg(struct ad_sigma_delta *sigma_delta, unsigned int reg,
 	unsigned int size, unsigned int val);
 int ad_sd_read_reg(struct ad_sigma_delta *sigma_delta, unsigned int reg,
 	unsigned int size, unsigned int *val);
-
-int ad_sd_reset(struct ad_sigma_delta *sigma_delta,
-	unsigned int reset_length);
 
 int ad_sd_reset(struct ad_sigma_delta *sigma_delta,
 	unsigned int reset_length);

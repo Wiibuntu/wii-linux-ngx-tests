@@ -39,14 +39,6 @@
 #define SNVS_LPPGDR_INIT	0x41736166
 #define CNTR_TO_SECS_SH		15
 
-/* The maximum RTC clock cycles that are allowed to pass between two
- * consecutive clock counter register reads. If the values are corrupted a
- * bigger difference is expected. The RTC frequency is 32kHz. With 320 cycles
- * we end at 10ms which should be enough for most cases. If it once takes
- * longer than expected we do a retry.
- */
-#define MAX_RTC_READ_DIFF_CYCLES	320
-
 struct snvs_rtc_data {
 	struct rtc_device *rtc;
 	struct regmap *regmap;
@@ -55,87 +47,49 @@ struct snvs_rtc_data {
 	struct clk *clk;
 };
 
-/* Read 64 bit timer register, which could be in inconsistent state */
-static u64 rtc_read_lpsrt(struct snvs_rtc_data *data)
-{
-	u32 msb, lsb;
-
-	regmap_read(data->regmap, data->offset + SNVS_LPSRTCMR, &msb);
-	regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &lsb);
-	return (u64)msb << 32 | lsb;
-}
-
-/* Read the secure real time counter, taking care to deal with the cases of the
- * counter updating while being read.
- */
 static u32 rtc_read_lp_counter(struct snvs_rtc_data *data)
 {
 	u64 read1, read2;
-	s64 diff;
-	unsigned int timeout = 100;
+	u32 val;
 
-	/* As expected, the registers might update between the read of the LSB
-	 * reg and the MSB reg.  It's also possible that one register might be
-	 * in partially modified state as well.
-	 */
-	read1 = rtc_read_lpsrt(data);
 	do {
-		read2 = read1;
-		read1 = rtc_read_lpsrt(data);
-		diff = read1 - read2;
-	} while (((diff < 0) || (diff > MAX_RTC_READ_DIFF_CYCLES)) && --timeout);
-	if (!timeout)
-		dev_err(&data->rtc->dev, "Timeout trying to get valid LPSRT Counter read\n");
+		regmap_read(data->regmap, data->offset + SNVS_LPSRTCMR, &val);
+		read1 = val;
+		read1 <<= 32;
+		regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &val);
+		read1 |= val;
+
+		regmap_read(data->regmap, data->offset + SNVS_LPSRTCMR, &val);
+		read2 = val;
+		read2 <<= 32;
+		regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &val);
+		read2 |= val;
+	} while (read1 != read2);
 
 	/* Convert 47-bit counter to 32-bit raw second count */
 	return (u32) (read1 >> CNTR_TO_SECS_SH);
 }
 
-/* Just read the lsb from the counter, dealing with inconsistent state */
-static int rtc_read_lp_counter_lsb(struct snvs_rtc_data *data, u32 *lsb)
+static void rtc_write_sync_lp(struct snvs_rtc_data *data)
 {
-	u32 count1, count2;
-	s32 diff;
-	unsigned int timeout = 100;
+	u32 count1, count2, count3;
+	int i;
 
-	regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count1);
-	do {
-		count2 = count1;
-		regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count1);
-		diff = count1 - count2;
-	} while (((diff < 0) || (diff > MAX_RTC_READ_DIFF_CYCLES)) && --timeout);
-	if (!timeout) {
-		dev_err(&data->rtc->dev, "Timeout trying to get valid LPSRT Counter read\n");
-		return -ETIMEDOUT;
+	/* Wait for 3 CKIL cycles */
+	for (i = 0; i < 3; i++) {
+		do {
+			regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count1);
+			regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count2);
+		} while (count1 != count2);
+
+		/* Now wait until counter value changes */
+		do {
+			do {
+				regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count2);
+				regmap_read(data->regmap, data->offset + SNVS_LPSRTCLR, &count3);
+			} while (count2 != count3);
+		} while (count3 == count1);
 	}
-
-	*lsb = count1;
-	return 0;
-}
-
-static int rtc_write_sync_lp(struct snvs_rtc_data *data)
-{
-	u32 count1, count2;
-	u32 elapsed;
-	unsigned int timeout = 1000;
-	int ret;
-
-	ret = rtc_read_lp_counter_lsb(data, &count1);
-	if (ret)
-		return ret;
-
-	/* Wait for 3 CKIL cycles, about 61.0-91.5 µs */
-	do {
-		ret = rtc_read_lp_counter_lsb(data, &count2);
-		if (ret)
-			return ret;
-		elapsed = count2 - count1; /* wrap around _is_ handled! */
-	} while (elapsed < 3 && --timeout);
-	if (!timeout) {
-		dev_err(&data->rtc->dev, "Timeout waiting for LPSRT Counter to change\n");
-		return -ETIMEDOUT;
-	}
-	return 0;
 }
 
 static int snvs_rtc_enable(struct snvs_rtc_data *data, bool enable)
@@ -178,23 +132,20 @@ static int snvs_rtc_set_time(struct device *dev, struct rtc_time *tm)
 {
 	struct snvs_rtc_data *data = dev_get_drvdata(dev);
 	unsigned long time;
-	int ret;
 
 	rtc_tm_to_time(tm, &time);
 
 	/* Disable RTC first */
-	ret = snvs_rtc_enable(data, false);
-	if (ret)
-		return ret;
+	snvs_rtc_enable(data, false);
 
 	/* Write 32-bit time to 47-bit timer, leaving 15 LSBs blank */
 	regmap_write(data->regmap, data->offset + SNVS_LPSRTCLR, time << CNTR_TO_SECS_SH);
 	regmap_write(data->regmap, data->offset + SNVS_LPSRTCMR, time >> (32 - CNTR_TO_SECS_SH));
 
 	/* Enable RTC again */
-	ret = snvs_rtc_enable(data, true);
+	snvs_rtc_enable(data, true);
 
-	return ret;
+	return 0;
 }
 
 static int snvs_rtc_read_alarm(struct device *dev, struct rtc_wkalrm *alrm)
@@ -219,7 +170,9 @@ static int snvs_rtc_alarm_irq_enable(struct device *dev, unsigned int enable)
 			   (SNVS_LPCR_LPTA_EN | SNVS_LPCR_LPWUI_EN),
 			   enable ? (SNVS_LPCR_LPTA_EN | SNVS_LPCR_LPWUI_EN) : 0);
 
-	return rtc_write_sync_lp(data);
+	rtc_write_sync_lp(data);
+
+	return 0;
 }
 
 static int snvs_rtc_set_alarm(struct device *dev, struct rtc_wkalrm *alrm)
@@ -335,11 +288,7 @@ static int snvs_rtc_probe(struct platform_device *pdev)
 	regmap_write(data->regmap, data->offset + SNVS_LPSR, 0xffffffff);
 
 	/* Enable RTC */
-	ret = snvs_rtc_enable(data, true);
-	if (ret) {
-		dev_err(&pdev->dev, "failed to enable rtc %d\n", ret);
-		goto error_rtc_device_register;
-	}
+	snvs_rtc_enable(data, true);
 
 	device_init_wakeup(&pdev->dev, true);
 

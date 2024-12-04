@@ -2821,7 +2821,6 @@ static struct virtio_driver virtio_net_driver = {
 	.freeze =	virtnet_freeze,
 	.restore =	virtnet_restore,
 #endif
-	.ndo_features_check	= passthru_features_check,
 };
 
 static __init int virtio_net_driver_init(void)

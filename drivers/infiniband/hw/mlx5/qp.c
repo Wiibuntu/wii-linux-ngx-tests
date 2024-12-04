@@ -2241,18 +2241,18 @@ enum {
 
 static int ib_rate_to_mlx5(struct mlx5_ib_dev *dev, u8 rate)
 {
-	if (rate == IB_RATE_PORT_CURRENT)
+	if (rate == IB_RATE_PORT_CURRENT) {
 		return 0;
-
-	if (rate < IB_RATE_2_5_GBPS || rate > IB_RATE_300_GBPS)
+	} else if (rate < IB_RATE_2_5_GBPS || rate > IB_RATE_300_GBPS) {
 		return -EINVAL;
+	} else {
+		while (rate != IB_RATE_2_5_GBPS &&
+		       !(1 << (rate + MLX5_STAT_RATE_OFFSET) &
+			 MLX5_CAP_GEN(dev->mdev, stat_rate_support)))
+			--rate;
+	}
 
-	while (rate != IB_RATE_PORT_CURRENT &&
-	       !(1 << (rate + MLX5_STAT_RATE_OFFSET) &
-		 MLX5_CAP_GEN(dev->mdev, stat_rate_support)))
-		--rate;
-
-	return rate ? rate + MLX5_STAT_RATE_OFFSET : rate;
+	return rate + MLX5_STAT_RATE_OFFSET;
 }
 
 static int modify_raw_packet_eth_prio(struct mlx5_core_dev *dev,
@@ -2399,11 +2399,6 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_PKEY_INDEX	|
 					  MLX5_QP_OPTPAR_Q_KEY		|
 					  MLX5_QP_OPTPAR_PRI_PORT,
-			[MLX5_QP_ST_XRC] = MLX5_QP_OPTPAR_RRE		|
-					  MLX5_QP_OPTPAR_RAE		|
-					  MLX5_QP_OPTPAR_RWE		|
-					  MLX5_QP_OPTPAR_PKEY_INDEX	|
-					  MLX5_QP_OPTPAR_PRI_PORT,
 		},
 		[MLX5_QP_STATE_RTR] = {
 			[MLX5_QP_ST_RC] = MLX5_QP_OPTPAR_ALT_ADDR_PATH  |
@@ -2437,12 +2432,6 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 					  MLX5_QP_OPTPAR_RWE		|
 					  MLX5_QP_OPTPAR_PM_STATE,
 			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_Q_KEY,
-			[MLX5_QP_ST_XRC] = MLX5_QP_OPTPAR_ALT_ADDR_PATH	|
-					  MLX5_QP_OPTPAR_RRE		|
-					  MLX5_QP_OPTPAR_RAE		|
-					  MLX5_QP_OPTPAR_RWE		|
-					  MLX5_QP_OPTPAR_PM_STATE	|
-					  MLX5_QP_OPTPAR_RNR_TIMEOUT,
 		},
 	},
 	[MLX5_QP_STATE_RTS] = {
@@ -2459,12 +2448,6 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 			[MLX5_QP_ST_UD] = MLX5_QP_OPTPAR_Q_KEY		|
 					  MLX5_QP_OPTPAR_SRQN		|
 					  MLX5_QP_OPTPAR_CQN_RCV,
-			[MLX5_QP_ST_XRC] = MLX5_QP_OPTPAR_RRE		|
-					  MLX5_QP_OPTPAR_RAE		|
-					  MLX5_QP_OPTPAR_RWE		|
-					  MLX5_QP_OPTPAR_RNR_TIMEOUT	|
-					  MLX5_QP_OPTPAR_PM_STATE	|
-					  MLX5_QP_OPTPAR_ALT_ADDR_PATH,
 		},
 	},
 	[MLX5_QP_STATE_SQER] = {
@@ -2473,10 +2456,6 @@ static enum mlx5_qp_optpar opt_mask[MLX5_QP_NUM_STATE][MLX5_QP_NUM_STATE][MLX5_Q
 			[MLX5_QP_ST_MLX] = MLX5_QP_OPTPAR_Q_KEY,
 			[MLX5_QP_ST_UC]	 = MLX5_QP_OPTPAR_RWE,
 			[MLX5_QP_ST_RC]	 = MLX5_QP_OPTPAR_RNR_TIMEOUT	|
-					   MLX5_QP_OPTPAR_RWE		|
-					   MLX5_QP_OPTPAR_RAE		|
-					   MLX5_QP_OPTPAR_RRE,
-			[MLX5_QP_ST_XRC]  = MLX5_QP_OPTPAR_RNR_TIMEOUT	|
 					   MLX5_QP_OPTPAR_RWE		|
 					   MLX5_QP_OPTPAR_RAE		|
 					   MLX5_QP_OPTPAR_RRE,
@@ -4706,10 +4685,13 @@ int mlx5_ib_dealloc_xrcd(struct ib_xrcd *xrcd)
 	int err;
 
 	err = mlx5_core_xrcd_dealloc(dev->mdev, xrcdn);
-	if (err)
+	if (err) {
 		mlx5_ib_warn(dev, "failed to dealloc xrcdn 0x%x\n", xrcdn);
+		return err;
+	}
 
 	kfree(xrcd);
+
 	return 0;
 }
 

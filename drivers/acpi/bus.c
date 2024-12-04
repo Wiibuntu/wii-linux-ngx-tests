@@ -163,7 +163,7 @@ int acpi_bus_get_private_data(acpi_handle handle, void **data)
 {
 	acpi_status status;
 
-	if (!data)
+	if (!*data)
 		return -EINVAL;
 
 	status = acpi_get_data(handle, acpi_bus_private_data_handler, data);
@@ -1001,9 +1001,6 @@ void __init acpi_early_init(void)
 
 	acpi_permanent_mmap = true;
 
-	/* Set capability bits for _OSC under processor scope */
-	acpi_early_processor_osc();
-
 	/*
 	 * If the machine falls into the DMI check table,
 	 * DSDT will be copied to memory
@@ -1222,7 +1219,6 @@ static int __init acpi_init(void)
 	init_acpi_device_notify();
 	result = acpi_bus_init();
 	if (result) {
-		kobject_put(acpi_kobj);
 		disable_acpi();
 		return result;
 	}

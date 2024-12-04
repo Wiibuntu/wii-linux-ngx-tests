@@ -319,14 +319,15 @@ static ssize_t dump_attr_read(struct file *filep, struct kobject *kobj,
 	return count;
 }
 
-static void create_dump_obj(uint32_t id, size_t size, uint32_t type)
+static struct dump_obj *create_dump_obj(uint32_t id, size_t size,
+					uint32_t type)
 {
 	struct dump_obj *dump;
 	int rc;
 
 	dump = kzalloc(sizeof(*dump), GFP_KERNEL);
 	if (!dump)
-		return;
+		return NULL;
 
 	dump->kobj.kset = dump_kset;
 

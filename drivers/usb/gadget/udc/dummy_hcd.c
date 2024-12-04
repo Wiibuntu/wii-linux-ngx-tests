@@ -48,7 +48,6 @@
 #define DRIVER_VERSION	"02 May 2005"
 
 #define POWER_BUDGET	500	/* in mA; use 8 for low-power port testing */
-#define POWER_BUDGET_3	900	/* in mA */
 
 static const char	driver_name[] = "dummy_hcd";
 static const char	driver_desc[] = "USB Host+Gadget Emulator";
@@ -369,7 +368,6 @@ static void stop_activity(struct dummy *dum)
 static void set_link_state_by_speed(struct dummy_hcd *dum_hcd)
 {
 	struct dummy *dum = dum_hcd->dum;
-	unsigned int power_bit;
 
 	if (dummy_hcd_to_hcd(dum_hcd)->speed == HCD_USB3) {
 		if ((dum_hcd->port_status & USB_SS_PORT_STAT_POWER) == 0) {
@@ -915,21 +913,6 @@ static int dummy_pullup(struct usb_gadget *_gadget, int value)
 	spin_lock_irqsave(&dum->lock, flags);
 	dum->pullup = (value != 0);
 	set_link_state(dum_hcd);
-	if (value == 0) {
-		/*
-		 * Emulate synchronize_irq(): wait for callbacks to finish.
-		 * This seems to be the best place to emulate the call to
-		 * synchronize_irq() that's in usb_gadget_remove_driver().
-		 * Doing it in dummy_udc_stop() would be too late since it
-		 * is called after the unbind callback and unbind shouldn't
-		 * be invoked until all the other callbacks are finished.
-		 */
-		while (dum->callback_usage > 0) {
-			spin_unlock_irqrestore(&dum->lock, flags);
-			usleep_range(1000, 2000);
-			spin_lock_irqsave(&dum->lock, flags);
-		}
-	}
 	spin_unlock_irqrestore(&dum->lock, flags);
 
 	usb_hcd_poll_rh_status(dummy_hcd_to_hcd(dum_hcd));
@@ -1587,8 +1570,6 @@ static struct dummy_ep *find_endpoint(struct dummy *dum, u8 address)
 		return NULL;
 	if (!dum->ints_enabled)
 		return NULL;
-	if (!dum->ints_enabled)
-		return NULL;
 	if ((address & ~USB_DIR_IN) == 0)
 		return &dum->ep[0];
 	for (i = 1; i < DUMMY_ENDPOINTS; i++) {
@@ -1838,7 +1819,6 @@ static void dummy_timer(struct timer_list *t)
 			break;
 		dum->ep[i].already_seen = 0;
 	}
-	dum_hcd->next_frame_urbp = NULL;
 
 restart:
 	list_for_each_entry_safe(urbp, tmp, &dum_hcd->urbp_list, urbp_list) {
@@ -1847,10 +1827,6 @@ restart:
 		u8			address;
 		struct dummy_ep		*ep = NULL;
 		int			status = -EINPROGRESS;
-
-		/* stop when we reach URBs queued after the timer interrupt */
-		if (urbp == dum_hcd->next_frame_urbp)
-			break;
 
 		/* stop when we reach URBs queued after the timer interrupt */
 		if (urbp == dum_hcd->next_frame_urbp)
@@ -2473,7 +2449,7 @@ static int dummy_start_ss(struct dummy_hcd *dum_hcd)
 	dum_hcd->rh_state = DUMMY_RH_RUNNING;
 	dum_hcd->stream_en_ep = 0;
 	INIT_LIST_HEAD(&dum_hcd->urbp_list);
-	dummy_hcd_to_hcd(dum_hcd)->power_budget = POWER_BUDGET_3;
+	dummy_hcd_to_hcd(dum_hcd)->power_budget = POWER_BUDGET;
 	dummy_hcd_to_hcd(dum_hcd)->state = HC_STATE_RUNNING;
 	dummy_hcd_to_hcd(dum_hcd)->uses_new_polling = 1;
 #ifdef CONFIG_USB_OTG
@@ -2773,7 +2749,7 @@ static int __init init(void)
 {
 	int	retval = -ENOMEM;
 	int	i;
-	struct	dummy *dum[MAX_NUM_UDC] = {};
+	struct	dummy *dum[MAX_NUM_UDC];
 
 	if (usb_disabled())
 		return -ENODEV;

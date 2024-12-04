@@ -13,7 +13,6 @@
 #include <linux/cred.h>
 #include <linux/file.h>
 #include <linux/fdtable.h>
-#include <linux/fs_struct.h>
 #include <linux/workqueue.h>
 #include <linux/security.h>
 #include <linux/mount.h>
@@ -121,7 +120,7 @@ out:
  * invoke it.
  *
  * If module auto-loading support is disabled then this function
- * simply returns -ENOENT.
+ * becomes a no-operation.
  */
 int __request_module(bool wait, const char *fmt, ...)
 {
@@ -138,7 +137,7 @@ int __request_module(bool wait, const char *fmt, ...)
 	WARN_ON_ONCE(wait && current_is_async());
 
 	if (!modprobe_path[0])
-		return -ENOENT;
+		return 0;
 
 	va_start(args, fmt);
 	ret = vsnprintf(module_name, MODULE_NAME_LEN, fmt, args);

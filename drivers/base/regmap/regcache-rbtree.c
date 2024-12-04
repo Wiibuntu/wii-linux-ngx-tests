@@ -291,18 +291,18 @@ static int regcache_rbtree_insert_to_block(struct regmap *map,
 
 	blk = krealloc(rbnode->block,
 		       blklen * map->cache_word_size,
-		       map->alloc_flags);
+		       GFP_KERNEL);
 	if (!blk)
 		return -ENOMEM;
-
-	rbnode->block = blk;
 
 	if (BITS_TO_LONGS(blklen) > BITS_TO_LONGS(rbnode->blklen)) {
 		present = krealloc(rbnode->cache_present,
 				   BITS_TO_LONGS(blklen) * sizeof(*present),
-				   map->alloc_flags);
-		if (!present)
+				   GFP_KERNEL);
+		if (!present) {
+			kfree(blk);
 			return -ENOMEM;
+		}
 
 		memset(present + BITS_TO_LONGS(rbnode->blklen), 0,
 		       (BITS_TO_LONGS(blklen) - BITS_TO_LONGS(rbnode->blklen))
@@ -319,6 +319,7 @@ static int regcache_rbtree_insert_to_block(struct regmap *map,
 	}
 
 	/* update the rbnode block, its size and the base register */
+	rbnode->block = blk;
 	rbnode->blklen = blklen;
 	rbnode->base_reg = base_reg;
 	rbnode->cache_present = present;
@@ -334,7 +335,7 @@ regcache_rbtree_node_alloc(struct regmap *map, unsigned int reg)
 	const struct regmap_range *range;
 	int i;
 
-	rbnode = kzalloc(sizeof(*rbnode), map->alloc_flags);
+	rbnode = kzalloc(sizeof(*rbnode), GFP_KERNEL);
 	if (!rbnode)
 		return NULL;
 

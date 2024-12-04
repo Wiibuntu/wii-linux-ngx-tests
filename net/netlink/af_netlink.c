@@ -127,44 +127,6 @@ static const char *const nlk_cb_mutex_key_strings[MAX_LINKS + 1] = {
 	"nlk_cb_mutex-MAX_LINKS"
 };
 
-static struct lock_class_key nlk_cb_mutex_keys[MAX_LINKS];
-
-static const char *const nlk_cb_mutex_key_strings[MAX_LINKS + 1] = {
-	"nlk_cb_mutex-ROUTE",
-	"nlk_cb_mutex-1",
-	"nlk_cb_mutex-USERSOCK",
-	"nlk_cb_mutex-FIREWALL",
-	"nlk_cb_mutex-SOCK_DIAG",
-	"nlk_cb_mutex-NFLOG",
-	"nlk_cb_mutex-XFRM",
-	"nlk_cb_mutex-SELINUX",
-	"nlk_cb_mutex-ISCSI",
-	"nlk_cb_mutex-AUDIT",
-	"nlk_cb_mutex-FIB_LOOKUP",
-	"nlk_cb_mutex-CONNECTOR",
-	"nlk_cb_mutex-NETFILTER",
-	"nlk_cb_mutex-IP6_FW",
-	"nlk_cb_mutex-DNRTMSG",
-	"nlk_cb_mutex-KOBJECT_UEVENT",
-	"nlk_cb_mutex-GENERIC",
-	"nlk_cb_mutex-17",
-	"nlk_cb_mutex-SCSITRANSPORT",
-	"nlk_cb_mutex-ECRYPTFS",
-	"nlk_cb_mutex-RDMA",
-	"nlk_cb_mutex-CRYPTO",
-	"nlk_cb_mutex-SMC",
-	"nlk_cb_mutex-23",
-	"nlk_cb_mutex-24",
-	"nlk_cb_mutex-25",
-	"nlk_cb_mutex-26",
-	"nlk_cb_mutex-27",
-	"nlk_cb_mutex-28",
-	"nlk_cb_mutex-29",
-	"nlk_cb_mutex-30",
-	"nlk_cb_mutex-31",
-	"nlk_cb_mutex-MAX_LINKS"
-};
-
 static int netlink_dump(struct sock *sk);
 
 /* nl_table locking explained:
@@ -190,8 +152,6 @@ static const struct rhashtable_params netlink_rhashtable_params;
 
 static inline u32 netlink_group_mask(u32 group)
 {
-	if (group > 32)
-		return 0;
 	return group ? 1 << (group - 1) : 0;
 }
 
@@ -426,14 +386,6 @@ static void netlink_sock_destruct_work(struct work_struct *work)
 	sk_free(&nlk->sk);
 }
 
-static void netlink_sock_destruct_work(struct work_struct *work)
-{
-	struct netlink_sock *nlk = container_of(work, struct netlink_sock,
-						work);
-
-	sk_free(&nlk->sk);
-}
-
 /* This lock without WQ_FLAG_EXCLUSIVE is good on UP and it is _very_ bad on
  * SMP. Look, when several writers sleep and reader wakes them up, all but one
  * immediately hit write lock and grab all the cpus. Exclusive sleep solves
@@ -475,13 +427,11 @@ void netlink_table_ungrab(void)
 static inline void
 netlink_lock_table(void)
 {
-	unsigned long flags;
-
 	/* read_lock() synchronizes us to netlink_table_grab */
 
-	read_lock_irqsave(&nl_table_lock, flags);
+	read_lock(&nl_table_lock);
 	atomic_inc(&nl_table_users);
-	read_unlock_irqrestore(&nl_table_lock, flags);
+	read_unlock(&nl_table_lock);
 }
 
 static inline void
@@ -613,10 +563,7 @@ static int netlink_insert(struct sock *sk, u32 portid)
 
 	/* We need to ensure that the socket is hashed and visible. */
 	smp_wmb();
-	/* Paired with lockless reads from netlink_bind(),
-	 * netlink_connect() and netlink_sendmsg().
-	 */
-	WRITE_ONCE(nlk_sk(sk)->bound, portid);
+	nlk_sk(sk)->bound = portid;
 
 err:
 	release_sock(sk);
@@ -699,7 +646,6 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 
 	if (protocol < 0 || protocol >= MAX_LINKS)
 		return -EPROTONOSUPPORT;
-	protocol = array_index_nospec(protocol, MAX_LINKS);
 
 	netlink_lock_table();
 #ifdef CONFIG_MODULES
@@ -1030,13 +976,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 			return err;
 	}
 
-	if (nlk->ngroups == 0)
-		groups = 0;
-	else if (nlk->ngroups < 8*sizeof(groups))
-		groups &= (1UL << nlk->ngroups) - 1;
-
-	/* Paired with WRITE_ONCE() in netlink_insert() */
-	bound = READ_ONCE(nlk->bound);
+	bound = nlk->bound;
 	if (bound) {
 		/* Ensure nlk->portid is up-to-date. */
 		smp_rmb();
@@ -1049,8 +989,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 	if (nlk->netlink_bind && groups) {
 		int group;
 
-		/* nl_groups is a u32, so cap the maximum groups we can bind */
-		for (group = 0; group < BITS_PER_TYPE(u32); group++) {
+		for (group = 0; group < nlk->ngroups; group++) {
 			if (!test_bit(group, &groups))
 				continue;
 			err = nlk->netlink_bind(net, group + 1);
@@ -1105,17 +1044,12 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 		return -EINVAL;
 
 	if (addr->sa_family == AF_UNSPEC) {
-		/* paired with READ_ONCE() in netlink_getsockbyportid() */
-		WRITE_ONCE(sk->sk_state, NETLINK_UNCONNECTED);
-		/* dst_portid and dst_group can be read locklessly */
-		WRITE_ONCE(nlk->dst_portid, 0);
-		WRITE_ONCE(nlk->dst_group, 0);
+		sk->sk_state	= NETLINK_UNCONNECTED;
+		nlk->dst_portid	= 0;
+		nlk->dst_group  = 0;
 		return 0;
 	}
 	if (addr->sa_family != AF_NETLINK)
-		return -EINVAL;
-
-	if (alen < sizeof(struct sockaddr_nl))
 		return -EINVAL;
 
 	if ((nladdr->nl_groups || nladdr->nl_pid) &&
@@ -1124,17 +1058,14 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 
 	/* No need for barriers here as we return to user-space without
 	 * using any of the bound attributes.
-	 * Paired with WRITE_ONCE() in netlink_insert().
 	 */
-	if (!READ_ONCE(nlk->bound))
+	if (!nlk->bound)
 		err = netlink_autobind(sock);
 
 	if (err == 0) {
-		/* paired with READ_ONCE() in netlink_getsockbyportid() */
-		WRITE_ONCE(sk->sk_state, NETLINK_CONNECTED);
-		/* dst_portid and dst_group can be read locklessly */
-		WRITE_ONCE(nlk->dst_portid, nladdr->nl_pid);
-		WRITE_ONCE(nlk->dst_group, ffs(nladdr->nl_groups));
+		sk->sk_state	= NETLINK_CONNECTED;
+		nlk->dst_portid = nladdr->nl_pid;
+		nlk->dst_group  = ffs(nladdr->nl_groups);
 	}
 
 	return err;
@@ -1152,9 +1083,8 @@ static int netlink_getname(struct socket *sock, struct sockaddr *addr,
 	*addr_len = sizeof(*nladdr);
 
 	if (peer) {
-		/* Paired with WRITE_ONCE() in netlink_connect() */
-		nladdr->nl_pid = READ_ONCE(nlk->dst_portid);
-		nladdr->nl_groups = netlink_group_mask(READ_ONCE(nlk->dst_group));
+		nladdr->nl_pid = nlk->dst_portid;
+		nladdr->nl_groups = netlink_group_mask(nlk->dst_group);
 	} else {
 		nladdr->nl_pid = nlk->portid;
 		netlink_lock_table();
@@ -1183,9 +1113,8 @@ static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 
 	/* Don't bother queuing skb if kernel socket has no input function */
 	nlk = nlk_sk(sock);
-	/* dst_portid and sk_state can be changed in netlink_connect() */
-	if (READ_ONCE(sock->sk_state) == NETLINK_CONNECTED &&
-	    READ_ONCE(nlk->dst_portid) != nlk_sk(ssk)->portid) {
+	if (sock->sk_state == NETLINK_CONNECTED &&
+	    nlk->dst_portid != nlk_sk(ssk)->portid) {
 		sock_put(sock);
 		return ERR_PTR(-ECONNREFUSED);
 	}
@@ -1874,19 +1803,12 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	if (msg->msg_flags&MSG_OOB)
 		return -EOPNOTSUPP;
 
-	if (len == 0) {
-		pr_warn_once("Zero length message leads to an empty skb\n");
-		return -ENODATA;
-	}
-
 	err = scm_send(sock, msg, &scm, true);
 	if (err < 0)
 		return err;
 
 	if (msg->msg_namelen) {
 		err = -EINVAL;
-		if (msg->msg_namelen < sizeof(struct sockaddr_nl))
-			goto out;
 		if (addr->nl_family != AF_NETLINK)
 			goto out;
 		dst_portid = addr->nl_pid;
@@ -1897,13 +1819,11 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 			goto out;
 		netlink_skb_flags |= NETLINK_SKB_DST;
 	} else {
-		/* Paired with WRITE_ONCE() in netlink_connect() */
-		dst_portid = READ_ONCE(nlk->dst_portid);
-		dst_group = READ_ONCE(nlk->dst_group);
+		dst_portid = nlk->dst_portid;
+		dst_group = nlk->dst_group;
 	}
 
-	/* Paired with WRITE_ONCE() in netlink_insert() */
-	if (!READ_ONCE(nlk->bound)) {
+	if (!nlk->bound) {
 		err = netlink_autobind(sock);
 		if (err)
 			goto out;
@@ -1998,6 +1918,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		copied = len;
 	}
 
+	skb_reset_transport_header(data_skb);
 	err = skb_copy_datagram_msg(data_skb, 0, msg, copied);
 
 	if (msg->msg_name) {
@@ -2021,7 +1942,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	skb_free_datagram(sk, skb);
 
-	if (READ_ONCE(nlk->cb_running) &&
+	if (nlk->cb_running &&
 	    atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf / 2) {
 		ret = netlink_dump(sk);
 		if (ret) {
@@ -2529,15 +2450,13 @@ int nlmsg_notify(struct sock *sk, struct sk_buff *skb, u32 portid,
 		/* errors reported via destination sk->sk_err, but propagate
 		 * delivery errors if NETLINK_BROADCAST_ERROR flag is set */
 		err = nlmsg_multicast(sk, skb, exclude_portid, group, flags);
-		if (err == -ESRCH)
-			err = 0;
 	}
 
 	if (report) {
 		int err2;
 
 		err2 = nlmsg_unicast(sk, skb, portid);
-		if (!err)
+		if (!err || err == -ESRCH)
 			err = err2;
 	}
 

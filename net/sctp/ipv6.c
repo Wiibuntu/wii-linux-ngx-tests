@@ -97,9 +97,10 @@ static int sctp_inet6addr_event(struct notifier_block *this, unsigned long ev,
 
 	switch (ev) {
 	case NETDEV_UP:
-		addr = kzalloc(sizeof(*addr), GFP_ATOMIC);
+		addr = kmalloc(sizeof(struct sctp_sockaddr_entry), GFP_ATOMIC);
 		if (addr) {
 			addr->a.v6.sin6_family = AF_INET6;
+			addr->a.v6.sin6_port = 0;
 			addr->a.v6.sin6_addr = ifa->addr;
 			addr->a.v6.sin6_scope_id = ifa->idev->dev->ifindex;
 			addr->valid = 1;
@@ -270,12 +271,9 @@ static void sctp_v6_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 	final_p = fl6_update_dst(fl6, rcu_dereference(np->opt), &final);
 	rcu_read_unlock();
 
-	dst = ip6_dst_lookup_flow(sock_net(sk), sk, fl6, final_p);
-	if (!asoc || saddr) {
-		t->dst = dst;
-		memcpy(fl, &_fl, sizeof(_fl));
+	dst = ip6_dst_lookup_flow(sk, fl6, final_p);
+	if (!asoc || saddr)
 		goto out;
-	}
 
 	bp = &asoc->base.bind_addr;
 	scope = sctp_scope(daddr);
@@ -298,8 +296,6 @@ static void sctp_v6_get_dst(struct sctp_transport *t, union sctp_addr *saddr,
 			if ((laddr->a.sa.sa_family == AF_INET6) &&
 			    (sctp_v6_cmp_addr(&dst_saddr, &laddr->a))) {
 				rcu_read_unlock();
-				t->dst = dst;
-				memcpy(fl, &_fl, sizeof(_fl));
 				goto out;
 			}
 		}
@@ -355,12 +351,14 @@ out:
 		struct rt6_info *rt;
 
 		rt = (struct rt6_info *)dst;
+		t->dst = dst;
 		t->dst_cookie = rt6_get_cookie(rt);
 		pr_debug("rt6_dst:%pI6/%d rt6_src:%pI6\n",
 			 &rt->rt6i_dst.addr, rt->rt6i_dst.plen,
-			 &fl->u.ip6.saddr);
+			 &fl6->saddr);
 	} else {
 		t->dst = NULL;
+
 		pr_debug("no route\n");
 	}
 }
@@ -412,6 +410,7 @@ static void sctp_v6_copy_addrlist(struct list_head *addrlist,
 		addr = kzalloc(sizeof(*addr), GFP_ATOMIC);
 		if (addr) {
 			addr->a.v6.sin6_family = AF_INET6;
+			addr->a.v6.sin6_port = 0;
 			addr->a.v6.sin6_addr = ifp->addr;
 			addr->a.v6.sin6_scope_id = dev->ifindex;
 			addr->valid = 1;
@@ -481,20 +480,15 @@ static void sctp_v6_to_sk_daddr(union sctp_addr *addr, struct sock *sk)
 }
 
 /* Initialize a sctp_addr from an address parameter. */
-static bool sctp_v6_from_addr_param(union sctp_addr *addr,
+static void sctp_v6_from_addr_param(union sctp_addr *addr,
 				    union sctp_addr_param *param,
 				    __be16 port, int iif)
 {
-	if (ntohs(param->v6.param_hdr.length) < sizeof(struct sctp_ipv6addr_param))
-		return false;
-
 	addr->v6.sin6_family = AF_INET6;
 	addr->v6.sin6_port = port;
 	addr->v6.sin6_flowinfo = 0; /* BUG */
 	addr->v6.sin6_addr = param->v6.addr;
 	addr->v6.sin6_scope_id = iif;
-
-	return true;
 }
 
 /* Initialize an address parameter from a sctp_addr and return the length
@@ -730,10 +724,8 @@ static int sctp_v6_addr_to_user(struct sctp_sock *sp, union sctp_addr *addr)
 			sctp_v6_map_v4(addr);
 	}
 
-	if (addr->sa.sa_family == AF_INET) {
-		memset(addr->v4.sin_zero, 0, sizeof(addr->v4.sin_zero));
+	if (addr->sa.sa_family == AF_INET)
 		return sizeof(struct sockaddr_in);
-	}
 	return sizeof(struct sockaddr_in6);
 }
 
@@ -848,8 +840,8 @@ static int sctp_inet6_cmp_addr(const union sctp_addr *addr1,
 			       const union sctp_addr *addr2,
 			       struct sctp_sock *opt)
 {
-	struct sock *sk = sctp_opt2sk(opt);
 	struct sctp_af *af1, *af2;
+	struct sock *sk = sctp_opt2sk(opt);
 
 	af1 = sctp_get_af_specific(addr1->sa.sa_family);
 	af2 = sctp_get_af_specific(addr2->sa.sa_family);
@@ -865,10 +857,10 @@ static int sctp_inet6_cmp_addr(const union sctp_addr *addr1,
 	if (sctp_is_any(sk, addr1) || sctp_is_any(sk, addr2))
 		return 1;
 
-	if (addr1->sa.sa_family == AF_INET && addr2->sa.sa_family == AF_INET)
-		return addr1->v4.sin_addr.s_addr == addr2->v4.sin_addr.s_addr;
+	if (addr1->sa.sa_family != addr2->sa.sa_family)
+		return 0;
 
-	return __sctp_v6_cmp_addr(addr1, addr2);
+	return af1->cmp_addr(addr1, addr2);
 }
 
 /* Verify that the provided sockaddr looks bindable.   Common verification,
@@ -976,7 +968,7 @@ static const struct proto_ops inet6_seqpacket_ops = {
 	.owner		   = THIS_MODULE,
 	.release	   = inet6_release,
 	.bind		   = inet6_bind,
-	.connect	   = sctp_inet_connect,
+	.connect	   = inet_dgram_connect,
 	.socketpair	   = sock_no_socketpair,
 	.accept		   = inet_accept,
 	.getname	   = sctp_getname,

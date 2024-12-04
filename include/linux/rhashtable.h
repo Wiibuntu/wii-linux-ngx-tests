@@ -722,6 +722,8 @@ static inline void *__rhashtable_insert_fast(
 	int elasticity;
 	void *data;
 
+	rcu_read_lock();
+
 	tbl = rht_dereference_rcu(ht->tbl, ht);
 	hash = rht_head_hashfn(ht, tbl, obj, params);
 	lock = rht_bucket_lock(tbl, hash);
@@ -1101,7 +1103,7 @@ static inline int __rhashtable_remove_fast(
 
 	rcu_read_unlock();
 
-	return err ? ERR_PTR(err) : data;
+	return err;
 }
 
 /**
@@ -1206,32 +1208,6 @@ static inline int __rhashtable_replace_fast(
 static inline int rhashtable_replace_fast(
 	struct rhashtable *ht, struct rhash_head *obj_old,
 	struct rhash_head *obj_new,
-	const struct rhashtable_params params)
-{
-	void *ret;
-
-	BUG_ON(!ht->p.obj_hashfn || !key);
-
-	ret = __rhashtable_insert_fast(ht, key, obj, params);
-	if (IS_ERR(ret))
-		return PTR_ERR(ret);
-
-	return ret == NULL ? 0 : -EEXIST;
-}
-
-/**
- * rhashtable_lookup_get_insert_key - lookup and insert object into hash table
- * @ht:		hash table
- * @obj:	pointer to hash head inside object
- * @params:	hash table parameters
- * @data:	pointer to element data already in hashes
- *
- * Just like rhashtable_lookup_insert_key(), but this function returns the
- * object if it exists, NULL if it does not and the insertion was successful,
- * and an ERR_PTR otherwise.
- */
-static inline void *rhashtable_lookup_get_insert_key(
-	struct rhashtable *ht, const void *key, struct rhash_head *obj,
 	const struct rhashtable_params params)
 {
 	struct bucket_table *tbl;

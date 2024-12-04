@@ -113,8 +113,6 @@ EXPORT_SYMBOL(setattr_prepare);
  */
 int inode_newsize_ok(const struct inode *inode, loff_t offset)
 {
-	if (offset < 0)
-		return -EINVAL;
 	if (inode->i_size < offset) {
 		unsigned long limit;
 
@@ -234,41 +232,10 @@ int notify_change(struct dentry * dentry, struct iattr * attr, struct inode **de
 		}
 	}
 
-	/*
-	 * If utimes(2) and friends are called with times == NULL (or both
-	 * times are UTIME_NOW), then we need to check for write permission
-	 */
-	if (ia_valid & ATTR_TOUCH) {
-		if (IS_IMMUTABLE(inode))
-			return -EPERM;
-
-		if (!inode_owner_or_capable(inode)) {
-			error = inode_permission(inode, MAY_WRITE);
-			if (error)
-				return error;
-		}
-	}
-
 	if ((ia_valid & ATTR_MODE)) {
-		/*
-		 * Don't allow changing the mode of symlinks:
-		 *
-		 * (1) The vfs doesn't take the mode of symlinks into account
-		 *     during permission checking.
-		 * (2) This has never worked correctly. Most major filesystems
-		 *     did return EOPNOTSUPP due to interactions with POSIX ACLs
-		 *     but did still updated the mode of the symlink.
-		 *     This inconsistency led system call wrapper providers such
-		 *     as libc to block changing the mode of symlinks with
-		 *     EOPNOTSUPP already.
-		 * (3) To even do this in the first place one would have to use
-		 *     specific file descriptors and quite some effort.
-		 */
-		if (S_ISLNK(inode->i_mode))
-			return -EOPNOTSUPP;
-
+		umode_t amode = attr->ia_mode;
 		/* Flag setting protected by i_mutex */
-		if (is_sxid(attr->ia_mode))
+		if (is_sxid(amode))
 			inode->i_flags &= ~S_NOSEC;
 	}
 

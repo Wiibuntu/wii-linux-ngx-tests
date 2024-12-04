@@ -29,7 +29,6 @@
 #include <linux/kernel.h>
 #include <linux/kref.h>
 #include <linux/list.h>
-#include <linux/mutex.h>
 #include <linux/netdevice.h>
 #include <linux/printk.h>
 #include <linux/rculist.h>
@@ -139,28 +138,6 @@ static bool batadv_mutual_parents(const struct net_device *dev1,
 }
 
 /**
- * batadv_mutual_parents - check if two devices are each others parent
- * @dev1: 1st net_device
- * @dev2: 2nd net_device
- *
- * veth devices come in pairs and each is the parent of the other!
- *
- * Return: true if the devices are each others parent, otherwise false
- */
-static bool batadv_mutual_parents(const struct net_device *dev1,
-				  const struct net_device *dev2)
-{
-	int dev1_parent_iflink = dev_get_iflink(dev1);
-	int dev2_parent_iflink = dev_get_iflink(dev2);
-
-	if (!dev1_parent_iflink || !dev2_parent_iflink)
-		return false;
-
-	return (dev1_parent_iflink == dev2->ifindex) &&
-	       (dev2_parent_iflink == dev1->ifindex);
-}
-
-/**
  * batadv_is_on_batman_iface - check if a device is a batman iface descendant
  * @net_dev: the device to check
  *
@@ -195,12 +172,7 @@ static bool batadv_is_on_batman_iface(const struct net_device *net_dev)
 	parent_dev = __dev_get_by_index((struct net *)parent_net,
 					dev_get_iflink(net_dev));
 	/* if we got a NULL parent_dev there is something broken.. */
-	if (!parent_dev) {
-		pr_err("Cannot find parent device\n");
-		return false;
-	}
-
-	if (batadv_mutual_parents(net_dev, parent_dev))
+	if (WARN(!parent_dev, "Cannot find parent device"))
 		return false;
 
 	if (batadv_mutual_parents(net_dev, net, parent_dev, parent_net))
@@ -584,9 +556,6 @@ static void batadv_hardif_recalc_extra_skbroom(struct net_device *soft_iface)
 	needed_headroom = lower_headroom + (lower_header_len - ETH_HLEN);
 	needed_headroom += batadv_max_header_len();
 
-	/* fragmentation headers don't strip the unicast/... header */
-	needed_headroom += sizeof(struct batadv_frag_packet);
-
 	soft_iface->needed_headroom = needed_headroom;
 	soft_iface->needed_tailroom = lower_tailroom;
 }
@@ -640,7 +609,7 @@ out:
 /* adjusts the MTU if a new interface with a smaller MTU appeared. */
 void batadv_update_min_mtu(struct net_device *soft_iface)
 {
-	dev_set_mtu(soft_iface, batadv_hardif_min_mtu(soft_iface));
+	soft_iface->mtu = batadv_hardif_min_mtu(soft_iface);
 
 	/* Check if the local translate table should be cleaned up to match a
 	 * new (and smaller) MTU.
@@ -875,7 +844,7 @@ void batadv_hardif_disable_interface(struct batadv_hard_iface *hard_iface,
 	batadv_hardif_recalc_extra_skbroom(hard_iface->soft_iface);
 
 	/* nobody uses this interface anymore */
-	if (bat_priv->num_ifaces == 0) {
+	if (!bat_priv->num_ifaces) {
 		batadv_gw_check_client_stop(bat_priv);
 
 		if (autodel == BATADV_IF_CLEANUP_AUTO)
@@ -911,7 +880,7 @@ batadv_hardif_add_interface(struct net_device *net_dev)
 	if (ret)
 		goto free_if;
 
-	hard_iface->if_num = 0;
+	hard_iface->if_num = -1;
 	hard_iface->net_dev = net_dev;
 	hard_iface->soft_iface = NULL;
 	hard_iface->if_status = BATADV_IF_NOT_IN_USE;
@@ -980,32 +949,6 @@ void batadv_hardif_remove_interfaces(void)
 	rtnl_unlock();
 }
 
-/**
- * batadv_hard_if_event_softif() - Handle events for soft interfaces
- * @event: NETDEV_* event to handle
- * @net_dev: net_device which generated an event
- *
- * Return: NOTIFY_* result
- */
-static int batadv_hard_if_event_softif(unsigned long event,
-				       struct net_device *net_dev)
-{
-	struct batadv_priv *bat_priv;
-
-	switch (event) {
-	case NETDEV_REGISTER:
-		batadv_sysfs_add_meshif(net_dev);
-		bat_priv = netdev_priv(net_dev);
-		batadv_softif_create_vlan(bat_priv, BATADV_NO_FLAGS);
-		break;
-	case NETDEV_CHANGENAME:
-		batadv_debugfs_rename_meshif(net_dev);
-		break;
-	}
-
-	return NOTIFY_DONE;
-}
-
 static int batadv_hard_if_event(struct notifier_block *this,
 				unsigned long event, void *ptr)
 {
@@ -1014,8 +957,12 @@ static int batadv_hard_if_event(struct notifier_block *this,
 	struct batadv_hard_iface *primary_if = NULL;
 	struct batadv_priv *bat_priv;
 
-	if (batadv_softif_is_valid(net_dev))
-		return batadv_hard_if_event_softif(event, net_dev);
+	if (batadv_softif_is_valid(net_dev) && event == NETDEV_REGISTER) {
+		batadv_sysfs_add_meshif(net_dev);
+		bat_priv = netdev_priv(net_dev);
+		batadv_softif_create_vlan(bat_priv, BATADV_NO_FLAGS);
+		return NOTIFY_DONE;
+	}
 
 	hard_iface = batadv_hardif_get_by_netdev(net_dev);
 	if (!hard_iface && (event == NETDEV_REGISTER ||
@@ -1063,9 +1010,6 @@ static int batadv_hard_if_event(struct notifier_block *this,
 		hard_iface->wifi_flags = batadv_wifi_flags_evaluate(net_dev);
 		if (batadv_is_wifi_hardif(hard_iface))
 			hard_iface->num_bcasts = BATADV_NUM_BCASTS_WIRELESS;
-		break;
-	case NETDEV_CHANGENAME:
-		batadv_debugfs_rename_hardif(hard_iface);
 		break;
 	default:
 		break;

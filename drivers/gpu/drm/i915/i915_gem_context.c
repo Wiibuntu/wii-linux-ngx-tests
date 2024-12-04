@@ -195,8 +195,6 @@ static void context_close(struct i915_gem_context *ctx)
 {
 	i915_gem_context_set_closed(ctx);
 
-	kfree(ctx->jump_whitelist);
-
 	/*
 	 * The LUT uses the VMA as a backpointer to unref the object,
 	 * so we need to clear the LUT before we close all the VMA (inside
@@ -322,9 +320,6 @@ __create_hw_context(struct drm_i915_private *dev_priv,
 		ctx->ggtt_offset_bias = GUC_WOPCM_TOP;
 	else
 		ctx->ggtt_offset_bias = I915_GTT_PAGE_SIZE;
-
-	ctx->jump_whitelist = NULL;
-	ctx->jump_whitelist_cmds = 0;
 
 	return ctx;
 
@@ -471,10 +466,6 @@ int i915_gem_contexts_init(struct drm_i915_private *dev_priv)
 			DRM_INFO("Only EXECLIST mode is supported in vgpu.\n");
 			return -EINVAL;
 		}
-
-		/* Force the GPU state to be reinitialised on enabling */
-		if (ring->default_context)
-			ring->default_context->legacy_hw_ctx.initialized = false;
 	}
 
 	/* Using the simple ida interface, the max is limited by sizeof(int) */

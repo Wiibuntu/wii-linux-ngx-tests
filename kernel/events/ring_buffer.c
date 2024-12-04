@@ -14,7 +14,6 @@
 #include <linux/slab.h>
 #include <linux/circ_buf.h>
 #include <linux/poll.h>
-#include <linux/nospec.h>
 
 #include "internal.h"
 
@@ -49,30 +48,14 @@ static void perf_output_put_handle(struct perf_output_handle *handle)
 	unsigned long head;
 
 again:
-	/*
-	 * In order to avoid publishing a head value that goes backwards,
-	 * we must ensure the load of @rb->head happens after we've
-	 * incremented @rb->nest.
-	 *
-	 * Otherwise we can observe a @rb->head value before one published
-	 * by an IRQ/NMI happening between the load and the increment.
-	 */
-	barrier();
 	head = local_read(&rb->head);
 
 	/*
-	 * IRQ/NMI can happen here and advance @rb->head, causing our
-	 * load above to be stale.
+	 * IRQ/NMI can happen here, which means we can miss a head update.
 	 */
 
-	/*
-	 * If this isn't the outermost nesting, we don't have to update
-	 * @rb->user_page->data_head.
-	 */
-	if (local_read(&rb->nest) > 1) {
-		local_dec(&rb->nest);
+	if (!local_dec_and_test(&rb->nest))
 		goto out;
-	}
 
 	/*
 	 * Since the mmap() consumer (userspace) can run on a different CPU:
@@ -104,18 +87,9 @@ again:
 	rb->user_page->data_head = head;
 
 	/*
-	 * We must publish the head before decrementing the nest count,
-	 * otherwise an IRQ/NMI can publish a more recent head value and our
-	 * write will (temporarily) publish a stale value.
+	 * Now check if we missed an update -- rely on previous implied
+	 * compiler barriers to force a re-read.
 	 */
-	barrier();
-	local_set(&rb->nest, 0);
-
-	/*
-	 * Ensure we decrement @rb->nest before we validate the @rb->head.
-	 * Otherwise we cannot be sure we caught the 'last' nested update.
-	 */
-	barrier();
 	if (unlikely(head != local_read(&rb->head))) {
 		local_inc(&rb->nest);
 		goto again;
@@ -387,13 +361,6 @@ void *perf_aux_output_begin(struct perf_output_handle *handle,
 		goto err;
 
 	/*
-	 * If rb::aux_mmap_count is zero (and rb_has_aux() above went through),
-	 * the aux buffer is in perf_mmap_close(), about to get freed.
-	 */
-	if (!atomic_read(&rb->aux_mmap_count))
-		goto err;
-
-	/*
 	 * Nesting is not supported for AUX area, make sure nested
 	 * writers are caught early
 	 */
@@ -473,7 +440,6 @@ void perf_aux_output_end(struct perf_output_handle *handle, unsigned long size)
 {
 	bool wakeup = !!(handle->aux_flags & PERF_AUX_FLAG_TRUNCATED);
 	struct ring_buffer *rb = handle->rb;
-	bool wakeup = truncated;
 	unsigned long aux_head;
 
 	/* in overwrite mode, driver provides aux_head via handle */
@@ -601,25 +567,6 @@ static void __rb_free_aux(struct ring_buffer *rb)
 	 * last rb_free_aux().
 	 */
 	WARN_ON_ONCE(in_atomic());
-
-	if (rb->aux_priv) {
-		rb->free_aux(rb->aux_priv);
-		rb->free_aux = NULL;
-		rb->aux_priv = NULL;
-	}
-
-	if (rb->aux_nr_pages) {
-		for (pg = 0; pg < rb->aux_nr_pages; pg++)
-			rb_free_aux_page(rb, pg);
-
-		kfree(rb->aux_pages);
-		rb->aux_nr_pages = 0;
-	}
-}
-
-static void __rb_free_aux(struct ring_buffer *rb)
-{
-	int pg;
 
 	if (rb->aux_priv) {
 		rb->free_aux(rb->aux_priv);
@@ -775,9 +722,6 @@ struct ring_buffer *rb_alloc(int nr_pages, long watermark, int cpu, int flags)
 	size = sizeof(struct ring_buffer);
 	size += nr_pages * sizeof(void *);
 
-	if (order_base_2(size) >= PAGE_SHIFT+MAX_ORDER)
-		goto fail;
-
 	rb = kzalloc(size, GFP_KERNEL);
 	if (!rb)
 		goto fail;
@@ -923,10 +867,8 @@ perf_mmap_to_page(struct ring_buffer *rb, unsigned long pgoff)
 			return NULL;
 
 		/* AUX space */
-		if (pgoff >= rb->aux_pgoff) {
-			int aux_pgoff = array_index_nospec(pgoff - rb->aux_pgoff, rb->aux_nr_pages);
-			return virt_to_page(rb->aux_pages[aux_pgoff]);
-		}
+		if (pgoff >= rb->aux_pgoff)
+			return virt_to_page(rb->aux_pages[pgoff - rb->aux_pgoff]);
 	}
 
 	return __perf_mmap_to_page(rb, pgoff);

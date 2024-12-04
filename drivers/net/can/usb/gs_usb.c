@@ -186,16 +186,14 @@ struct gs_can {
 
 	struct usb_anchor tx_submitted;
 	atomic_t active_tx_urbs;
-	void *rxbuf[GS_MAX_RX_URBS];
-	dma_addr_t rxbuf_dma[GS_MAX_RX_URBS];
 };
 
 /* usb interface struct */
 struct gs_usb {
 	struct gs_can *canch[GS_MAX_INTF];
 	struct usb_anchor rx_submitted;
+	atomic_t active_channels;
 	struct usb_device *udev;
-	u8 active_channels;
 };
 
 /* 'allocate' a tx context.
@@ -269,8 +267,6 @@ static int gs_cmd_reset(struct gs_usb *gsusb, struct gs_can *gsdev)
 
 	kfree(dm);
 
-	kfree(dm);
-
 	return rc;
 }
 
@@ -326,7 +322,7 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 	/* device reports out of range channel id */
 	if (hf->channel >= GS_MAX_INTF)
-		goto device_detach;
+		goto resubmit_urb;
 
 	dev = usbcan->canch[hf->channel];
 
@@ -381,15 +377,10 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 		atomic_dec(&dev->active_tx_urbs);
 
-		atomic_dec(&dev->active_tx_urbs);
-
 		netif_wake_queue(netdev);
 	}
 
 	if (hf->flags & GS_CAN_FLAG_OVERFLOW) {
-		stats->rx_over_errors++;
-		stats->rx_errors++;
-
 		skb = alloc_can_err_skb(netdev, &cf);
 		if (!skb)
 			goto resubmit_urb;
@@ -397,6 +388,8 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 		cf->can_id |= CAN_ERR_CRTL;
 		cf->can_dlc = CAN_ERR_DLC;
 		cf->data[1] = CAN_ERR_CRTL_RX_OVERFLOW;
+		stats->rx_over_errors++;
+		stats->rx_errors++;
 		netif_rx(skb);
 	}
 
@@ -414,7 +407,6 @@ static void gs_usb_receive_bulk_callback(struct urb *urb)
 
 	/* USB failure take down all interfaces */
 	if (rc == -ENODEV) {
- device_detach:
 		for (rc = 0; rc < GS_MAX_INTF; rc++) {
 			if (usbcan->canch[rc])
 				netif_device_detach(usbcan->canch[rc]->netdev);
@@ -790,7 +782,7 @@ static int gs_usb_set_phys_id(struct net_device *dev,
 		break;
 	}
 
-	return (rc > 0) ? 0 : rc;
+	return rc;
 }
 
 static const struct ethtool_ops gs_usb_ethtool_ops = {
@@ -933,7 +925,7 @@ static int gs_usb_probe(struct usb_interface *intf,
 			     GS_USB_BREQ_HOST_FORMAT,
 			     USB_DIR_OUT | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
 			     1,
-			     intf->cur_altsetting->desc.bInterfaceNumber,
+			     intf->altsetting[0].desc.bInterfaceNumber,
 			     hconf,
 			     sizeof(*hconf),
 			     1000);
@@ -956,7 +948,7 @@ static int gs_usb_probe(struct usb_interface *intf,
 			     GS_USB_BREQ_DEVICE_CONFIG,
 			     USB_DIR_IN | USB_TYPE_VENDOR | USB_RECIP_INTERFACE,
 			     1,
-			     intf->cur_altsetting->desc.bInterfaceNumber,
+			     intf->altsetting[0].desc.bInterfaceNumber,
 			     dconf,
 			     sizeof(*dconf),
 			     1000);

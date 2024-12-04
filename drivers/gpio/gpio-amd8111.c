@@ -231,10 +231,7 @@ found:
 		ioport_unmap(gp.pm);
 		goto out;
 	}
-	return 0;
-
 out:
-	pci_dev_put(pdev);
 	return err;
 }
 

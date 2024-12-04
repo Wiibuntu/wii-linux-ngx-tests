@@ -449,9 +449,6 @@ static void __init map_mem(pgd_t *pgd)
 		__map_memblock(pgd, start, end, PAGE_KERNEL, flags);
 	}
 
-	/* Ensure the zero page is visible to the page table walker */
-	dsb(ishst);
-
 	/*
 	 * Map the linear alias of the [_text, __init_begin) interval
 	 * as non-executable now, and remove the write permission in
@@ -909,15 +906,3 @@ int pmd_clear_huge(pmd_t *pmd)
 	pmd_clear(pmd);
 	return 1;
 }
-
-#ifdef CONFIG_HAVE_ARCH_HUGE_VMAP
-int pud_free_pmd_page(pud_t *pud, unsigned long addr)
-{
-	return pud_none(*pud);
-}
-
-int pmd_free_pte_page(pmd_t *pmd, unsigned long addr)
-{
-	return pmd_none(*pmd);
-}
-#endif

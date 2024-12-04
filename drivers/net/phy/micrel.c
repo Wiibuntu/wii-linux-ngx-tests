@@ -29,7 +29,6 @@
 #include <linux/micrel_phy.h>
 #include <linux/of.h>
 #include <linux/clk.h>
-#include <uapi/linux/mdio.h>
 
 /* Operation Mode Strap Override */
 #define MII_KSZPHY_OMSO				0x16
@@ -338,17 +337,6 @@ static int ksz8041_config_aneg(struct phy_device *phydev)
 	}
 
 	return genphy_config_aneg(phydev);
-}
-
-static int ksz8061_config_init(struct phy_device *phydev)
-{
-	int ret;
-
-	ret = phy_write_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_DEVID1, 0xB61A);
-	if (ret)
-		return ret;
-
-	return kszphy_config_init(phydev);
 }
 
 static int ksz9021_load_values_from_of(struct phy_device *phydev,
@@ -740,21 +728,6 @@ static int kszphy_resume(struct phy_device *phydev)
 		if (phydev->drv->config_intr)
 			phydev->drv->config_intr(phydev);
 	}
-
-	return 0;
-}
-
-static int kszphy_resume(struct phy_device *phydev)
-{
-	int value;
-
-	mutex_lock(&phydev->lock);
-
-	value = phy_read(phydev, MII_BMCR);
-	phy_write(phydev, MII_BMCR, value & ~BMCR_PDOWN);
-
-	kszphy_config_intr(phydev);
-	mutex_unlock(&phydev->lock);
 
 	return 0;
 }

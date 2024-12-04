@@ -328,27 +328,6 @@ hrtimer_expires_remaining_adjusted(const struct hrtimer *timer)
 						    timer->base->get_time());
 }
 
-static inline ktime_t
-__hrtimer_expires_remaining_adjusted(const struct hrtimer *timer, ktime_t now)
-{
-	ktime_t rem = ktime_sub(timer->node.expires, now);
-
-	/*
-	 * Adjust relative timers for the extra we added in
-	 * hrtimer_start_range_ns() to prevent short timeouts.
-	 */
-	if (IS_ENABLED(CONFIG_TIME_LOW_RES) && timer->is_rel)
-		rem.tv64 -= hrtimer_resolution;
-	return rem;
-}
-
-static inline ktime_t
-hrtimer_expires_remaining_adjusted(const struct hrtimer *timer)
-{
-	return __hrtimer_expires_remaining_adjusted(timer,
-						    timer->base->get_time());
-}
-
 extern void clock_was_set(void);
 #ifdef CONFIG_TIMERFD
 extern void timerfd_clock_was_set(void);

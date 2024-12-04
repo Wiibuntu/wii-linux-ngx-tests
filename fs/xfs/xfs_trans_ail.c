@@ -513,6 +513,7 @@ xfsaild(
 	long		tout = 0;	/* milliseconds */
 
 	current->flags |= PF_MEMALLOC;
+	set_freezable();
 
 	while (1) {
 		if (tout && tout <= 20)

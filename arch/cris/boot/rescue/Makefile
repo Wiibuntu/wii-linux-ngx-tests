@@ -34,11 +34,6 @@ $(obj)/rescue.bin:
 
 endif
 
-else
-$(obj)/rescue.bin:
-
-endif
-
 $(obj)/testrescue.bin: $(obj)/testrescue.o
 	$(OBJCOPY) $(OBJCOPYFLAGS) $(obj)/testrescue.o tr.bin
 # Pad it to 784 bytes

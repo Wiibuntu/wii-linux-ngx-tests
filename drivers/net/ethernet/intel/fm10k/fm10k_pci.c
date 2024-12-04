@@ -333,10 +333,6 @@ static int fm10k_handle_reset(struct fm10k_intfc *interface)
 
 	fm10k_iov_resume(interface->pdev);
 
-reinit_err:
-	if (err)
-		netif_device_detach(netdev);
-
 	rtnl_unlock();
 
 	fm10k_resume_macvlan_task(interface);
@@ -1469,10 +1465,6 @@ void fm10k_mbx_free_irq(struct fm10k_intfc *interface)
 		return;
 
 	entry = &interface->msix_entries[FM10K_MBX_VECTOR];
-
-	/* no mailbox IRQ to free if MSI-X is not enabled */
-	if (!interface->msix_entries)
-		return;
 
 	/* disconnect the mailbox */
 	hw->mbx.ops.disconnect(hw, &hw->mbx);

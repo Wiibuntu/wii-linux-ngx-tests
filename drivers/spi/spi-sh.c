@@ -450,7 +450,7 @@ static int spi_sh_probe(struct platform_device *pdev)
 		return irq;
 	}
 
-	master = devm_spi_alloc_master(&pdev->dev, sizeof(struct spi_sh_data));
+	master = spi_alloc_master(&pdev->dev, sizeof(struct spi_sh_data));
 	if (master == NULL) {
 		dev_err(&pdev->dev, "spi_alloc_master error.\n");
 		return -ENOMEM;
@@ -468,14 +468,16 @@ static int spi_sh_probe(struct platform_device *pdev)
 		break;
 	default:
 		dev_err(&pdev->dev, "No support width\n");
-		return -ENODEV;
+		ret = -ENODEV;
+		goto error1;
 	}
 	ss->irq = irq;
 	ss->master = master;
 	ss->addr = devm_ioremap(&pdev->dev, res->start, resource_size(res));
 	if (ss->addr == NULL) {
 		dev_err(&pdev->dev, "ioremap error.\n");
-		return -ENOMEM;
+		ret = -ENOMEM;
+		goto error1;
 	}
 	INIT_LIST_HEAD(&ss->queue);
 	spin_lock_init(&ss->lock);

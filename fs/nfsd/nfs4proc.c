@@ -853,8 +853,8 @@ nfsd4_rename(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 			     rename->rn_tname, rename->rn_tnamelen);
 	if (status)
 		return status;
-	set_change_info(&rename->rn_sinfo, &cstate->save_fh);
-	set_change_info(&rename->rn_tinfo, &cstate->current_fh);
+	set_change_info(&rename->rn_sinfo, &cstate->current_fh);
+	set_change_info(&rename->rn_tinfo, &cstate->save_fh);
 	return nfs_ok;
 }
 
@@ -998,9 +998,8 @@ nfsd4_write(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 	unsigned long cnt;
 	int nvecs;
 
-	if (write->wr_offset > (u64)OFFSET_MAX ||
-	    write->wr_offset + write->wr_buflen > (u64)OFFSET_MAX)
-		return nfserr_fbig;
+	if (write->wr_offset >= OFFSET_MAX)
+		return nfserr_inval;
 
 	status = nfs4_preprocess_stateid_op(rqstp, cstate, &cstate->current_fh,
 						stateid, WR_STATE, &filp, NULL);
@@ -1364,14 +1363,14 @@ nfsd4_layoutget(struct svc_rqst *rqstp,
 	const struct nfsd4_layout_ops *ops;
 	struct nfs4_layout_stateid *ls;
 	__be32 nfserr;
-	int accmode = NFSD_MAY_READ_IF_EXEC;
+	int accmode;
 
 	switch (lgp->lg_seg.iomode) {
 	case IOMODE_READ:
-		accmode |= NFSD_MAY_READ;
+		accmode = NFSD_MAY_READ;
 		break;
 	case IOMODE_RW:
-		accmode |= NFSD_MAY_READ | NFSD_MAY_WRITE;
+		accmode = NFSD_MAY_READ | NFSD_MAY_WRITE;
 		break;
 	default:
 		dprintk("%s: invalid iomode %d\n",
@@ -1709,7 +1708,6 @@ nfsd4_proc_compound(struct svc_rqst *rqstp)
 	if (status) {
 		op = &args->ops[0];
 		op->status = status;
-		resp->opcnt = 1;
 		goto encode_op;
 	}
 

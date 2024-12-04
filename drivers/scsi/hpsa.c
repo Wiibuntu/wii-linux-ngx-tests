@@ -2329,8 +2329,6 @@ static int handle_ioaccel_mode2_error(struct ctlr_info *h,
 	case IOACCEL2_SERV_RESPONSE_COMPLETE:
 		switch (c2->error_data.status) {
 		case IOACCEL2_STATUS_SR_TASK_COMP_GOOD:
-			if (cmd)
-				cmd->result = 0;
 			break;
 		case IOACCEL2_STATUS_SR_TASK_COMP_CHK_COND:
 			cmd->result |= SAM_STAT_CHECK_CONDITION;
@@ -2490,10 +2488,8 @@ static void process_ioaccel2_completion(struct ctlr_info *h,
 
 	/* check for good status */
 	if (likely(c2->error_data.serv_response == 0 &&
-			c2->error_data.status == 0)) {
-		cmd->result = 0;
+			c2->error_data.status == 0))
 		return hpsa_cmd_free_and_done(h, c, cmd);
-	}
 
 	/*
 	 * Any RAID offload error results in retry which will use
@@ -4713,7 +4709,7 @@ static int fixup_ioaccel_cdb(u8 *cdb, int *cdb_len)
 		*cdb_len = 10;
 		break;
 	}
-	return HPSA_LV_OK;
+	return 0;
 }
 
 static int hpsa_scsi_ioaccel1_queue_command(struct ctlr_info *h,
@@ -5297,70 +5293,6 @@ static int hpsa_scsi_ioaccel_raid_map(struct ctlr_info *h,
 		if (r5or6_first_row != r5or6_last_row)
 			return IO_ACCEL_INELIGIBLE;
 
-static bool hpsa_is_disk_spare(struct ctlr_info *h, u8 *lunaddrbytes)
-{
-	struct bmic_identify_physical_device *id_phys;
-	bool is_spare = false;
-	int rc;
-
-	id_phys = kzalloc(sizeof(*id_phys), GFP_KERNEL);
-	if (!id_phys)
-		return false;
-
-	rc = hpsa_bmic_id_physical_device(h,
-					lunaddrbytes,
-					GET_BMIC_DRIVE_NUMBER(lunaddrbytes),
-					id_phys, sizeof(*id_phys));
-	if (rc == 0)
-		is_spare = (id_phys->more_flags >> 6) & 0x01;
-
-	kfree(id_phys);
-	return is_spare;
-}
-
-#define RPL_DEV_FLAG_NON_DISK                           0x1
-#define RPL_DEV_FLAG_UNCONFIG_DISK_REPORTING_SUPPORTED  0x2
-#define RPL_DEV_FLAG_UNCONFIG_DISK                      0x4
-
-#define BMIC_DEVICE_TYPE_ENCLOSURE  6
-
-static bool hpsa_skip_device(struct ctlr_info *h, u8 *lunaddrbytes,
-				struct ext_report_lun_entry *rle)
-{
-	u8 device_flags;
-	u8 device_type;
-
-	if (!MASKED_DEVICE(lunaddrbytes))
-		return false;
-
-	device_flags = rle->device_flags;
-	device_type = rle->device_type;
-
-	if (device_flags & RPL_DEV_FLAG_NON_DISK) {
-		if (device_type == BMIC_DEVICE_TYPE_ENCLOSURE)
-			return false;
-		return true;
-	}
-
-	if (!(device_flags & RPL_DEV_FLAG_UNCONFIG_DISK_REPORTING_SUPPORTED))
-		return false;
-
-	if (device_flags & RPL_DEV_FLAG_UNCONFIG_DISK)
-		return false;
-
-	/*
-	 * Spares may be spun down, we do not want to
-	 * do an Inquiry to a RAID set spare drive as
-	 * that would have them spun up, that is a
-	 * performance hit because I/O to the RAID device
-	 * stops while the spin up occurs which can take
-	 * over 50 seconds.
-	 */
-	if (hpsa_is_disk_spare(h, lunaddrbytes))
-		return true;
-
-	return false;
-}
 
 		/* Verify request is in a single column */
 #if BITS_PER_LONG == 32
@@ -5698,12 +5630,6 @@ static int hpsa_scsi_queue_command(struct Scsi_Host *sh, struct scsi_cmnd *cmd)
 	c = cmd_tagged_alloc(h, cmd);
 
 	/*
-	 * This is necessary because the SML doesn't zero out this field during
-	 * error recovery.
-	 */
-	cmd->result = 0;
-
-	/*
 	 * Call alternate submit routine for I/O accelerated commands.
 	 * Retries always go down the normal I/O path.
 	 */
@@ -5826,7 +5752,7 @@ static int hpsa_scsi_host_alloc(struct ctlr_info *h)
 {
 	struct Scsi_Host *sh;
 
-	sh = scsi_host_alloc(&hpsa_driver_template, sizeof(struct ctlr_info));
+	sh = scsi_host_alloc(&hpsa_driver_template, sizeof(h));
 	if (sh == NULL) {
 		dev_err(&h->pdev->dev, "scsi_host_alloc failed\n");
 		return -ENOMEM;
@@ -8966,8 +8892,6 @@ static void hpsa_remove_one(struct pci_dev *pdev)
 
 	hpsa_delete_sas_host(h);
 
-	hpsa_delete_sas_host(h);
-
 	/*
 	 * Call before disabling interrupts.
 	 * scsi_remove_host can trigger I/O operations especially
@@ -9676,8 +9600,7 @@ static int hpsa_add_sas_host(struct ctlr_info *h)
 	return 0;
 
 free_sas_phy:
-	sas_phy_free(hpsa_sas_phy->phy);
-	kfree(hpsa_sas_phy);
+	hpsa_free_sas_phy(hpsa_sas_phy);
 free_sas_port:
 	hpsa_free_sas_port(hpsa_sas_port);
 free_sas_node:
@@ -9713,12 +9636,10 @@ static int hpsa_add_sas_device(struct hpsa_sas_node *hpsa_sas_node,
 
 	rc = hpsa_sas_port_add_rphy(hpsa_sas_port, rphy);
 	if (rc)
-		goto free_sas_rphy;
+		goto free_sas_port;
 
 	return 0;
 
-free_sas_rphy:
-	sas_rphy_free(rphy);
 free_sas_port:
 	hpsa_free_sas_port(hpsa_sas_port);
 	device->sas_port = NULL;

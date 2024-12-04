@@ -11,8 +11,6 @@
 # are not supported by all versions of the compiler
 # ==========================================================================
 
-KBUILD_CFLAGS += $(call cc-disable-warning, packed-not-aligned)
-
 ifeq ("$(origin W)", "command line")
   export KBUILD_ENABLE_EXTRA_GCC_CHECKS := $(W)
 endif

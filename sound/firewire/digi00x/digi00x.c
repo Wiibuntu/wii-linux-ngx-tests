@@ -70,8 +70,6 @@ static void do_registration(struct work_struct *work)
 	if (err < 0)
 		return;
 
-	dg00x->is_console = entry->model_id == MODEL_CONSOLE;
-
 	err = name_card(dg00x);
 	if (err < 0)
 		goto error;

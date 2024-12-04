@@ -1,14 +1,22 @@
-// SPDX-License-Identifier: GPL-2.0
 /**
  * GHASH routines supporting VMX instructions on the Power 8
  *
- * Copyright (C) 2015, 2019 International Business Machines Inc.
+ * Copyright (C) 2015 International Business Machines Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; version 2 only.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * Author: Marcelo Henrique Cerri <mhcerri@br.ibm.com>
- *
- * Extended by Daniel Axtens <dja@axtens.net> to replace the fallback
- * mechanism. The new approach is based on arm64 code, which is:
- *   Copyright (C) 2014 - 2018 Linaro Ltd. <ard.biesheuvel@linaro.org>
  */
 
 #include <linux/types.h>
@@ -115,53 +123,7 @@ static int p8_ghash_setkey(struct crypto_shash *tfm, const u8 *key,
 	disable_kernel_vsx();
 	pagefault_enable();
 	preempt_enable();
-
-	memcpy(&ctx->key, key, GHASH_BLOCK_SIZE);
-
-	return 0;
-}
-
-static inline void __ghash_block(struct p8_ghash_ctx *ctx,
-				 struct p8_ghash_desc_ctx *dctx)
-{
-	if (!IN_INTERRUPT) {
-		preempt_disable();
-		pagefault_disable();
-		enable_kernel_altivec();
-		enable_kernel_vsx();
-		enable_kernel_fp();
-		gcm_ghash_p8(dctx->shash, ctx->htable,
-				dctx->buffer, GHASH_DIGEST_SIZE);
-		pagefault_enable();
-		preempt_enable();
-	} else {
-		crypto_xor((u8 *)dctx->shash, dctx->buffer, GHASH_BLOCK_SIZE);
-		gf128mul_lle((be128 *)dctx->shash, &ctx->key);
-	}
-}
-
-static inline void __ghash_blocks(struct p8_ghash_ctx *ctx,
-				  struct p8_ghash_desc_ctx *dctx,
-				  const u8 *src, unsigned int srclen)
-{
-	if (!IN_INTERRUPT) {
-		preempt_disable();
-		pagefault_disable();
-		enable_kernel_altivec();
-		enable_kernel_vsx();
-		enable_kernel_fp();
-		gcm_ghash_p8(dctx->shash, ctx->htable,
-				src, srclen);
-		pagefault_enable();
-		preempt_enable();
-	} else {
-		while (srclen >= GHASH_BLOCK_SIZE) {
-			crypto_xor((u8 *)dctx->shash, src, GHASH_BLOCK_SIZE);
-			gf128mul_lle((be128 *)dctx->shash, &ctx->key);
-			srclen -= GHASH_BLOCK_SIZE;
-			src += GHASH_BLOCK_SIZE;
-		}
-	}
+	return crypto_shash_setkey(ctx->fallback, key, keylen);
 }
 
 static int p8_ghash_update(struct shash_desc *desc,

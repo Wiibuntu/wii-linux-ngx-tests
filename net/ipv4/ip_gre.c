@@ -229,7 +229,6 @@ static void gre_err(struct sk_buff *skb, u32 info)
 	const int code = icmp_hdr(skb)->code;
 	struct tnl_ptk_info tpi;
 	bool csum_err = false;
-	int hdr_len;
 
 	if (gre_parse_header(skb, &tpi, &csum_err, htons(ETH_P_IP),
 			     iph->ihl * 4) < 0) {
@@ -1075,11 +1074,6 @@ static int ipgre_tunnel_validate(struct nlattr *tb[], struct nlattr *data[],
 	if (data[IFLA_GRE_OFLAGS])
 		flags |= nla_get_be16(data[IFLA_GRE_OFLAGS]);
 	if (flags & (GRE_VERSION|GRE_ROUTING))
-		return -EINVAL;
-
-	if (data[IFLA_GRE_COLLECT_METADATA] &&
-	    data[IFLA_GRE_ENCAP_TYPE] &&
-	    nla_get_u16(data[IFLA_GRE_ENCAP_TYPE]) != TUNNEL_ENCAP_NONE)
 		return -EINVAL;
 
 	if (data[IFLA_GRE_COLLECT_METADATA] &&

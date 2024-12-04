@@ -87,8 +87,7 @@ static inline void __tlb_flush_kernel(void)
 #define __tlb_flush_global()	__tlb_flush_local()
 
 /*
- * Flush TLB entries for a specific ASCE on all CPUs. Should never be used
- * when more than one asce (e.g. gmap) ran on this mm.
+ * Flush TLB entries for a specific ASCE on all CPUs.
  */
 static inline void __tlb_flush_mm(struct mm_struct *mm)
 {

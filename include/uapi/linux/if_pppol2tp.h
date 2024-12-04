@@ -100,7 +100,6 @@ enum {
 	PPPOL2TP_MSG_DATA	= L2TP_MSG_DATA,
 };
 
-#include <linux/l2tp.h>
 
 
 #endif /* _UAPI__LINUX_IF_PPPOL2TP_H */

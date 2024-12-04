@@ -325,12 +325,6 @@ struct klp_modinfo {
 };
 #endif
 
-struct mod_kallsyms {
-	Elf_Sym *symtab;
-	unsigned int num_symtab;
-	char *strtab;
-};
-
 struct module {
 	enum module_state state;
 
@@ -806,15 +800,6 @@ static inline void module_bug_finalize(const Elf_Ehdr *hdr,
 }
 static inline void module_bug_cleanup(struct module *mod) {}
 #endif	/* CONFIG_GENERIC_BUG */
-
-#ifdef CONFIG_RETPOLINE
-extern bool retpoline_module_ok(bool has_retpoline);
-#else
-static inline bool retpoline_module_ok(bool has_retpoline)
-{
-	return true;
-}
-#endif
 
 #ifdef CONFIG_MODULE_SIG
 static inline bool module_sig_ok(struct module *module)

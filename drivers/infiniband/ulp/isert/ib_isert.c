@@ -2498,7 +2498,6 @@ isert_free_np(struct iscsi_np *np)
 {
 	struct isert_np *isert_np = np->np_context;
 	struct isert_conn *isert_conn, *n;
-	LIST_HEAD(drop_conn_list);
 
 	if (isert_np->cm_id)
 		rdma_destroy_id(isert_np->cm_id);
@@ -2518,7 +2517,7 @@ isert_free_np(struct iscsi_np *np)
 					 node) {
 			isert_info("cleaning isert_conn %p state (%d)\n",
 				   isert_conn, isert_conn->state);
-			list_move_tail(&isert_conn->node, &drop_conn_list);
+			isert_connect_release(isert_conn);
 		}
 	}
 
@@ -2529,15 +2528,10 @@ isert_free_np(struct iscsi_np *np)
 					 node) {
 			isert_info("cleaning isert_conn %p state (%d)\n",
 				   isert_conn, isert_conn->state);
-			list_move_tail(&isert_conn->node, &drop_conn_list);
+			isert_connect_release(isert_conn);
 		}
 	}
 	mutex_unlock(&isert_np->mutex);
-
-	list_for_each_entry_safe(isert_conn, n, &drop_conn_list, node) {
-		list_del_init(&isert_conn->node);
-		isert_connect_release(isert_conn);
-	}
 
 	np->np_context = NULL;
 	kfree(isert_np);
@@ -2570,17 +2564,6 @@ isert_wait4logout(struct isert_conn *isert_conn)
 		isert_info("conn %p wait for conn_logout_comp\n", isert_conn);
 		wait_for_completion_timeout(&conn->conn_logout_comp,
 					    SECONDS_FOR_LOGOUT_COMP * HZ);
-	}
-}
-
-static void
-isert_wait4cmds(struct iscsi_conn *conn)
-{
-	isert_info("iscsi_conn %p\n", conn);
-
-	if (conn->sess) {
-		target_sess_cmd_list_set_waiting(conn->sess->se_sess);
-		target_wait_for_sess_cmds(conn->sess->se_sess);
 	}
 }
 

@@ -77,8 +77,7 @@ static inline int gup_huge_pmd(pmd_t *pmdp, pmd_t pmd, unsigned long addr,
 		refs++;
 	} while (addr += PAGE_SIZE, addr != end);
 
-	if (WARN_ON_ONCE(page_ref_count(head) < 0)
-	    || !page_cache_add_speculative(head, refs)) {
+	if (!page_cache_add_speculative(head, refs)) {
 		*nr -= refs;
 		return 0;
 	}

@@ -1104,8 +1104,6 @@ struct megasas_ctrl_info {
 	 */
 	char package_version[0x60];
 
-#define SCAN_PD_CHANNEL	0x1
-#define SCAN_VD_CHANNEL	0x2
 
 	/*
 	* If adapterOperations.supportMoreThan8Phys is set,

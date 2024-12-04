@@ -123,12 +123,6 @@ struct soc_device *soc_device_register(struct soc_device_attribute *soc_dev_attr
 		return NULL;
 	}
 
-	if (!soc_bus_type.p) {
-		ret = bus_register(&soc_bus_type);
-		if (ret)
-			goto out1;
-	}
-
 	soc_dev = kzalloc(sizeof(*soc_dev), GFP_KERNEL);
 	if (!soc_dev) {
 		ret = -ENOMEM;
@@ -161,7 +155,6 @@ out2:
 out1:
 	return ERR_PTR(ret);
 }
-EXPORT_SYMBOL_GPL(soc_device_register);
 
 /* Ensure soc_dev->attr is freed prior to calling soc_device_unregister. */
 void soc_device_unregister(struct soc_device *soc_dev)

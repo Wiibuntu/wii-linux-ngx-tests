@@ -132,24 +132,21 @@ void udf_evict_inode(struct inode *inode)
 	struct udf_inode_info *iinfo = UDF_I(inode);
 	int want_delete = 0;
 
-	if (!is_bad_inode(inode)) {
-		if (!inode->i_nlink) {
-			want_delete = 1;
-			udf_setsize(inode, 0);
-			udf_update_inode(inode, IS_SYNC(inode));
-		}
-		if (iinfo->i_alloc_type != ICBTAG_FLAG_AD_IN_ICB &&
-		    inode->i_size != iinfo->i_lenExtents) {
-			udf_warn(inode->i_sb,
-				 "Inode %lu (mode %o) has inode size %llu different from extent length %llu. Filesystem need not be standards compliant.\n",
-				 inode->i_ino, inode->i_mode,
-				 (unsigned long long)inode->i_size,
-				 (unsigned long long)iinfo->i_lenExtents);
-		}
+	if (!inode->i_nlink && !is_bad_inode(inode)) {
+		want_delete = 1;
+		udf_setsize(inode, 0);
+		udf_update_inode(inode, IS_SYNC(inode));
 	}
 	truncate_inode_pages_final(&inode->i_data);
 	invalidate_inode_buffers(inode);
 	clear_inode(inode);
+	if (iinfo->i_alloc_type != ICBTAG_FLAG_AD_IN_ICB &&
+	    inode->i_size != iinfo->i_lenExtents) {
+		udf_warn(inode->i_sb, "Inode %lu (mode %o) has inode size %llu different from extent length %llu. Filesystem need not be standards compliant.\n",
+			 inode->i_ino, inode->i_mode,
+			 (unsigned long long)inode->i_size,
+			 (unsigned long long)iinfo->i_lenExtents);
+	}
 	kfree(iinfo->i_ext.i_data);
 	iinfo->i_ext.i_data = NULL;
 	udf_clear_extent_cache(inode);
@@ -251,6 +248,10 @@ int udf_expand_file_adinicb(struct inode *inode)
 	char *kaddr;
 	struct udf_inode_info *iinfo = UDF_I(inode);
 	int err;
+	struct writeback_control udf_wbc = {
+		.sync_mode = WB_SYNC_NONE,
+		.nr_to_write = 1,
+	};
 
 	WARN_ON_ONCE(!inode_is_locked(inode));
 	if (!iinfo->i_lenAlloc) {
@@ -294,10 +295,8 @@ int udf_expand_file_adinicb(struct inode *inode)
 		iinfo->i_alloc_type = ICBTAG_FLAG_AD_LONG;
 	/* from now on we have normal address_space methods */
 	inode->i_data.a_ops = &udf_aops;
-	set_page_dirty(page);
-	unlock_page(page);
 	up_write(&iinfo->i_data_sem);
-	err = filemap_fdatawrite(inode->i_mapping);
+	err = inode->i_data.a_ops->writepage(page, &udf_wbc);
 	if (err) {
 		/* Restore everything back so that we don't lose data... */
 		lock_page(page);
@@ -309,7 +308,6 @@ int udf_expand_file_adinicb(struct inode *inode)
 		unlock_page(page);
 		iinfo->i_alloc_type = ICBTAG_FLAG_AD_IN_ICB;
 		inode->i_data.a_ops = &udf_adinicb_aops;
-		iinfo->i_lenAlloc = inode->i_size;
 		up_write(&iinfo->i_data_sem);
 	}
 	put_page(page);
@@ -434,12 +432,6 @@ static int udf_get_block(struct inode *inode, sector_t block,
 		iinfo->i_next_alloc_goal++;
 	}
 
-	/*
-	 * Block beyond EOF and prealloc extents? Just discard preallocation
-	 * as it is not useful and complicates things.
-	 */
-	if (((loff_t)block) << inode->i_blkbits > iinfo->i_lenExtents)
-		udf_discard_prealloc(inode);
 	udf_clear_extent_cache(inode);
 	phys = inode_getblk(inode, block, &err, &new);
 	if (!phys)
@@ -602,33 +594,6 @@ out:
 		return -EIO;
 
 	return count;
-out_err:
-	/* Remove extents we've created so far */
-	udf_clear_extent_cache(inode);
-	udf_truncate_extents(inode);
-	return err;
-}
-
-/* Extend the final block of the file to final_block_len bytes */
-static void udf_do_extend_final_block(struct inode *inode,
-				      struct extent_position *last_pos,
-				      struct kernel_long_ad *last_ext,
-				      uint32_t new_elen)
-{
-	uint32_t added_bytes;
-
-	/*
-	 * Extent already large enough? It may be already rounded up to block
-	 * size...
-	 */
-	if (new_elen <= (last_ext->extLength & UDF_EXTENT_LENGTH_MASK))
-		return;
-	added_bytes = new_elen - (last_ext->extLength & UDF_EXTENT_LENGTH_MASK);
-	last_ext->extLength += added_bytes;
-	UDF_I(inode)->i_lenExtents += added_bytes;
-
-	udf_write_aext(inode, last_pos, &last_ext->extLocation,
-			last_ext->extLength, 1);
 }
 
 static int udf_extend_file(struct inode *inode, loff_t newsize)
@@ -640,12 +605,10 @@ static int udf_extend_file(struct inode *inode, loff_t newsize)
 	int8_t etype;
 	struct super_block *sb = inode->i_sb;
 	sector_t first_block = newsize >> sb->s_blocksize_bits, offset;
-	loff_t new_elen;
 	int adsize;
 	struct udf_inode_info *iinfo = UDF_I(inode);
 	struct kernel_long_ad extent;
-	int err = 0;
-	bool within_last_ext;
+	int err;
 
 	if (iinfo->i_alloc_type == ICBTAG_FLAG_AD_SHORT)
 		adsize = sizeof(struct short_ad);
@@ -654,18 +617,19 @@ static int udf_extend_file(struct inode *inode, loff_t newsize)
 	else
 		BUG();
 
-	/*
-	 * When creating hole in file, just don't bother with preserving
-	 * preallocation. It likely won't be very useful anyway.
-	 */
-	udf_discard_prealloc(inode);
-
 	etype = inode_bmap(inode, first_block, &epos, &eloc, &elen, &offset);
-	within_last_ext = (etype != -1);
-	/* We don't expect extents past EOF... */
-	WARN_ON_ONCE(within_last_ext &&
-		     elen > ((loff_t)offset + 1) << inode->i_blkbits);
 
+	/* File has extent covering the new size (could happen when extending
+	 * inside a block)? */
+	if (etype != -1)
+		return 0;
+	if (newsize & (sb->s_blocksize - 1))
+		offset++;
+	/* Extended file just to the boundary of the last file block? */
+	if (offset == 0)
+		return 0;
+
+	/* Truncate is extending the file by 'offset' blocks */
 	if ((!epos.bh && epos.offset == udf_file_entry_alloc_offset(inode)) ||
 	    (epos.bh && epos.offset == sizeof(struct allocExtDesc))) {
 		/* File has no extents at all or has empty last
@@ -679,20 +643,7 @@ static int udf_extend_file(struct inode *inode, loff_t newsize)
 				      &extent.extLength, 0);
 		extent.extLength |= etype << 30;
 	}
-
-	new_elen = ((loff_t)offset << inode->i_blkbits) |
-					(newsize & (sb->s_blocksize - 1));
-
-	/* File has extent covering the new size (could happen when extending
-	 * inside a block)?
-	 */
-	if (within_last_ext) {
-		/* Extending file within the last file block */
-		udf_do_extend_final_block(inode, &epos, &extent, new_elen);
-	} else {
-		err = udf_do_extend_file(inode, &epos, &extent, new_elen);
-	}
-
+	err = udf_do_extend_file(inode, &epos, &extent, offset);
 	if (err < 0)
 		goto out;
 	err = 0;
@@ -1107,8 +1058,23 @@ static void udf_merge_extents(struct inode *inode, struct kernel_long_ad *laarr,
 			blocksize - 1) >> blocksize_bits)))) {
 
 			if (((li->extLength & UDF_EXTENT_LENGTH_MASK) +
-			     (lip1->extLength & UDF_EXTENT_LENGTH_MASK) +
-			     blocksize - 1) <= UDF_EXTENT_LENGTH_MASK) {
+				(lip1->extLength & UDF_EXTENT_LENGTH_MASK) +
+				blocksize - 1) & ~UDF_EXTENT_LENGTH_MASK) {
+				lip1->extLength = (lip1->extLength -
+						  (li->extLength &
+						   UDF_EXTENT_LENGTH_MASK) +
+						   UDF_EXTENT_LENGTH_MASK) &
+							~(blocksize - 1);
+				li->extLength = (li->extLength &
+						 UDF_EXTENT_FLAG_MASK) +
+						(UDF_EXTENT_LENGTH_MASK + 1) -
+						blocksize;
+				lip1->extLocation.logicalBlockNum =
+					li->extLocation.logicalBlockNum +
+					((li->extLength &
+						UDF_EXTENT_LENGTH_MASK) >>
+						blocksize_bits);
+			} else {
 				li->extLength = lip1->extLength +
 					(((li->extLength &
 						UDF_EXTENT_LENGTH_MASK) +
@@ -1178,23 +1144,15 @@ static void udf_update_extents(struct inode *inode, struct kernel_long_ad *laarr
 	int start = 0, i;
 	struct kernel_lb_addr tmploc;
 	uint32_t tmplen;
-	int err;
 
 	if (startnum > endnum) {
 		for (i = 0; i < (startnum - endnum); i++)
-			udf_delete_aext(inode, *epos);
+			udf_delete_aext(inode, *epos, laarr[i].extLocation,
+					laarr[i].extLength);
 	} else if (startnum < endnum) {
 		for (i = 0; i < (endnum - startnum); i++) {
-			err = udf_insert_aext(inode, *epos,
-					      laarr[i].extLocation,
-					      laarr[i].extLength);
-			/*
-			 * If we fail here, we are likely corrupting the extent
-			 * list and leaking blocks. At least stop early to
-			 * limit the damage.
-			 */
-			if (err < 0)
-				return err;
+			udf_insert_aext(inode, *epos, laarr[i].extLocation,
+					laarr[i].extLength);
 			udf_next_aext(inode, epos, &laarr[i].extLocation,
 				      &laarr[i].extLength, 1);
 			start++;
@@ -1206,7 +1164,6 @@ static void udf_update_extents(struct inode *inode, struct kernel_long_ad *laarr
 		udf_write_aext(inode, epos, &laarr[i].extLocation,
 			       laarr[i].extLength, 1);
 	}
-	return 0;
 }
 
 struct buffer_head *udf_bread(struct inode *inode, udf_pblk_t block,
@@ -1400,12 +1357,6 @@ reread:
 
 	iinfo->i_alloc_type = le16_to_cpu(fe->icbTag.flags) &
 							ICBTAG_FLAG_AD_MASK;
-	if (iinfo->i_alloc_type != ICBTAG_FLAG_AD_SHORT &&
-	    iinfo->i_alloc_type != ICBTAG_FLAG_AD_LONG &&
-	    iinfo->i_alloc_type != ICBTAG_FLAG_AD_IN_ICB) {
-		ret = -EIO;
-		goto out;
-	}
 	iinfo->i_unique = 0;
 	iinfo->i_lenEAttr = 0;
 	iinfo->i_lenExtents = 0;
@@ -2202,13 +2153,12 @@ int8_t udf_current_aext(struct inode *inode, struct extent_position *epos,
 	return etype;
 }
 
-static int udf_insert_aext(struct inode *inode, struct extent_position epos,
-			   struct kernel_lb_addr neloc, uint32_t nelen)
+static int8_t udf_insert_aext(struct inode *inode, struct extent_position epos,
+			      struct kernel_lb_addr neloc, uint32_t nelen)
 {
 	struct kernel_lb_addr oeloc;
 	uint32_t oelen;
 	int8_t etype;
-	int err;
 
 	if (epos.bh)
 		get_bh(epos.bh);
@@ -2218,21 +2168,20 @@ static int udf_insert_aext(struct inode *inode, struct extent_position epos,
 		neloc = oeloc;
 		nelen = (etype << 30) | oelen;
 	}
-	err = udf_add_aext(inode, &epos, &neloc, nelen, 1);
+	udf_add_aext(inode, &epos, &neloc, nelen, 1);
 	brelse(epos.bh);
 
-	return err;
+	return (nelen >> 30);
 }
 
-int8_t udf_delete_aext(struct inode *inode, struct extent_position epos)
+int8_t udf_delete_aext(struct inode *inode, struct extent_position epos,
+		       struct kernel_lb_addr eloc, uint32_t elen)
 {
 	struct extent_position oepos;
 	int adsize;
 	int8_t etype;
 	struct allocExtDesc *aed;
 	struct udf_inode_info *iinfo;
-	struct kernel_lb_addr eloc;
-	uint32_t elen;
 
 	if (epos.bh) {
 		get_bh(epos.bh);

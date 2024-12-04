@@ -2141,9 +2141,6 @@ void i40evf_free_all_tx_resources(struct i40evf_adapter *adapter)
 	if (!adapter->tx_rings)
 		return;
 
-	if (!adapter->tx_rings)
-		return;
-
 	for (i = 0; i < adapter->num_active_queues; i++)
 		if (adapter->tx_rings[i].desc)
 			i40evf_free_tx_resources(&adapter->tx_rings[i]);
@@ -2211,9 +2208,6 @@ static int i40evf_setup_all_rx_resources(struct i40evf_adapter *adapter)
 void i40evf_free_all_rx_resources(struct i40evf_adapter *adapter)
 {
 	int i;
-
-	if (!adapter->rx_rings)
-		return;
 
 	if (!adapter->rx_rings)
 		return;
@@ -2968,7 +2962,6 @@ static int i40evf_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 err_ioremap:
 	free_netdev(netdev);
 err_alloc_etherdev:
-	pci_disable_pcie_error_reporting(pdev);
 	pci_release_regions(pdev);
 err_pci_reg:
 err_dma:

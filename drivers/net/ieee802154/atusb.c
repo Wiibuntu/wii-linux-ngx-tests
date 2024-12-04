@@ -96,9 +96,7 @@ static int atusb_control_msg(struct atusb *atusb, unsigned int pipe,
 
 	ret = usb_control_msg(usb_dev, pipe, request, requesttype,
 			      value, index, data, size, timeout);
-	if (ret < size) {
-		ret = ret < 0 ? ret : -ENODATA;
-
+	if (ret < 0) {
 		atusb->err = ret;
 		dev_err(&usb_dev->dev,
 			"%s: req 0x%02x val 0x%x idx 0x%x, error %d\n",
@@ -370,7 +368,6 @@ static int atusb_alloc_urbs(struct atusb *atusb, int n)
 			return -ENOMEM;
 		}
 		usb_anchor_urb(urb, &atusb->idle_urbs);
-		usb_free_urb(urb);
 		n--;
 	}
 	return 0;
@@ -1143,11 +1140,10 @@ static void atusb_disconnect(struct usb_interface *interface)
 
 	ieee802154_unregister_hw(atusb->hw);
 
-	usb_put_dev(atusb->usb_dev);
-
 	ieee802154_free_hw(atusb->hw);
 
 	usb_set_intfdata(interface, NULL);
+	usb_put_dev(atusb->usb_dev);
 
 	pr_debug("%s done\n", __func__);
 }

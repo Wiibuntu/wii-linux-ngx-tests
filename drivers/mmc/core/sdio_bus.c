@@ -292,25 +292,9 @@ struct sdio_func *sdio_alloc_func(struct mmc_card *card)
 		return ERR_PTR(-ENOMEM);
 	}
 
-	/*
-	 * allocate buffer separately to make sure it's properly aligned for
-	 * DMA usage (incl. 64 bit DMA)
-	 */
-	func->tmpbuf = kmalloc(4, GFP_KERNEL);
-	if (!func->tmpbuf) {
-		kfree(func);
-		return ERR_PTR(-ENOMEM);
-	}
-
 	func->card = card;
 
 	device_initialize(&func->dev);
-
-	/*
-	 * We may link to tuples in the card structure,
-	 * we need make sure we have a reference to it.
-	 */
-	get_device(&func->card->dev);
 
 	func->dev.parent = &card->dev;
 	func->dev.bus = &sdio_bus_type;
@@ -365,9 +349,10 @@ int sdio_add_func(struct sdio_func *func)
  */
 void sdio_remove_func(struct sdio_func *func)
 {
-	if (sdio_func_present(func))
-		device_del(&func->dev);
+	if (!sdio_func_present(func))
+		return;
 
+	device_del(&func->dev);
 	of_node_put(func->dev.of_node);
 	put_device(&func->dev);
 }

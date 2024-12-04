@@ -2772,7 +2772,7 @@ static void __init fixup_device_tree_efika_add_phy(void)
 
 	/* Check if the phy-handle property exists - bail if it does */
 	rv = prom_getprop(node, "phy-handle", prop, sizeof(prop));
-	if (rv <= 0)
+	if (!rv)
 		return;
 
 	/*
@@ -2990,9 +2990,6 @@ static void __init prom_find_boot_cpu(void)
 	prom_cpu = be32_to_cpu(rval);
 
 	cpu_pkg = call_prom("instance-to-package", 1, 1, prom_cpu);
-
-	if (!PHANDLE_VALID(cpu_pkg))
-		return;
 
 	if (!PHANDLE_VALID(cpu_pkg))
 		return;

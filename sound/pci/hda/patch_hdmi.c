@@ -1544,11 +1544,9 @@ static bool hdmi_present_sense_via_verbs(struct hdmi_spec_per_pin *per_pin,
 	ret = !repoll || !eld->monitor_present || eld->eld_valid;
 
 	jack = snd_hda_jack_tbl_get(codec, pin_nid);
-	if (jack) {
+	if (jack)
 		jack->block_report = !ret;
-		jack->pin_sense = (eld->monitor_present && eld->eld_valid) ?
-			AC_PINSENSE_PRESENCE : 0;
-	}
+
 	mutex_unlock(&per_pin->lock);
 	return ret;
 }
@@ -2296,18 +2294,6 @@ static void generic_hdmi_free(struct hda_codec *codec)
 }
 
 #ifdef CONFIG_PM
-static int generic_hdmi_suspend(struct hda_codec *codec)
-{
-	struct hdmi_spec *spec = codec->spec;
-	int pin_idx;
-
-	for (pin_idx = 0; pin_idx < spec->num_pins; pin_idx++) {
-		struct hdmi_spec_per_pin *per_pin = get_pin(spec, pin_idx);
-		cancel_delayed_work_sync(&per_pin->work);
-	}
-	return 0;
-}
-
 static int generic_hdmi_resume(struct hda_codec *codec)
 {
 	struct hdmi_spec *spec = codec->spec;
@@ -2331,7 +2317,6 @@ static const struct hda_codec_ops generic_hdmi_patch_ops = {
 	.build_controls		= generic_hdmi_build_controls,
 	.unsol_event		= hdmi_unsol_event,
 #ifdef CONFIG_PM
-	.suspend		= generic_hdmi_suspend,
 	.resume			= generic_hdmi_resume,
 #endif
 };
@@ -2490,10 +2475,6 @@ static void intel_pin_eld_notify(void *audio_ptr, int port, int pipe)
 		pin_nid = port + 0x04;
 		break;
 	}
-
-	/* we assume only from port-B to port-D */
-	if (port < 1 || port > 3)
-		return;
 
 	/* skip notification during system suspend (but not in runtime PM);
 	 * the state will be updated at resume
@@ -3386,7 +3367,6 @@ static int patch_tegra_hdmi(struct hda_codec *codec)
 	if (err)
 		return err;
 
-	codec->depop_delay = 10;
 	codec->patch_ops.build_pcms = tegra_hdmi_build_pcms;
 
 	return 0;

@@ -2163,11 +2163,6 @@ intel_pin_and_fence_fb_obj(struct drm_framebuffer *fb, unsigned int rotation)
 err:
 	atomic_dec(&dev_priv->gpu_error.pending_fb_pin);
 
-	if (NEEDS_RC6_CTX_CORRUPTION_WA(dev_priv)) {
-		i915_rc6_ctx_wa_check(dev_priv);
-		intel_uncore_forcewake_put(dev_priv, FORCEWAKE_ALL);
-	}
-
 	intel_runtime_pm_put(dev_priv);
 	return vma;
 }

@@ -163,7 +163,7 @@ tr_gdt:
 tr_gdt_end:
 
 	.bss
-	.balign	KAISER_KERNEL_PGD_ALIGNMENT
+	.balign	PAGE_SIZE
 GLOBAL(trampoline_pgd)		.space	PAGE_SIZE
 
 	.balign	8

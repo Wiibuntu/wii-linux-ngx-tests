@@ -98,10 +98,6 @@ config USB_RTL8150
 config USB_RTL8152
 	tristate "Realtek RTL8152/RTL8153 Based USB Ethernet Adapters"
 	select MII
-	select CRC32
-	select CRYPTO
-	select CRYPTO_HASH
-	select CRYPTO_SHA256
 	help
 	  This option adds support for Realtek RTL8152 based USB 2.0
 	  10/100 Ethernet adapters and RTL8153 based USB 3.0 10/100/1000
@@ -403,10 +399,6 @@ config USB_NET_RNDIS_HOST
 	  Avoid using this protocol unless you have no better options.
 	  The protocol specification is incomplete, and is controlled by
 	  (and for) Microsoft; it isn't an "Open" ecosystem or market.
-
-config USB_NET_CDC_SUBSET_ENABLE
-	tristate
-	depends on USB_NET_CDC_SUBSET
 
 config USB_NET_CDC_SUBSET_ENABLE
 	tristate

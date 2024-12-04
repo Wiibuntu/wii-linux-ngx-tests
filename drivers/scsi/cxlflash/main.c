@@ -542,16 +542,6 @@ out:
 	return rc;
 }
 
-static void afu_unmap(struct kref *ref)
-{
-	struct afu *afu = container_of(ref, struct afu, mapcount);
-
-	if (likely(afu->afu_map)) {
-		cxl_psa_unmap((void __iomem *)afu->afu_map);
-		afu->afu_map = NULL;
-	}
-}
-
 /**
  * cxlflash_driver_info() - information handler for this host driver
  * @host:	SCSI host associated with device.
@@ -582,7 +572,6 @@ static int cxlflash_queuecommand(struct Scsi_Host *host, struct scsi_cmnd *scp)
 	u16 req_flags = SISL_REQ_FLAGS_SUP_UNDERRUN;
 	ulong lock_flags;
 	int rc = 0;
-	int kref_got = 0;
 
 	dev_dbg_ratelimited(dev, "%s: (scp=%p) %d/%d/%d/%llu "
 			    "cdb=(%08x-%08x-%08x-%08x)\n",
@@ -1580,7 +1569,6 @@ static irqreturn_t cxlflash_async_err_irq(int irq, void *data)
 				__func__, port);
 			cfg->lr_state = LINK_RESET_REQUIRED;
 			cfg->lr_port = port;
-			kref_get(&cfg->afu->mapcount);
 			schedule_work(&cfg->work_q);
 		}
 
@@ -1601,7 +1589,6 @@ static irqreturn_t cxlflash_async_err_irq(int irq, void *data)
 
 		if (info->action & SCAN_HOST) {
 			atomic_inc(&cfg->scan_host_needed);
-			kref_get(&cfg->afu->mapcount);
 			schedule_work(&cfg->work_q);
 		}
 	}
@@ -2127,7 +2114,6 @@ static int init_afu(struct cxlflash_cfg *cfg)
 		rc = -ENOMEM;
 		goto err1;
 	}
-	kref_init(&afu->mapcount);
 
 	/* No byte reverse on reading afu_version or string will be backwards */
 	reg = readq(&afu->afu_map->global.regs.afu_version);
@@ -2279,11 +2265,6 @@ static void cxlflash_schedule_async_reset(struct cxlflash_cfg *cfg)
  *
  * The command status is optionally passed back to the caller when the caller
  * populates the IOASA field of the IOARCB with a pointer to an IOASA structure.
- *
- * Following a reset, the state is evaluated again in case an EEH occurred
- * during the reset. In such a scenario, the host reset will either yield
- * until the EEH recovery is complete or return success or failure based
- * upon the current device state.
  *
  * Return:
  *	0 on success, -errno on failure
@@ -3001,8 +2982,7 @@ retry:
 		else
 			cfg->state = STATE_NORMAL;
 		wake_up_all(&cfg->reset_waitq);
-		ssleep(1);
-		/* fall through */
+		break;
 	case STATE_RESET:
 		wait_event(cfg->reset_waitq, cfg->state != STATE_RESET);
 		if (cfg->state == STATE_NORMAL)
@@ -3244,7 +3224,6 @@ static void cxlflash_worker_thread(struct work_struct *work)
 
 	if (atomic_dec_if_positive(&cfg->scan_host_needed) >= 0)
 		scsi_scan_host(cfg->host);
-	kref_put(&afu->mapcount, afu_unmap);
 }
 
 /**
@@ -3770,9 +3749,6 @@ out_remove:
  * cxlflash_pci_error_detected() - called when a PCI error is detected
  * @pdev:	PCI device struct.
  * @state:	PCI channel state.
- *
- * When an EEH occurs during an active reset, wait until the reset is
- * complete and then take action based upon the device state.
  *
  * When an EEH occurs during an active reset, wait until the reset is
  * complete and then take action based upon the device state.

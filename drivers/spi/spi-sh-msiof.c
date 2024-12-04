@@ -19,7 +19,6 @@
 #include <linux/dmaengine.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
-#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/kernel.h>
@@ -382,8 +381,7 @@ static void sh_msiof_spi_set_mode_regs(struct sh_msiof_spi_priv *p,
 
 static void sh_msiof_reset_str(struct sh_msiof_spi_priv *p)
 {
-	sh_msiof_write(p, STR,
-		       sh_msiof_read(p, STR) & ~(STR_TDREQ | STR_RDREQ));
+	sh_msiof_write(p, STR, sh_msiof_read(p, STR));
 }
 
 static void sh_msiof_spi_write_fifo_8(struct sh_msiof_spi_priv *p,
@@ -530,7 +528,8 @@ static int sh_msiof_spi_setup(struct spi_device *spi)
 {
 	struct device_node	*np = spi->master->dev.of_node;
 	struct sh_msiof_spi_priv *p = spi_master_get_devdata(spi->master);
-	u32 clr, set, tmp;
+
+	pm_runtime_get_sync(&p->pdev->dev);
 
 	if (!np) {
 		/*
@@ -540,28 +539,19 @@ static int sh_msiof_spi_setup(struct spi_device *spi)
 		spi->cs_gpio = (uintptr_t)spi->controller_data;
 	}
 
-	if (gpio_is_valid(spi->cs_gpio)) {
-		gpio_direction_output(spi->cs_gpio, !(spi->mode & SPI_CS_HIGH));
-		return 0;
-	}
+	/* Configure pins before deasserting CS */
+	sh_msiof_spi_set_pin_regs(p, !!(spi->mode & SPI_CPOL),
+				  !!(spi->mode & SPI_CPHA),
+				  !!(spi->mode & SPI_3WIRE),
+				  !!(spi->mode & SPI_LSB_FIRST),
+				  !!(spi->mode & SPI_CS_HIGH));
 
-	if (p->native_cs_inited &&
-	    (p->native_cs_high == !!(spi->mode & SPI_CS_HIGH)))
-		return 0;
+	if (spi->cs_gpio >= 0)
+		gpio_set_value(spi->cs_gpio, !(spi->mode & SPI_CS_HIGH));
 
-	/* Configure native chip select mode/polarity early */
-	clr = MDR1_SYNCMD_MASK;
-	set = MDR1_TRMD | TMDR1_PCON | MDR1_SYNCMD_SPI;
-	if (spi->mode & SPI_CS_HIGH)
-		clr |= BIT(MDR1_SYNCAC_SHIFT);
-	else
-		set |= BIT(MDR1_SYNCAC_SHIFT);
-	pm_runtime_get_sync(&p->pdev->dev);
-	tmp = sh_msiof_read(p, TMDR1) & ~clr;
-	sh_msiof_write(p, TMDR1, tmp | set);
+
 	pm_runtime_put(&p->pdev->dev);
-	p->native_cs_high = spi->mode & SPI_CS_HIGH;
-	p->native_cs_inited = true;
+
 	return 0;
 }
 
@@ -570,18 +560,13 @@ static int sh_msiof_prepare_message(struct spi_master *master,
 {
 	struct sh_msiof_spi_priv *p = spi_master_get_devdata(master);
 	const struct spi_device *spi = msg->spi;
-	u32 cs_high;
-
-	if (gpio_is_valid(spi->cs_gpio))
-		cs_high = p->native_cs_high;
-	else
-		cs_high = !!(spi->mode & SPI_CS_HIGH);
 
 	/* Configure pins before asserting CS */
 	sh_msiof_spi_set_pin_regs(p, !!(spi->mode & SPI_CPOL),
 				  !!(spi->mode & SPI_CPHA),
 				  !!(spi->mode & SPI_3WIRE),
-				  !!(spi->mode & SPI_LSB_FIRST), cs_high);
+				  !!(spi->mode & SPI_LSB_FIRST),
+				  !!(spi->mode & SPI_CS_HIGH));
 	return 0;
 }
 
@@ -1086,45 +1071,6 @@ static struct sh_msiof_spi_info *sh_msiof_spi_parse_dt(struct device *dev)
 }
 #endif
 
-static int sh_msiof_get_cs_gpios(struct sh_msiof_spi_priv *p)
-{
-	struct device *dev = &p->pdev->dev;
-	unsigned int used_ss_mask = 0;
-	unsigned int cs_gpios = 0;
-	unsigned int num_cs, i;
-	int ret;
-
-	ret = gpiod_count(dev, "cs");
-	if (ret <= 0)
-		return 0;
-
-	num_cs = max_t(unsigned int, ret, p->master->num_chipselect);
-	for (i = 0; i < num_cs; i++) {
-		struct gpio_desc *gpiod;
-
-		gpiod = devm_gpiod_get_index(dev, "cs", i, GPIOD_ASIS);
-		if (!IS_ERR(gpiod)) {
-			cs_gpios++;
-			continue;
-		}
-
-		if (PTR_ERR(gpiod) != -ENOENT)
-			return PTR_ERR(gpiod);
-
-		if (i >= MAX_SS) {
-			dev_err(dev, "Invalid native chip select %d\n", i);
-			return -EINVAL;
-		}
-		used_ss_mask |= BIT(i);
-	}
-	used_ss_mask = ffz(used_ss_mask);
-	if (cs_gpios && used_ss_mask >= MAX_SS) {
-		dev_err(dev, "No unused native chip select available\n");
-		return -EINVAL;
-	}
-	return 0;
-}
-
 static struct dma_chan *sh_msiof_request_dma_chan(struct device *dev,
 	enum dma_transfer_direction dir, unsigned int id, dma_addr_t port_addr)
 {
@@ -1308,8 +1254,8 @@ static int sh_msiof_spi_probe(struct platform_device *pdev)
 
 	i = platform_get_irq(pdev, 0);
 	if (i < 0) {
-		dev_err(&pdev->dev, "cannot get IRQ\n");
-		ret = i;
+		dev_err(&pdev->dev, "cannot get platform IRQ\n");
+		ret = -ENOENT;
 		goto err1;
 	}
 
@@ -1387,37 +1333,12 @@ static const struct platform_device_id spi_driver_ids[] = {
 };
 MODULE_DEVICE_TABLE(platform, spi_driver_ids);
 
-#ifdef CONFIG_PM_SLEEP
-static int sh_msiof_spi_suspend(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct sh_msiof_spi_priv *p = platform_get_drvdata(pdev);
-
-	return spi_master_suspend(p->master);
-}
-
-static int sh_msiof_spi_resume(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct sh_msiof_spi_priv *p = platform_get_drvdata(pdev);
-
-	return spi_master_resume(p->master);
-}
-
-static SIMPLE_DEV_PM_OPS(sh_msiof_spi_pm_ops, sh_msiof_spi_suspend,
-			 sh_msiof_spi_resume);
-#define DEV_PM_OPS	&sh_msiof_spi_pm_ops
-#else
-#define DEV_PM_OPS	NULL
-#endif /* CONFIG_PM_SLEEP */
-
 static struct platform_driver sh_msiof_spi_drv = {
 	.probe		= sh_msiof_spi_probe,
 	.remove		= sh_msiof_spi_remove,
 	.id_table	= spi_driver_ids,
 	.driver		= {
 		.name		= "spi_sh_msiof",
-		.pm		= DEV_PM_OPS,
 		.of_match_table = of_match_ptr(sh_msiof_match),
 	},
 };

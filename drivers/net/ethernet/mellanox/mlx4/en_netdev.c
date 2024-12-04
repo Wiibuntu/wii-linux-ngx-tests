@@ -363,9 +363,6 @@ mlx4_en_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
 	int nhoff = skb_network_offset(skb);
 	int ret = 0;
 
-	if (skb->encapsulation)
-		return -EPROTONOSUPPORT;
-
 	if (skb->protocol != htons(ETH_P_IP))
 		return -EPROTONOSUPPORT;
 
@@ -740,7 +737,7 @@ static void mlx4_en_update_user_mac(struct mlx4_en_priv *priv,
 				    unsigned char new_mac[ETH_ALEN + 2])
 {
 	struct mlx4_en_dev *mdev = priv->mdev;
-	int err = 0;
+	int err;
 
 	if (!(mdev->dev->caps.flags2 & MLX4_DEV_CAP_FLAG2_USER_MAC_EN))
 		return;
@@ -2311,7 +2308,7 @@ int mlx4_en_try_alloc_resources(struct mlx4_en_priv *priv,
 					   xdp_prog);
 	}
 
-	return err;
+	return 0;
 }
 
 void mlx4_en_safe_replace_resources(struct mlx4_en_priv *priv,
@@ -2392,7 +2389,7 @@ static int mlx4_en_change_mtu(struct net_device *dev, int new_mtu)
 	if (netif_running(dev)) {
 		mutex_lock(&mdev->state_lock);
 		if (!mdev->device_up) {
-			/* NIC is probably restarting - let restart task reset
+			/* NIC is probably restarting - let watchdog task reset
 			 * the port */
 			en_dbg(DRV, priv, "Change MTU called with card down!?\n");
 		} else {
@@ -2401,9 +2398,7 @@ static int mlx4_en_change_mtu(struct net_device *dev, int new_mtu)
 			if (err) {
 				en_err(priv, "Failed restarting port:%d\n",
 					 priv->port);
-				if (!test_and_set_bit(MLX4_EN_STATE_FLAG_RESTARTING,
-						      &priv->state))
-					queue_work(mdev->workqueue, &priv->restart_task);
+				queue_work(mdev->workqueue, &priv->watchdog_task);
 			}
 		}
 		mutex_unlock(&mdev->state_lock);
@@ -3290,7 +3285,7 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	priv->counter_index = MLX4_SINK_COUNTER_INDEX(mdev->dev);
 	spin_lock_init(&priv->stats_lock);
 	INIT_WORK(&priv->rx_mode_task, mlx4_en_do_set_rx_mode);
-	INIT_WORK(&priv->restart_task, mlx4_en_restart);
+	INIT_WORK(&priv->watchdog_task, mlx4_en_restart);
 	INIT_WORK(&priv->linkstate_task, mlx4_en_linkstate);
 	INIT_DELAYED_WORK(&priv->stats_task, mlx4_en_do_get_stats);
 	INIT_DELAYED_WORK(&priv->service_task, mlx4_en_service_task);
@@ -3509,11 +3504,6 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	dev->min_mtu = MLX4_EN_MIN_MTU;
 	dev->max_mtu = priv->max_mtu;
 
-	if (mdev->dev->caps.tunnel_offload_mode == MLX4_TUNNEL_OFFLOAD_MODE_VXLAN) {
-		dev->hw_features |= NETIF_F_GSO_UDP_TUNNEL;
-		dev->features    |= NETIF_F_GSO_UDP_TUNNEL;
-	}
-
 	mdev->pndev[port] = dev;
 	mdev->upper[port] = NULL;
 
@@ -3676,8 +3666,6 @@ int mlx4_en_reset_config(struct net_device *dev,
 			en_err(priv, "Failed starting port\n");
 	}
 
-	if (!err)
-		err = mlx4_en_moderation_update(priv);
 out:
 	mutex_unlock(&mdev->state_lock);
 	kfree(tmp);

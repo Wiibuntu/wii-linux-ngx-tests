@@ -29,7 +29,6 @@
 #include <linux/net_tstamp.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
-#include <linux/phy.h>
 #include <net/arp.h>
 #include <net/switchdev.h>
 
@@ -115,8 +114,8 @@ static netdev_tx_t vlan_dev_hard_start_xmit(struct sk_buff *skb,
 	 * NOTE: THIS ASSUMES DIX ETHERNET, SPECIFICALLY NOT SUPPORTING
 	 * OTHER THINGS LIKE FDDI/TokenRing/802.3 SNAPs...
 	 */
-	if (vlan->flags & VLAN_FLAG_REORDER_HDR ||
-	    veth->h_vlan_proto != vlan->vlan_proto) {
+	if (veth->h_vlan_proto != vlan->vlan_proto ||
+	    vlan->flags & VLAN_FLAG_REORDER_HDR) {
 		u16 vlan_tci;
 		vlan_tci = vlan->vlan_id;
 		vlan_tci |= vlan_dev_get_egress_qos_mask(dev, skb->priority);
@@ -259,17 +258,6 @@ bool vlan_dev_inherit_address(struct net_device *dev,
 	return true;
 }
 
-bool vlan_dev_inherit_address(struct net_device *dev,
-			      struct net_device *real_dev)
-{
-	if (dev->addr_assign_type != NET_ADDR_STOLEN)
-		return false;
-
-	ether_addr_copy(dev->dev_addr, real_dev->dev_addr);
-	call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
-	return true;
-}
-
 static int vlan_dev_open(struct net_device *dev)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -377,12 +365,10 @@ static int vlan_dev_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	ifrr.ifr_ifru = ifr->ifr_ifru;
 
 	switch (cmd) {
-	case SIOCSHWTSTAMP:
-		if (!net_eq(dev_net(dev), dev_net(real_dev)))
-			break;
 	case SIOCGMIIPHY:
 	case SIOCGMIIREG:
 	case SIOCSMIIREG:
+	case SIOCSHWTSTAMP:
 	case SIOCGHWTSTAMP:
 		if (netif_device_present(real_dev) && ops->ndo_do_ioctl)
 			err = ops->ndo_do_ioctl(real_dev, &ifrr, cmd);
@@ -621,8 +607,7 @@ static int vlan_dev_init(struct net_device *dev)
 	return 0;
 }
 
-/* Note: this function might be called multiple times for the same device. */
-void vlan_dev_uninit(struct net_device *dev)
+static void vlan_dev_uninit(struct net_device *dev)
 {
 	struct vlan_priority_tci_mapping *pm;
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -680,11 +665,8 @@ static int vlan_ethtool_get_ts_info(struct net_device *dev,
 {
 	const struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
 	const struct ethtool_ops *ops = vlan->real_dev->ethtool_ops;
-	struct phy_device *phydev = vlan->real_dev->phydev;
 
-	if (phydev && phydev->drv && phydev->drv->ts_info) {
-		 return phydev->drv->ts_info(phydev, info);
-	} else if (ops->get_ts_info) {
+	if (ops->get_ts_info) {
 		return ops->get_ts_info(vlan->real_dev, info);
 	} else {
 		info->so_timestamping = SOF_TIMESTAMPING_RX_SOFTWARE |

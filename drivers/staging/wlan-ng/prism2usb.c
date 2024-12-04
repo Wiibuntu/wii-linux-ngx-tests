@@ -82,8 +82,6 @@ static int prism2sta_probe_usb(struct usb_interface *interface,
 	}
 
 	/* Initialize the hw data */
-	hw->endp_in = usb_rcvbulkpipe(dev, bulk_in->bEndpointAddress);
-	hw->endp_out = usb_sndbulkpipe(dev, bulk_out->bEndpointAddress);
 	hfa384x_create(hw, dev);
 	hw->wlandev = wlandev;
 

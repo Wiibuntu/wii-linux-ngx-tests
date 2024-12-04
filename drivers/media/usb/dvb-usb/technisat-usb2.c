@@ -646,25 +646,26 @@ unlock:
 		return 0; /* no key pressed */
 
 	/* decoding */
+	b = buf+1;
 
 #if 0
 	deb_rc("RC: %d ", ret);
-	debug_dump(buf + 1, ret, deb_rc);
+	debug_dump(b, ret, deb_rc);
 #endif
 
 	ev.pulse = 0;
-	for (i = 1; i < ARRAY_SIZE(buf); i++) {
-		if (buf[i] == 0xff) {
+	while (1) {
+		ev.pulse = !ev.pulse;
+		ev.duration = (*b * FIRMWARE_CLOCK_DIVISOR * FIRMWARE_CLOCK_TICK) / 1000;
+		ir_raw_event_store(d->rc_dev, &ev);
+
+		b++;
+		if (*b == 0xff) {
 			ev.pulse = 0;
 			ev.duration = 888888*2;
 			ir_raw_event_store(d->rc_dev, &ev);
 			break;
 		}
-
-		ev.pulse = !ev.pulse;
-		ev.duration = (buf[i] * FIRMWARE_CLOCK_DIVISOR *
-			       FIRMWARE_CLOCK_TICK) / 1000;
-		ir_raw_event_store(d->rc_dev, &ev);
 	}
 
 	ir_raw_event_handle(d->rc_dev);

@@ -26,7 +26,7 @@ static ssize_t clock_name_show(struct device *dev,
 			       struct device_attribute *attr, char *page)
 {
 	struct ptp_clock *ptp = dev_get_drvdata(dev);
-	return sysfs_emit(page, "%s\n", ptp->info->name);
+	return snprintf(page, PAGE_SIZE-1, "%s\n", ptp->info->name);
 }
 static DEVICE_ATTR_RO(clock_name);
 
@@ -200,7 +200,6 @@ static umode_t ptp_is_attribute_visible(struct kobject *kobj,
 
 	return mode;
 }
-static DEVICE_ATTR(extts_enable, 0220, NULL, extts_enable_store);
 
 static const struct attribute_group ptp_group = {
 	.is_visible	= ptp_is_attribute_visible,
@@ -243,7 +242,6 @@ static ssize_t ptp_pin_show(struct device *dev, struct device_attribute *attr,
 
 	return snprintf(page, PAGE_SIZE, "%u %u\n", func, chan);
 }
-static DEVICE_ATTR(fifo, 0444, extts_fifo_show, NULL);
 
 static ssize_t ptp_pin_store(struct device *dev, struct device_attribute *attr,
 			     const char *buf, size_t count)
@@ -269,7 +267,6 @@ static ssize_t ptp_pin_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
-static DEVICE_ATTR(period, 0220, NULL, period_store);
 
 int ptp_populate_pin_groups(struct ptp_clock *ptp)
 {
@@ -310,57 +307,6 @@ no_pin_attr:
 no_dev_attr:
 	return err;
 }
-static DEVICE_ATTR(pps_enable, 0220, NULL, pps_enable_store);
-
-static struct attribute *ptp_attrs[] = {
-	&dev_attr_clock_name.attr,
-
-	&dev_attr_max_adjustment.attr,
-	&dev_attr_n_alarms.attr,
-	&dev_attr_n_external_timestamps.attr,
-	&dev_attr_n_periodic_outputs.attr,
-	&dev_attr_n_programmable_pins.attr,
-	&dev_attr_pps_available.attr,
-
-	&dev_attr_extts_enable.attr,
-	&dev_attr_fifo.attr,
-	&dev_attr_period.attr,
-	&dev_attr_pps_enable.attr,
-	NULL
-};
-
-static umode_t ptp_is_attribute_visible(struct kobject *kobj,
-					struct attribute *attr, int n)
-{
-	struct device *dev = kobj_to_dev(kobj);
-	struct ptp_clock *ptp = dev_get_drvdata(dev);
-	struct ptp_clock_info *info = ptp->info;
-	umode_t mode = attr->mode;
-
-	if (attr == &dev_attr_extts_enable.attr ||
-	    attr == &dev_attr_fifo.attr) {
-		if (!info->n_ext_ts)
-			mode = 0;
-	} else if (attr == &dev_attr_period.attr) {
-		if (!info->n_per_out)
-			mode = 0;
-	} else if (attr == &dev_attr_pps_enable.attr) {
-		if (!info->pps)
-			mode = 0;
-	}
-
-	return mode;
-}
-
-static const struct attribute_group ptp_group = {
-	.is_visible	= ptp_is_attribute_visible,
-	.attrs		= ptp_attrs,
-};
-
-const struct attribute_group *ptp_groups[] = {
-	&ptp_group,
-	NULL
-};
 
 void ptp_cleanup_pin_groups(struct ptp_clock *ptp)
 {

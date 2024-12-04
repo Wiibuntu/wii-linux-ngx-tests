@@ -1620,14 +1620,12 @@ static inline struct pci_dev *pci_get_class(unsigned int class,
 #define pci_dev_put(dev)	do { } while (0)
 
 static inline void pci_set_master(struct pci_dev *dev) { }
-static inline void pci_clear_master(struct pci_dev *dev) { }
 static inline int pci_enable_device(struct pci_dev *dev) { return -EIO; }
 static inline void pci_disable_device(struct pci_dev *dev) { }
 static inline int pci_assign_resource(struct pci_dev *dev, int i)
 { return -EBUSY; }
-static inline int __must_check __pci_register_driver(struct pci_driver *drv,
-						     struct module *owner,
-						     const char *mod_name)
+static inline int __pci_register_driver(struct pci_driver *drv,
+					struct module *owner)
 { return 0; }
 static inline int pci_register_driver(struct pci_driver *drv)
 { return 0; }
@@ -2043,20 +2041,6 @@ static inline u16 pcie_caps_reg(const struct pci_dev *dev)
 static inline int pci_pcie_type(const struct pci_dev *dev)
 {
 	return (pcie_caps_reg(dev) & PCI_EXP_FLAGS_TYPE) >> 4;
-}
-
-static inline struct pci_dev *pcie_find_root_port(struct pci_dev *dev)
-{
-	while (1) {
-		if (!pci_is_pcie(dev))
-			break;
-		if (pci_pcie_type(dev) == PCI_EXP_TYPE_ROOT_PORT)
-			return dev;
-		if (!dev->bus->self)
-			break;
-		dev = dev->bus->self;
-	}
-	return NULL;
 }
 
 static inline struct pci_dev *pcie_find_root_port(struct pci_dev *dev)

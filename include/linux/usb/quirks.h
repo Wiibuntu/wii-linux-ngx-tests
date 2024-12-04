@@ -63,16 +63,4 @@
  */
 #define USB_QUIRK_DISCONNECT_SUSPEND		BIT(12)
 
-/*
- * Device reports its bInterval as linear frames instead of the
- * USB 2.0 calculation.
- */
-#define USB_QUIRK_LINEAR_FRAME_INTR_BINTERVAL	BIT(11)
-
-/* Device needs a pause after every control message. */
-#define USB_QUIRK_DELAY_CTRL_MSG		BIT(13)
-
-/* device has blacklisted endpoints */
-#define USB_QUIRK_ENDPOINT_BLACKLIST		BIT(15)
-
 #endif /* __LINUX_USB_QUIRKS_H */

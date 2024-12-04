@@ -93,8 +93,6 @@ static struct sk_buff *brcm_tag_xmit_ll(struct sk_buff *skb,
 	 */
 	skb_set_queue_mapping(skb, BRCM_TAG_SET_PORT_QUEUE(dp->index, queue));
 
-	skb->offload_fwd_mark = 1;
-
 	return skb;
 }
 

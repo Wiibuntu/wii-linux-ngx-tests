@@ -1063,8 +1063,6 @@ static int gmc_v7_0_hw_init(void *handle)
 
 	gmc_v7_0_init_golden_registers(adev);
 
-	gmc_v7_0_init_golden_registers(adev);
-
 	gmc_v7_0_mc_program(adev);
 
 	if (!(adev->flags & AMD_IS_APU)) {

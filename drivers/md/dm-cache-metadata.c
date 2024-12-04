@@ -363,7 +363,7 @@ static int __write_initial_superblock(struct dm_cache_metadata *cmd)
 	disk_super->version = cpu_to_le32(cmd->version);
 	memset(disk_super->policy_name, 0, sizeof(disk_super->policy_name));
 	memset(disk_super->policy_version, 0, sizeof(disk_super->policy_version));
-	disk_super->policy_hint_size = cpu_to_le32(0);
+	disk_super->policy_hint_size = 0;
 
 	__copy_sm_root(cmd, disk_super);
 
@@ -537,27 +537,21 @@ static int __create_persistent_data_objects(struct dm_cache_metadata *cmd,
 					  CACHE_MAX_CONCURRENT_LOCKS);
 	if (IS_ERR(cmd->bm)) {
 		DMERR("could not create block manager");
-		r = PTR_ERR(cmd->bm);
-		cmd->bm = NULL;
-		return r;
+		return PTR_ERR(cmd->bm);
 	}
 
 	r = __open_or_format_metadata(cmd, may_format_device);
-	if (r) {
+	if (r)
 		dm_block_manager_destroy(cmd->bm);
-		cmd->bm = NULL;
-	}
 
 	return r;
 }
 
-static void __destroy_persistent_data_objects(struct dm_cache_metadata *cmd,
-					      bool destroy_bm)
+static void __destroy_persistent_data_objects(struct dm_cache_metadata *cmd)
 {
 	dm_sm_destroy(cmd->metadata_sm);
 	dm_tm_destroy(cmd->tm);
-	if (destroy_bm)
-		dm_block_manager_destroy(cmd->bm);
+	dm_block_manager_destroy(cmd->bm);
 }
 
 typedef unsigned long (*flags_mutator)(unsigned long);
@@ -707,7 +701,6 @@ static int __commit_transaction(struct dm_cache_metadata *cmd,
 	disk_super->policy_version[0] = cpu_to_le32(cmd->policy_version[0]);
 	disk_super->policy_version[1] = cpu_to_le32(cmd->policy_version[1]);
 	disk_super->policy_version[2] = cpu_to_le32(cmd->policy_version[2]);
-	disk_super->policy_hint_size = cpu_to_le32(cmd->policy_hint_size);
 
 	disk_super->read_hits = cpu_to_le32(cmd->stats.read_hits);
 	disk_super->read_misses = cpu_to_le32(cmd->stats.read_misses);
@@ -828,7 +821,7 @@ static struct dm_cache_metadata *lookup_or_open(struct block_device *bdev,
 		cmd2 = lookup(bdev);
 		if (cmd2) {
 			mutex_unlock(&table_lock);
-			__destroy_persistent_data_objects(cmd, true);
+			__destroy_persistent_data_objects(cmd);
 			kfree(cmd);
 			return cmd2;
 		}
@@ -876,7 +869,7 @@ void dm_cache_metadata_close(struct dm_cache_metadata *cmd)
 		mutex_unlock(&table_lock);
 
 		if (!cmd->fail_io)
-			__destroy_persistent_data_objects(cmd, true);
+			__destroy_persistent_data_objects(cmd);
 		kfree(cmd);
 	}
 }

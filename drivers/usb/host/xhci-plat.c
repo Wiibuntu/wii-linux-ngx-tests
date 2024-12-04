@@ -249,7 +249,7 @@ static int xhci_plat_probe(struct platform_device *pdev)
 			*priv = *priv_match;
 	}
 
-	device_set_wakeup_capable(&pdev->dev, true);
+	device_wakeup_enable(hcd->self.controller);
 
 	xhci->clk = clk;
 	xhci->main_hcd = hcd;
@@ -284,9 +284,6 @@ static int xhci_plat_probe(struct platform_device *pdev)
 	ret = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (ret)
 		goto disable_usb_phy;
-
-	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
-		xhci->shared_hcd->can_do_streams = 1;
 
 	if (HCC_MAX_PSA(xhci->hcc_params) >= 4)
 		xhci->shared_hcd->can_do_streams = 1;
@@ -335,8 +332,6 @@ static int xhci_plat_remove(struct platform_device *dev)
 	struct usb_hcd	*hcd = platform_get_drvdata(dev);
 	struct xhci_hcd	*xhci = hcd_to_xhci(hcd);
 	struct clk *clk = xhci->clk;
-
-	xhci->xhc_state |= XHCI_STATE_REMOVING;
 
 	xhci->xhc_state |= XHCI_STATE_REMOVING;
 

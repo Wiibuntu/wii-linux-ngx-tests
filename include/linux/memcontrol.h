@@ -153,11 +153,6 @@ enum memcg_kmem_state {
 	KMEM_ONLINE,
 };
 
-struct mem_cgroup_id {
-	int id;
-	atomic_t ref;
-};
-
 /*
  * The memory controller data structure. The memory controller controls both
  * page cache and RSS per cgroup. We would eventually like to provide
@@ -166,9 +161,6 @@ struct mem_cgroup_id {
  */
 struct mem_cgroup {
 	struct cgroup_subsys_state css;
-
-	/* Private memcg ID. Used to ID objects that outlive the cgroup */
-	struct mem_cgroup_id id;
 
 	/* Private memcg ID. Used to ID objects that outlive the cgroup */
 	struct mem_cgroup_id id;

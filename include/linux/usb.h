@@ -47,41 +47,6 @@ struct wusb_dev;
 
 struct ep_device;
 
-int __must_check
-usb_find_common_endpoints(struct usb_host_interface *alt,
-		struct usb_endpoint_descriptor **bulk_in,
-		struct usb_endpoint_descriptor **bulk_out,
-		struct usb_endpoint_descriptor **int_in,
-		struct usb_endpoint_descriptor **int_out);
-
-static inline int __must_check
-usb_find_bulk_in_endpoint(struct usb_host_interface *alt,
-		struct usb_endpoint_descriptor **bulk_in)
-{
-	return usb_find_common_endpoints(alt, bulk_in, NULL, NULL, NULL);
-}
-
-static inline int __must_check
-usb_find_bulk_out_endpoint(struct usb_host_interface *alt,
-		struct usb_endpoint_descriptor **bulk_out)
-{
-	return usb_find_common_endpoints(alt, NULL, bulk_out, NULL, NULL);
-}
-
-static inline int __must_check
-usb_find_int_in_endpoint(struct usb_host_interface *alt,
-		struct usb_endpoint_descriptor **int_in)
-{
-	return usb_find_common_endpoints(alt, NULL, NULL, int_in, NULL);
-}
-
-static inline int __must_check
-usb_find_int_out_endpoint(struct usb_host_interface *alt,
-		struct usb_endpoint_descriptor **int_out)
-{
-	return usb_find_common_endpoints(alt, NULL, NULL, NULL, int_out);
-}
-
 /**
  * struct usb_host_endpoint - host-side endpoint descriptor and queue
  * @desc: descriptor for this endpoint, wMaxPacketSize in native byteorder
@@ -235,6 +200,7 @@ usb_find_last_int_out_endpoint(struct usb_host_interface *alt,
  * @dev: driver model's view of this device
  * @usb_dev: if an interface is bound to the USB major, this will point
  *	to the sysfs representation for that device.
+ * @pm_usage_cnt: PM usage counter for this interface
  * @reset_ws: Used for scheduling resets from atomic context.
  * @resetting_device: USB core reset the device, so use alt setting 0 as
  *	current; needs bandwidth alloc after reset.
@@ -291,6 +257,7 @@ struct usb_interface {
 
 	struct device dev;		/* interface specific device info */
 	struct device *usb_dev;
+	atomic_t pm_usage_cnt;		/* usage counter for autosuspend */
 	struct work_struct reset_ws;	/* for resets in atomic context */
 };
 #define	to_usb_interface(d) container_of(d, struct usb_interface, dev)
@@ -313,11 +280,6 @@ void usb_put_intf(struct usb_interface *intf);
 /* this maximum is arbitrary */
 #define USB_MAXINTERFACES	32
 #define USB_MAXIADS		(USB_MAXINTERFACES/2)
-
-bool usb_check_bulk_endpoints(
-		const struct usb_interface *intf, const u8 *ep_addrs);
-bool usb_check_int_endpoints(
-		const struct usb_interface *intf, const u8 *ep_addrs);
 
 /*
  * USB Resume Timer: Every Host controller driver should drive the resume
@@ -608,7 +570,6 @@ struct usb3_lpm_parameters {
  * @level: number of USB hub ancestors
  * @can_submit: URBs may be submitted
  * @persist_enabled:  USB_PERSIST enabled for this device
- * @reset_in_progress: the device is being reset
  * @have_langid: whether string_langid is valid
  * @authorized: policy has said we can use it;
  *	(user space) policy determines if we authorize this device to be
@@ -687,7 +648,6 @@ struct usb_device {
 
 	unsigned can_submit:1;
 	unsigned persist_enabled:1;
-	unsigned reset_in_progress:1;
 	unsigned have_langid:1;
 	unsigned authorized:1;
 	unsigned authenticated:1;
@@ -1768,8 +1728,6 @@ static inline int usb_urb_dir_out(struct urb *urb)
 {
 	return (urb->transfer_flags & URB_DIR_MASK) == URB_DIR_OUT;
 }
-
-int usb_urb_ep_type_check(const struct urb *urb);
 
 int usb_urb_ep_type_check(const struct urb *urb);
 

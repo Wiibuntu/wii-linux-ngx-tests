@@ -1425,9 +1425,6 @@ static int ipipe_prep(struct pipe_inode_info *pipe, unsigned int flags)
 	if (pipe->nrbufs)
 		return 0;
 
-	if (!spd_pages)
-		return 0;
-
 	ret = 0;
 	pipe_lock(pipe);
 

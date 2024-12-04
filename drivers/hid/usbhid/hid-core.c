@@ -373,7 +373,7 @@ static int hid_submit_ctrl(struct hid_device *hid)
 	raw_report = usbhid->ctrl[usbhid->ctrltail].raw_report;
 	dir = usbhid->ctrl[usbhid->ctrltail].dir;
 
-	len = hid_report_len(report);
+	len = ((report->size - 1) >> 3) + 1 + (report->id > 0);
 	if (dir == USB_DIR_OUT) {
 		usbhid->urbctrl->pipe = usb_sndctrlpipe(hid_to_usb_dev(hid), 0);
 		usbhid->urbctrl->transfer_buffer_length = len;
@@ -499,11 +499,9 @@ static void hid_ctrl(struct urb *urb)
 
 	spin_lock(&usbhid->lock);
 
-	spin_lock(&usbhid->lock);
-
 	if (unplug) {
 		usbhid->ctrltail = usbhid->ctrlhead;
-	} else if (usbhid->ctrlhead != usbhid->ctrltail) {
+	} else {
 		usbhid->ctrltail = (usbhid->ctrltail + 1) & (HID_CONTROL_FIFO_SIZE - 1);
 
 		if (usbhid->ctrlhead != usbhid->ctrltail &&
@@ -1198,20 +1196,9 @@ static void usbhid_stop(struct hid_device *hid)
 	}
 
 	clear_bit(HID_STARTED, &usbhid->iofl);
-
 	spin_lock_irq(&usbhid->lock);	/* Sync with error and led handlers */
 	set_bit(HID_DISCONNECTED, &usbhid->iofl);
-	while (usbhid->ctrltail != usbhid->ctrlhead) {
-		if (usbhid->ctrl[usbhid->ctrltail].dir == USB_DIR_OUT) {
-			kfree(usbhid->ctrl[usbhid->ctrltail].raw_report);
-			usbhid->ctrl[usbhid->ctrltail].raw_report = NULL;
-		}
-
-		usbhid->ctrltail = (usbhid->ctrltail + 1) &
-			(HID_CONTROL_FIFO_SIZE - 1);
-	}
 	spin_unlock_irq(&usbhid->lock);
-
 	usb_kill_urb(usbhid->urbin);
 	usb_kill_urb(usbhid->urbout);
 	usb_kill_urb(usbhid->urbctrl);
@@ -1627,7 +1614,6 @@ static const struct usb_device_id hid_usb_ids[] = {
 		.bInterfaceClass = USB_INTERFACE_CLASS_HID },
 	{ }						/* Terminating entry */
 };
-EXPORT_SYMBOL_GPL(usb_hid_driver);
 
 MODULE_DEVICE_TABLE (usb, hid_usb_ids);
 

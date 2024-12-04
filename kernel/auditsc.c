@@ -471,8 +471,6 @@ static int audit_filter_rules(struct task_struct *tsk,
 			break;
 		case AUDIT_EXE:
 			result = audit_exe_compare(tsk, rule->exe);
-			if (f->op == Audit_not_equal)
-				result = !result;
 			break;
 		case AUDIT_UID:
 			result = audit_uid_comparator(cred->uid, f->op, f->uid);
@@ -1917,8 +1915,6 @@ void __audit_inode_child(struct inode *parent,
 			break;
 		}
 	}
-
-	cond_resched();
 
 	/* is there a matching child entry? */
 	list_for_each_entry(n, &context->names_list, list) {

@@ -242,15 +242,6 @@ struct paca_struct {
 	u64 l1d_flush_congruence;
 	u64 l1d_flush_sets;
 #endif
-#ifdef CONFIG_PPC_BOOK3S_64
-	/*
-	 * rfi fallback flush must be in its own cacheline to prevent
-	 * other paca data leaking into the L1d
-	 */
-	u64 exrfi[13] __aligned(0x80);
-	void *rfi_flush_fallback_area;
-	u64 l1d_flush_size;
-#endif
 };
 
 extern void copy_mm_to_paca(struct mm_struct *mm);

@@ -1078,7 +1078,7 @@ struct h2c_cmd {
 			u8 data;
 		} __packed bt_grant;
 	};
-} __packed;
+};
 
 enum c2h_evt_8723b {
 	C2H_8723B_DEBUG = 0,

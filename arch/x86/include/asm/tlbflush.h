@@ -242,7 +242,7 @@ DECLARE_PER_CPU_SHARED_ALIGNED(struct tlb_state, cpu_tlbstate);
 /* Initialize cr4 shadow for this CPU. */
 static inline void cr4_init_shadow(void)
 {
-	this_cpu_write(cpu_tlbstate.cr4, __read_cr4_safe());
+	this_cpu_write(cpu_tlbstate.cr4, __read_cr4());
 }
 
 static inline void __cr4_set(unsigned long cr4)
@@ -282,16 +282,6 @@ static inline void cr4_toggle_bits_irqsoff(unsigned long mask)
 
 	cr4 = this_cpu_read(cpu_tlbstate.cr4);
 	__cr4_set(cr4 ^ mask);
-}
-
-static inline void cr4_toggle_bits(unsigned long mask)
-{
-	unsigned long cr4;
-
-	cr4 = this_cpu_read(cpu_tlbstate.cr4);
-	cr4 ^= mask;
-	this_cpu_write(cpu_tlbstate.cr4, cr4);
-	__write_cr4(cr4);
 }
 
 /* Read the CR4 shadow. */

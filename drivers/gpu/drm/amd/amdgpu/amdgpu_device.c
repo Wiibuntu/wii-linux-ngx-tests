@@ -2228,6 +2228,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	 * ignore it */
 	vga_client_register(adev->pdev, adev, NULL, amdgpu_vga_set_decode);
 
+	if (amdgpu_runtime_pm == 1)
+		runtime = true;
 	if (amdgpu_device_is_px(ddev))
 		runtime = true;
 	if (!pci_is_thunderbolt_attached(adev->pdev))
@@ -2538,23 +2540,6 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
 		if (r)
 			DRM_ERROR("amdgpu asic reset failed\n");
 	}
-
-	/*
-	 * Most of the connector probing functions try to acquire runtime pm
-	 * refs to ensure that the GPU is powered on when connector polling is
-	 * performed. Since we're calling this from a runtime PM callback,
-	 * trying to acquire rpm refs will cause us to deadlock.
-	 *
-	 * Since we're guaranteed to be holding the rpm lock, it's safe to
-	 * temporarily disable the rpm helpers so this doesn't deadlock us.
-	 */
-#ifdef CONFIG_PM
-	dev->dev->power.disable_depth++;
-#endif
-	drm_helper_hpd_irq_event(dev);
-#ifdef CONFIG_PM
-	dev->dev->power.disable_depth--;
-#endif
 
 	if (fbcon) {
 		console_lock();

@@ -77,7 +77,7 @@ static bool dentry_connected(struct dentry *dentry)
 		struct dentry *parent = dget_parent(dentry);
 
 		dput(dentry);
-		if (dentry == parent) {
+		if (IS_ROOT(dentry)) {
 			dput(parent);
 			return false;
 		}
@@ -147,7 +147,6 @@ static struct dentry *reconnect_one(struct vfsmount *mnt,
 	tmp = lookup_one_len_unlocked(nbuf, parent, strlen(nbuf));
 	if (IS_ERR(tmp)) {
 		dprintk("%s: lookup failed: %d\n", __func__, PTR_ERR(tmp));
-		err = PTR_ERR(tmp);
 		goto out_err;
 	}
 	if (tmp != dentry) {

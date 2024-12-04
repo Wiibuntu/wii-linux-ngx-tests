@@ -13,7 +13,6 @@
 #include <asm/ptrace.h>
 #include <asm/thread_info.h>
 #include <asm/asm-offsets.h>
-#include <asm/nospec-insn.h>
 #include <asm/sigp.h>
 
 /*
@@ -25,8 +24,6 @@
  * (see below) in the resume process.
  * This function runs with disabled interrupts.
  */
-	GEN_BR_THUNK %r14
-
 	.section .text
 ENTRY(swsusp_arch_suspend)
 	stmg	%r6,%r15,__SF_GPRS(%r15)
@@ -106,7 +103,7 @@ ENTRY(swsusp_arch_suspend)
 	spx	0x318(%r1)
 	lmg	%r6,%r15,STACK_FRAME_OVERHEAD + __SF_GPRS(%r15)
 	lghi	%r2,0
-	BR_EX	%r14
+	br	%r14
 
 /*
  * Restore saved memory image to correct place and restore register context.
@@ -270,7 +267,7 @@ restore_registers:
 	/* Return 0 */
 	lmg	%r6,%r15,STACK_FRAME_OVERHEAD + __SF_GPRS(%r15)
 	lghi	%r2,0
-	BR_EX	%r14
+	br	%r14
 
 	.section .data..nosave,"aw",@progbits
 	.align	8

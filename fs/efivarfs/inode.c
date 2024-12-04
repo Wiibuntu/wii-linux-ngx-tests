@@ -98,23 +98,12 @@ static int efivarfs_create(struct inode *dir, struct dentry *dentry,
 		goto out;
 	}
 
-	if (efivar_variable_is_removable(var->var.VendorGuid,
-					 dentry->d_name.name, namelen))
-		is_removable = true;
-
-	inode = efivarfs_get_inode(dir->i_sb, dir, mode, 0, is_removable);
-	if (!inode) {
-		err = -ENOMEM;
-		goto out;
-	}
-
 	for (i = 0; i < namelen; i++)
 		var->var.VariableName[i] = dentry->d_name.name[i];
 
 	var->var.VariableName[i] = '\0';
 
 	inode->i_private = var;
-	kmemleak_ignore(var);
 
 	err = efivar_entry_add(var, &efivarfs_list);
 	if (err)

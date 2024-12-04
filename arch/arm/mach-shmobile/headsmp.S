@@ -16,11 +16,6 @@
 #include <asm/assembler.h>
 #include <asm/memory.h>
 
-#define SCTLR_MMU	0x01
-#define BOOTROM_ADDRESS	0xE6340000
-#define RWTCSRA_ADDRESS 0xE6020004
-#define RWTCSRA_WOVF	0x10
-
 /*
  * Reset vector for secondary CPUs.
  * This will be mapped at address 0 by SBAR register.

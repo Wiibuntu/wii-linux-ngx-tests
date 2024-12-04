@@ -402,7 +402,6 @@ static struct aa_loaddata *aa_simple_write_to_buffer(const char __user *userbuf,
 		kvfree(data);
 		return ERR_PTR(-EFAULT);
 	}
-	aa_put_profile(profile);
 
 	return data;
 }

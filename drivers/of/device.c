@@ -238,9 +238,8 @@ static ssize_t of_device_get_modalias(struct device *dev, char *str, ssize_t len
 		str += csize;
 	}
 
-	return repend;
+	return tsize;
 }
-EXPORT_SYMBOL_GPL(of_device_get_modalias);
 
 int of_device_request_module(struct device *dev)
 {

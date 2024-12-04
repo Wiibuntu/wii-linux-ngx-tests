@@ -265,8 +265,8 @@ struct key *key_alloc(struct key_type *type, const char *desc,
 
 		spin_lock(&user->lock);
 		if (!(flags & KEY_ALLOC_QUOTA_OVERRUN)) {
-			if (user->qnkeys + 1 > maxkeys ||
-			    user->qnbytes + quotalen > maxbytes ||
+			if (user->qnkeys + 1 >= maxkeys ||
+			    user->qnbytes + quotalen >= maxbytes ||
 			    user->qnbytes + quotalen < user->qnbytes)
 				goto no_quota;
 		}
@@ -382,7 +382,7 @@ int key_payload_reserve(struct key *key, size_t datalen)
 		spin_lock(&key->user->lock);
 
 		if (delta > 0 &&
-		    (key->user->qnbytes + delta > maxbytes ||
+		    (key->user->qnbytes + delta >= maxbytes ||
 		     key->user->qnbytes + delta < key->user->qnbytes)) {
 			ret = -EDQUOT;
 		}
@@ -400,18 +400,6 @@ int key_payload_reserve(struct key *key, size_t datalen)
 	return ret;
 }
 EXPORT_SYMBOL(key_payload_reserve);
-
-/*
- * Change the key state to being instantiated.
- */
-static void mark_key_instantiated(struct key *key, int reject_error)
-{
-	/* Commit the payload before setting the state; barrier versus
-	 * key_read_state().
-	 */
-	smp_store_release(&key->state,
-			  (reject_error < 0) ? reject_error : KEY_IS_POSITIVE);
-}
 
 /*
  * Change the key state to being instantiated.
@@ -950,16 +938,6 @@ error:
 	 * - we can drop the locks first as we have the key pinned
 	 */
 	__key_link_end(keyring, &index_key, edit);
-
-	key = key_ref_to_ptr(key_ref);
-	if (test_bit(KEY_FLAG_USER_CONSTRUCT, &key->flags)) {
-		ret = wait_for_key_construction(key, true);
-		if (ret < 0) {
-			key_ref_put(key_ref);
-			key_ref = ERR_PTR(ret);
-			goto error_free_prep;
-		}
-	}
 
 	key = key_ref_to_ptr(key_ref);
 	if (test_bit(KEY_FLAG_USER_CONSTRUCT, &key->flags)) {

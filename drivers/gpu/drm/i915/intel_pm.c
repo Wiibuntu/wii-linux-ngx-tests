@@ -2967,9 +2967,9 @@ static void snb_wm_latency_quirk(struct drm_i915_private *dev_priv)
 	 * The BIOS provided WM memory latency values are often
 	 * inadequate for high resolution displays. Adjust them.
 	 */
-	changed = ilk_increase_wm_latency(dev_priv, dev_priv->wm.pri_latency, 12);
-	changed |= ilk_increase_wm_latency(dev_priv, dev_priv->wm.spr_latency, 12);
-	changed |= ilk_increase_wm_latency(dev_priv, dev_priv->wm.cur_latency, 12);
+	changed = ilk_increase_wm_latency(dev_priv, dev_priv->wm.pri_latency, 12) |
+		ilk_increase_wm_latency(dev_priv, dev_priv->wm.spr_latency, 12) |
+		ilk_increase_wm_latency(dev_priv, dev_priv->wm.cur_latency, 12);
 
 	if (!changed)
 		return;
@@ -5321,8 +5321,6 @@ static void ilk_pipe_wm_get_hw_state(struct drm_crtc *crtc)
 
 	memset(active, 0, sizeof(*active));
 
-	memset(active, 0, sizeof(*active));
-
 	active->pipe_enabled = intel_crtc->active;
 
 	if (active->pipe_enabled) {
@@ -6092,12 +6090,6 @@ static void gen6_set_rps_thresholds(struct drm_i915_private *dev_priv, u8 val)
 		threshold_down = 60;
 		break;
 	}
-
-	/* When byt can survive without system hang with dynamic
-	 * sw freq adjustments, this restriction can be lifted.
-	 */
-	if (IS_VALLEYVIEW(dev_priv))
-		goto skip_hw_write;
 
 	/* When byt can survive without system hang with dynamic
 	 * sw freq adjustments, this restriction can be lifted.

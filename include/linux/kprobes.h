@@ -193,14 +193,11 @@ struct kretprobe {
 	raw_spinlock_t lock;
 };
 
-#define KRETPROBE_MAX_DATA_SIZE	4096
-
 struct kretprobe_instance {
 	struct hlist_node hlist;
 	struct kretprobe *rp;
 	kprobe_opcode_t *ret_addr;
 	struct task_struct *task;
-	void *fp;
 	char data[0];
 };
 

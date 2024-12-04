@@ -257,10 +257,6 @@ unsigned int arpt_do_table(struct sk_buff *skb,
 			}
 			if (table_base + v
 			    != arpt_next_entry(e)) {
-				if (unlikely(stackidx >= private->stacksize)) {
-					verdict = NF_DROP;
-					break;
-				}
 				jumpstack[stackidx++] = e;
 			}
 
@@ -483,14 +479,6 @@ static inline int check_entry_size_and_hooks(struct arpt_entry *e,
 	if (err)
 		return err;
 
-	if (!arp_checkentry(&e->arp))
-		return -EINVAL;
-
-	err = xt_check_entry_offsets(e, e->elems, e->target_offset,
-				     e->next_offset);
-	if (err)
-		return err;
-
 	/* Check hooks & underflows */
 	for (h = 0; h < NF_ARP_NUMHOOKS; h++) {
 		if (!(valid_hooks & (1 << h)))
@@ -596,9 +584,7 @@ static int translate_table(struct xt_table_info *newinfo, void *entry0,
 		ret = find_check_entry(iter, repl->name, repl->size,
 				       &alloc_state);
 		if (ret != 0)
-			goto out_free;
-		if (i < repl->num_entries)
-			offsets[i] = (void *)iter - entry0;
+			break;
 		++i;
 	}
 
@@ -1333,9 +1319,6 @@ static int compat_do_arpt_set_ctl(struct sock *sk, int cmd, void __user *user,
 	}
 
 	return ret;
- out_free:
-	kvfree(offsets);
-	return ret;
 }
 
 static int compat_copy_entry_to_user(struct arpt_entry *e, void __user **dstptr,
@@ -1590,7 +1573,6 @@ int arpt_register_table(struct net *net,
 		__arpt_unregister_table(new_table);
 		*res = NULL;
 	}
-	get.name[sizeof(get.name) - 1] = '\0';
 
 	return ret;
 

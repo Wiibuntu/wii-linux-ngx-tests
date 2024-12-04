@@ -37,7 +37,6 @@
 
 #include <linux/pci.h>
 #include <linux/export.h>
-#include <linux/nospec.h>
 
 /**
  * DOC: getunique and setversion story
@@ -436,13 +435,7 @@ EXPORT_SYMBOL(drm_invalid_op);
  */
 static int drm_copy_field(char __user *buf, size_t *buf_len, const char *value)
 {
-	size_t len;
-
-	/* don't attempt to copy a NULL pointer */
-	if (WARN_ONCE(!value, "BUG: the value to copy was not set!")) {
-		*buf_len = 0;
-		return 0;
-	}
+	int len;
 
 	/* don't overflow userbuf */
 	len = strlen(value);
@@ -791,17 +784,13 @@ long drm_ioctl(struct file *filp,
 
 	if (is_driver_ioctl) {
 		/* driver ioctl */
-		unsigned int index = nr - DRM_COMMAND_BASE;
-
-		if (index >= dev->driver->num_ioctls)
+		if (nr - DRM_COMMAND_BASE >= dev->driver->num_ioctls)
 			goto err_i1;
-		index = array_index_nospec(index, dev->driver->num_ioctls);
-		ioctl = &dev->driver->ioctls[index];
+		ioctl = &dev->driver->ioctls[nr - DRM_COMMAND_BASE];
 	} else {
 		/* core ioctl */
 		if (nr >= DRM_CORE_IOCTL_COUNT)
 			goto err_i1;
-		nr = array_index_nospec(nr, DRM_CORE_IOCTL_COUNT);
 		ioctl = &drm_ioctls[nr];
 	}
 
@@ -883,7 +872,6 @@ bool drm_ioctl_flags(unsigned int nr, unsigned int *flags)
 
 	if (nr >= DRM_CORE_IOCTL_COUNT)
 		return false;
-	nr = array_index_nospec(nr, DRM_CORE_IOCTL_COUNT);
 
 	*flags = drm_ioctls[nr].flags;
 	return true;

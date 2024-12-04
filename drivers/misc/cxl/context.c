@@ -42,7 +42,7 @@ int cxl_context_init(struct cxl_context *ctx, struct cxl_afu *afu, bool master)
 
 	ctx->afu = afu;
 	ctx->master = master;
-	ctx->pid = ctx->glpid = NULL; /* Set in start work ioctl */
+	ctx->pid = NULL; /* Set in start work ioctl */
 	mutex_init(&ctx->mapping_lock);
 	ctx->mapping = NULL;
 
@@ -334,9 +334,6 @@ static void reclaim_ctx(struct rcu_head *rcu)
 	ctx->sstp = NULL;
 
 	kfree(ctx->irq_bitmap);
-
-	/* Drop ref to the afu device taken during cxl_context_init */
-	cxl_afu_put(ctx->afu);
 
 	/* Drop ref to the afu device taken during cxl_context_init */
 	cxl_afu_put(ctx->afu);

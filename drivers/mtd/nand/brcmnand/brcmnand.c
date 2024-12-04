@@ -373,36 +373,6 @@ static const u16 brcmnand_regs_v72[] = {
 	[BRCMNAND_FC_BASE]		= 0x600,
 };
 
-/* BRCMNAND v7.1 */
-static const u16 brcmnand_regs_v71[] = {
-	[BRCMNAND_CMD_START]		=  0x04,
-	[BRCMNAND_CMD_EXT_ADDRESS]	=  0x08,
-	[BRCMNAND_CMD_ADDRESS]		=  0x0c,
-	[BRCMNAND_INTFC_STATUS]		=  0x14,
-	[BRCMNAND_CS_SELECT]		=  0x18,
-	[BRCMNAND_CS_XOR]		=  0x1c,
-	[BRCMNAND_LL_OP]		=  0x20,
-	[BRCMNAND_CS0_BASE]		=  0x50,
-	[BRCMNAND_CS1_BASE]		=     0,
-	[BRCMNAND_CORR_THRESHOLD]	=  0xdc,
-	[BRCMNAND_CORR_THRESHOLD_EXT]	=  0xe0,
-	[BRCMNAND_UNCORR_COUNT]		=  0xfc,
-	[BRCMNAND_CORR_COUNT]		= 0x100,
-	[BRCMNAND_CORR_EXT_ADDR]	= 0x10c,
-	[BRCMNAND_CORR_ADDR]		= 0x110,
-	[BRCMNAND_UNCORR_EXT_ADDR]	= 0x114,
-	[BRCMNAND_UNCORR_ADDR]		= 0x118,
-	[BRCMNAND_SEMAPHORE]		= 0x150,
-	[BRCMNAND_ID]			= 0x194,
-	[BRCMNAND_ID_EXT]		= 0x198,
-	[BRCMNAND_LL_RDATA]		= 0x19c,
-	[BRCMNAND_OOB_READ_BASE]	= 0x200,
-	[BRCMNAND_OOB_READ_10_BASE]	=     0,
-	[BRCMNAND_OOB_WRITE_BASE]	= 0x280,
-	[BRCMNAND_OOB_WRITE_10_BASE]	=     0,
-	[BRCMNAND_FC_BASE]		= 0x400,
-};
-
 enum brcmnand_cs_reg {
 	BRCMNAND_CS_CFG_EXT = 0,
 	BRCMNAND_CS_CFG,
@@ -521,9 +491,8 @@ static int brcmnand_revision_init(struct brcmnand_controller *ctrl)
 	} else {
 		ctrl->cs_offsets = brcmnand_cs_offsets;
 
-		/* v3.3-5.0 have a different CS0 offset layout */
-		if (ctrl->nand_version >= 0x0303 &&
-		    ctrl->nand_version <= 0x0500)
+		/* v5.0 and earlier has a different CS0 offset layout */
+		if (ctrl->nand_version <= 0x0500)
 			ctrl->cs0_offsets = brcmnand_cs_offsets_cs0;
 	}
 
@@ -1192,33 +1161,19 @@ static int write_oob_to_regs(struct brcmnand_controller *ctrl, int i,
 			     const u8 *oob, int sas, int sector_1k)
 {
 	int tbytes = sas << sector_1k;
-	int j, k = 0;
-	u32 last = 0xffffffff;
-	u8 *plast = (u8 *)&last;
+	int j;
 
 	/* Adjust OOB values for 1K sector size */
 	if (sector_1k && (i & 0x01))
 		tbytes = max(0, tbytes - (int)ctrl->max_oob);
 	tbytes = min_t(int, tbytes, ctrl->max_oob);
 
-	/*
-	 * tbytes may not be multiple of words. Make sure we don't read out of
-	 * the boundary and stop at last word.
-	 */
-	for (j = 0; (j + 3) < tbytes; j += 4)
+	for (j = 0; j < tbytes; j += 4)
 		oob_reg_write(ctrl, j,
 				(oob[j + 0] << 24) |
 				(oob[j + 1] << 16) |
 				(oob[j + 2] <<  8) |
 				(oob[j + 3] <<  0));
-
-	/* handle the remaing bytes */
-	while (j < tbytes)
-		plast[k++] = oob[j++];
-
-	if (tbytes & 0x3)
-		oob_reg_write(ctrl, (tbytes & ~0x3), (__force u32)cpu_to_be32(last));
-
 	return tbytes;
 }
 
@@ -1678,7 +1633,7 @@ static int brcmnand_read_by_pio(struct mtd_info *mtd, struct nand_chip *chip,
 					mtd->oobsize / trans,
 					host->hwcfg.sector_size_1k);
 
-		if (ret != -EBADMSG) {
+		if (!ret) {
 			*err_addr = brcmnand_read_reg(ctrl,
 					BRCMNAND_UNCORR_ADDR) |
 				((u64)(brcmnand_read_reg(ctrl,
@@ -2238,9 +2193,16 @@ static int brcmnand_setup_dev(struct brcmnand_host *host)
 	if (ctrl->nand_version >= 0x0702)
 		tmp |= ACC_CONTROL_RD_ERASED;
 	tmp &= ~ACC_CONTROL_FAST_PGM_RDIN;
-	if (ctrl->features & BRCMNAND_HAS_PREFETCH)
-		tmp &= ~ACC_CONTROL_PREFETCH;
-
+	if (ctrl->features & BRCMNAND_HAS_PREFETCH) {
+		/*
+		 * FIXME: Flash DMA + prefetch may see spurious erased-page ECC
+		 * errors
+		 */
+		if (has_flash_dma(ctrl))
+			tmp &= ~ACC_CONTROL_PREFETCH;
+		else
+			tmp |= ACC_CONTROL_PREFETCH;
+	}
 	nand_writereg(ctrl, offs, tmp);
 
 	return 0;

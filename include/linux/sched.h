@@ -1484,10 +1484,6 @@ extern void kick_process(struct task_struct *tsk);
 #else
 static inline void kick_process(struct task_struct *tsk) { }
 #endif
-#ifdef CONFIG_CGROUPS
-	/* disallow userland-initiated cgroup migration */
-	unsigned no_cgroup_migration:1;
-#endif
 
 extern void __set_task_comm(struct task_struct *tsk, const char *from, bool exec);
 
@@ -1656,9 +1652,6 @@ static inline void set_task_cpu(struct task_struct *p, unsigned int cpu)
  */
 #ifndef vcpu_is_preempted
 # define vcpu_is_preempted(cpu)	false
-#endif
-#ifdef CONFIG_UBSAN
-	unsigned int in_ubsan;
 #endif
 
 extern long sched_setaffinity(pid_t pid, const struct cpumask *new_mask);
