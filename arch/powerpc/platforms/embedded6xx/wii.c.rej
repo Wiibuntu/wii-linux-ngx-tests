@@ -1,0 +1,45 @@
+--- arch/powerpc/platforms/embedded6xx/wii.c
++++ arch/powerpc/platforms/embedded6xx/wii.c
+@@ -167,8 +176,42 @@ static void __init wii_setup_arch(void)
+ 		clrbits32(hw_gpio + HW_GPIO_OUT(0),
+ 			  HW_GPIO_SLOT_LED | HW_GPIO_SENSOR_BAR);
+ 	}
++
++	ug_udbg_init();
++	gcnvi_udbg_init();
++	starlet_discover_ipc_flavour();
++}
++
++#ifdef CONFIG_STARLET_IOS
++static void wii_restart(char *cmd)
++{
++	local_irq_disable();
++
++	/* try first to launch The Homebrew Channel... */
++	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_V107);
++	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_JODI);
++	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_HAXX);
++	/* ..and if that fails, try an assisted restart */
++	starlet_stm_restart();
++
++	/* fallback to spinning until the power button pressed */
++	for (;;)
++		cpu_relax();
++ }
++
++static void wii_power_off(void)
++{
++	local_irq_disable();
++
++	/* try an assisted poweroff */
++	starlet_stm_power_off();
++
++	/* fallback to spinning until the power button pressed */
++	for (;;)
++		cpu_relax();
+ }
+ 
++#elif defined CONFIG_STARLET_MINI /* end of CONFIG_STARLET_IOS */
+ static void wii_restart(char *cmd)
+ {
+ 	local_irq_disable();
