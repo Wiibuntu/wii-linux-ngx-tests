@@ -62,26 +62,11 @@ static int dma_direct_dma_supported(struct device *dev, u64 mask)
 #endif
 }
 
-int void *__dma_direct_alloc_coherent(struct device *dev, size_t size,
+void *__dma_direct_alloc_coherent(struct device *dev, size_t size,
 				  dma_addr_t *dma_handle, gfp_t flag,
 				  unsigned long attrs)
 {
 	void *ret;
-#ifdef CONFIG_NOT_COHERENT_CACHE
-	if (dma_alloc_from_coherent(dev, size, dma_handle, &ret))
-		return ret;
-
-	ret = __dma_alloc_coherent(dev, size, dma_handle, flag);
-	if (ret == NULL)
-		return NULL;
-	*dma_handle += get_dma_offset(dev);
-	return ret;
-#else
-	struct page *page;
-	int node = dev_to_node(dev);
-#ifdef CONFIG_FSL_SOC
-	u64 pfn = get_pfn_limit(dev);
-	int zone;
 
 	/*
 	 * This code should be OK on other platforms, but we have drivers that
