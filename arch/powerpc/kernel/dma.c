@@ -62,7 +62,7 @@ static int dma_direct_dma_supported(struct device *dev, u64 mask)
 #endif
 }
 
-void *__dma_direct_alloc_coherent(struct device *dev, size_t size,
+int void *__dma_direct_alloc_coherent(struct device *dev, size_t size,
 				  dma_addr_t *dma_handle, gfp_t flag,
 				  unsigned long attrs)
 {

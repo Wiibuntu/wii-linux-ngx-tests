@@ -193,7 +193,6 @@ static void wii_power_off(void)
 	}
 	wii_spin();
 }
-#endif /* CONFIG_STARLET_MINI */
 
 static void __noreturn wii_halt(void)
 {
