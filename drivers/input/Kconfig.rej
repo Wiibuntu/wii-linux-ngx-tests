@@ -1,0 +1,11 @@
+--- drivers/input/Kconfig
++++ drivers/input/Kconfig
+@@ -209,6 +209,8 @@ source "drivers/input/serio/Kconfig"
+ 
+ source "drivers/input/gameport/Kconfig"
+ 
++source "drivers/input/si/Kconfig"
++
+ endmenu
+ 
+ endmenu

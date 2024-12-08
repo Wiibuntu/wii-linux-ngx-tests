@@ -1472,6 +1472,20 @@ static int urb_needs_transfer_dma_unmap(struct usb_hcd *hcd, struct urb *urb)
 		urb->transfer_dma && urb->transfer_dma != ~(dma_addr_t)0);
 }
 
+static int urb_needs_transfer_dma_map(struct usb_hcd *hcd, struct urb *urb)
+{
+	return !(urb->transfer_flags & URB_NO_TRANSFER_DMA_MAP) ||
+	       ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+		urb->transfer_dma == ~(dma_addr_t)0);
+}
+
+static int urb_needs_transfer_dma_unmap(struct usb_hcd *hcd, struct urb *urb)
+{
+	return !(urb->transfer_flags & URB_NO_TRANSFER_DMA_MAP) ||
+	       ((hcd->driver->flags & HCD_NO_COHERENT_MEM) &&
+		urb->transfer_dma && urb->transfer_dma != ~(dma_addr_t)0);
+}
+
 static void unmap_urb_for_dma(struct usb_hcd *hcd, struct urb *urb)
 {
 	if (hcd->driver->unmap_urb_for_dma)
