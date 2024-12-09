@@ -571,7 +571,7 @@ unsigned int irq_create_fwspec_mapping(struct irq_fwspec *fwspec)
 	int virq;
 
 	if (fwspec->fwnode) {
-		domain = irq_find_matching_fwspec(fwspec, DOMAIN_BUS_WIRED);
+		domain = irq_find_matching_fwspec(fwspec, DOMAIN_BUS_IPI);
 		if (!domain)
 			domain = irq_find_matching_fwspec(fwspec, DOMAIN_BUS_ANY);
 	} else {
