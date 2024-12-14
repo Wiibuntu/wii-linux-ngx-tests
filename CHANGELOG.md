@@ -1,3 +1,17 @@
+
+Wiibuntu Fork:
+
+v0.3.8 wiibuntu
+    * Ported baedit from Go to C++
+    * Using Techflash's change, instead of "LABEL=" kernel now uses "ROOT="
+    * Added Techflash's patches in more modern kernels (Most dont work yet)
+
+
+::TechflashYT has added MANY patches between the neagic fork and the Wiibuntu fork.::
+
+
+neagix fork:
+
 v0.3.6 neagix
 	* added Gumboot bootloader
 	* switched first partition to FAT32
