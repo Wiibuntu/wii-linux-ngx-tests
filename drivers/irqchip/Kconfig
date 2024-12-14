@@ -240,6 +240,7 @@ config RENESAS_H8S_INTC
 config IMX_GPCV2
 	bool
 	select IRQ_DOMAIN
+	depends on HAS_IOMEM
 	help
 	  Enables the wakeup IRQs for IMX platforms with GPCv2 block
 
