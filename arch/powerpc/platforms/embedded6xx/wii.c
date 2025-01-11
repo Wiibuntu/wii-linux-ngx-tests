@@ -121,7 +121,7 @@ unsigned long __init wii_mmu_mapin_mem2(unsigned long top)
 	return delta + bl;
 }
 
-static void __noreturn wii_spin(void)
+static void wii_spin(void)
 {
 	local_irq_disable();
 	for (;;)
@@ -167,9 +167,43 @@ static void __init wii_setup_arch(void)
 		clrbits32(hw_gpio + HW_GPIO_OUT(0),
 			  HW_GPIO_SLOT_LED | HW_GPIO_SENSOR_BAR);
 	}
+
+	ug_udbg_init();
+	gcnvi_udbg_init();
+	starlet_discover_ipc_flavour();
 }
 
-static void __noreturn wii_restart(char *cmd)
+#ifdef CONFIG_STARLET_IOS
+static void wii_restart(char *cmd)
+{
+	local_irq_disable();
+
+	/* try first to launch The Homebrew Channel... */
+	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_V107);
+	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_JODI);
+	starlet_es_reload_ios_and_launch(STARLET_TITLE_HBC_HAXX);
+	/* ..and if that fails, try an assisted restart */
+	starlet_stm_restart();
+
+	/* fallback to spinning until the power button pressed */
+	for (;;)
+		cpu_relax();
+ }
+
+static void wii_power_off(void)
+{
+	local_irq_disable();
+
+	/* try an assisted poweroff */
+	starlet_stm_power_off();
+
+	/* fallback to spinning until the power button pressed */
+	for (;;)
+		cpu_relax();
+}
+
+#elif defined CONFIG_STARLET_MINI /* end of CONFIG_STARLET_IOS */
+static void wii_restart(char *cmd)
 {
 	local_irq_disable();
 
@@ -195,11 +229,16 @@ static void wii_power_off(void)
 }
 #endif /* CONFIG_STARLET_MINI */
 
-static void __noreturn wii_halt(void)
+static void wii_halt(void)
 {
 	if (ppc_md.restart)
 		ppc_md.restart(NULL);
 	wii_spin();
+}
+
+static void __init wii_init_early(void)
+{
+	ug_udbg_init();
 }
 
 static void __init wii_pic_probe(void)
@@ -212,12 +251,13 @@ static void __init wii_pic_probe(void)
 
 static int __init wii_probe(void)
 {
-	if (!of_machine_is_compatible("nintendo,wii"))
+	unsigned long dt_root;
+
+	dt_root = of_get_flat_dt_root();
+	if (!of_flat_dt_is_compatible(dt_root, "nintendo,wii"))
 		return 0;
 
 	pm_power_off = wii_power_off;
-
-	ug_udbg_init();
 
 	return 1;
 }
@@ -339,6 +379,7 @@ static void wii_shutdown(void)
 define_machine(wii) {
 	.name			= "wii",
 	.probe			= wii_probe,
+	.init_early		= wii_init_early,
 	.setup_arch		= wii_setup_arch,
 	.restart		= wii_restart,
 	.show_cpuinfo		= wii_show_cpuinfo,

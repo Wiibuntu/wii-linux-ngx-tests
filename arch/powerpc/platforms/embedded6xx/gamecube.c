@@ -29,14 +29,14 @@
 #include "usbgecko_udbg.h"
 
 
-static void __noreturn gamecube_spin(void)
+static void gamecube_spin(void)
 {
 	/* spin until power button pressed */
 	for (;;)
 		cpu_relax();
 }
 
-static void __noreturn gamecube_restart(char *cmd)
+static void gamecube_restart(char *cmd)
 {
 	local_irq_disable();
 	flipper_platform_reset();
@@ -49,19 +49,35 @@ static void gamecube_power_off(void)
 	gamecube_spin();
 }
 
-static void __noreturn gamecube_halt(void)
+static void gamecube_halt(void)
 {
 	gamecube_restart(NULL);
 }
 
+static void gamecube_show_cpuinfo(struct seq_file *m)
+{
+	seq_printf(m, "vendor\t\t: IBM\n");
+	seq_printf(m, "machine\t\t: Nintendo GameCube\n");
+}
+
+static void gamecube_setup_arch(void)
+{
+}
+
+static void __init gamecube_init_early(void)
+{
+	ug_udbg_init();
+}
+
 static int __init gamecube_probe(void)
 {
-	if (!of_machine_is_compatible("nintendo,gamecube"))
+	unsigned long dt_root;
+
+	dt_root = of_get_flat_dt_root();
+	if (!of_flat_dt_is_compatible(dt_root, "nintendo,gamecube"))
 		return 0;
 
 	pm_power_off = gamecube_power_off;
-
-	ug_udbg_init();
 
 	return 1;
 }
@@ -71,9 +87,20 @@ static void gamecube_shutdown(void)
 	flipper_quiesce();
 }
 
+#ifdef CONFIG_KEXEC
+static int gamecube_kexec_prepare(struct kimage *image)
+{
+	return 0;
+}
+#endif /* CONFIG_KEXEC */
+
+
 define_machine(gamecube) {
 	.name			= "gamecube",
 	.probe			= gamecube_probe,
+	.setup_arch		= gamecube_setup_arch,
+	.init_early		= gamecube_init_early,
+	.show_cpuinfo		= gamecube_show_cpuinfo,
 	.restart		= gamecube_restart,
 	.halt			= gamecube_halt,
 	.init_IRQ		= flipper_pic_probe,
